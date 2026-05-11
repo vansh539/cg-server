@@ -2924,6 +2924,70 @@ def attempt_auto_parse(file_path, module_globals=None, extractor_path=None):
         return [], "AIFallbackParser(Ollama)", f"{type(e).__name__}: {e}"
 
 
+class OCRPDFParser:
+    """OCR-based fallback for CID-encoded PDFs.
+
+    Converts each page to an image with pdf2image, OCRs with tesseract,
+    then sends the text to local Ollama for structured extraction —
+    using the same prompt and JSON parsing logic as AIFallbackParser.
+    """
+
+    def parse(self, file_path, source_name=None):
+        source = source_name or source_name_from_file(file_path)
+        try:
+            from pdf2image import convert_from_path
+            import pytesseract
+        except ImportError as e:
+            print(f"[WARN] OCRPDFParser: missing dependency: {e}", file=sys.stderr)
+            return []
+
+        try:
+            images = convert_from_path(file_path, dpi=200)
+        except Exception as e:
+            print(f"[WARN] OCRPDFParser: pdf2image failed: {e}", file=sys.stderr)
+            return []
+
+        ai = AIFallbackParser()
+        chunks = []
+        for i, img in enumerate(images):
+            try:
+                import pytesseract as _tess
+                text = _tess.image_to_string(img)
+            except Exception as e:
+                print(f"[WARN] OCRPDFParser: tesseract failed on page {i+1}: {e}", file=sys.stderr)
+                continue
+            if text and len(text.strip()) >= 80:
+                chunks.append(text)
+
+        if 1 < len(chunks) <= 3:
+            chunks = ["\n".join(chunks)]
+
+        all_rows = []
+        seen_keys = set()
+        for idx, chunk in enumerate(chunks):
+            try:
+                rows = ai._call_ollama(chunk, source)
+            except Exception as e:
+                print(f"[WARN] OCRPDFParser chunk {idx+1}/{len(chunks)} Ollama call failed: {e}", file=sys.stderr)
+                continue
+            for r in rows:
+                k = (
+                    r.get("sale_date").strftime("%Y-%m-%d") if r.get("sale_date") else "",
+                    (r.get("share_name") or "").strip().lower(),
+                    round(float(r.get("sale_amt") or 0), 2),
+                    r.get("purchase_date").strftime("%Y-%m-%d") if r.get("purchase_date") else "",
+                )
+                if k in seen_keys:
+                    continue
+                seen_keys.add(k)
+                all_rows.append(r)
+
+        if all_rows:
+            print(f"[INFO] OCRPDFParser extracted {len(all_rows)} rows from "
+                  f"{Path(file_path).name} ({len(chunks)} chunk(s))", file=sys.stderr)
+        return all_rows
+
+
 
 
 
@@ -4841,6 +4905,11 @@ def process_file(file_path):
                         )
             except Exception:
                 pass
+
+            if 'CID-encoded' in trip_reason:
+                rows = OCRPDFParser().parse(file_path, source_name=source_name)
+                if rows:
+                    trip_reason = None
 
             # Try auto-parser (Claude API) only if NOT CID-encoded
             is_cid_encoded = '(cid:' in trip_reason or 'CID-encoded' in trip_reason
