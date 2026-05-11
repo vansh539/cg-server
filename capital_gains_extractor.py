@@ -2772,7 +2772,7 @@ JSON array:"""
                   f"{Path(file_path).name} ({len(chunks)} chunk(s))", file=sys.stderr)
         return all_rows
 
-    def _call_ollama(self, text, source):
+    def _call_ollama(self, text, source, force_json_format=True):
         """One Ollama API call. Returns list of make_row dicts."""
         import urllib.request
 
@@ -2784,13 +2784,15 @@ JSON array:"""
             text = text[:12000] + "\n[...truncated...]"
 
         prompt = self.PROMPT_TEMPLATE.format(text=text)
-        payload = json.dumps({
+        body_dict = {
             "model": ollama_model,
             "prompt": prompt,
             "stream": False,
-            "format": "json",
             "options": {"temperature": 0.0, "num_ctx": 16384}
-        }).encode()
+        }
+        if force_json_format:
+            body_dict["format"] = "json"
+        payload = json.dumps(body_dict).encode()
 
         req = urllib.request.Request(
             f"{ollama_url}/api/generate",
@@ -2970,7 +2972,7 @@ class OCRPDFParser:
         seen_keys = set()
         for idx, chunk in enumerate(chunks):
             try:
-                rows = ai._call_ollama(chunk, source)
+                rows = ai._call_ollama(chunk, source, force_json_format=False)
             except Exception as e:
                 print(f"[WARN] OCRPDFParser chunk {idx+1}/{len(chunks)} Ollama call failed: {e}", file=sys.stderr)
                 continue
@@ -4915,9 +4917,9 @@ def process_file(file_path):
                 if rows:
                     trip_reason = None
 
-            # Try auto-parser (Claude API) only if NOT CID-encoded
+            # Try auto-parser (Claude API) only if NOT CID-encoded and OCR didn't already get rows
             is_cid_encoded = trip_reason is not None and ('(cid:' in trip_reason or 'CID-encoded' in trip_reason)
-            if not is_cid_encoded:
+            if not is_cid_encoded and len(rows) == 0:
                 try:
                     print(f"[AUTO-PARSER] {Path(file_path).name}: 0 rows from {parser.__class__.__name__}, trying auto-generation...", file=sys.stderr)
                     # Use module globals for the auto-parser scope
