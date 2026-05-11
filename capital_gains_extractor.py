@@ -2818,6 +2818,9 @@ JSON array:"""
                     if isinstance(v, list):
                         txns = v
                         break
+                # Single transaction object returned instead of array
+                if txns is None and 'sale_date' in parsed:
+                    txns = [parsed]
         except Exception:
             # Try to recover by extracting the first [...] block
             m = re.search(r'\[[\s\S]*\]', raw)
@@ -2959,8 +2962,9 @@ class OCRPDFParser:
             if text and len(text.strip()) >= 80:
                 chunks.append(text)
 
-        if 1 < len(chunks) <= 3:
-            chunks = ["\n".join(chunks)]
+        # Always combine all pages — OCR text is sparse, context across pages helps Ollama
+        if len(chunks) > 1:
+            chunks = ["\n\n".join(chunks)]
 
         all_rows = []
         seen_keys = set()
@@ -4912,7 +4916,7 @@ def process_file(file_path):
                     trip_reason = None
 
             # Try auto-parser (Claude API) only if NOT CID-encoded
-            is_cid_encoded = '(cid:' in trip_reason or 'CID-encoded' in trip_reason
+            is_cid_encoded = trip_reason is not None and ('(cid:' in trip_reason or 'CID-encoded' in trip_reason)
             if not is_cid_encoded:
                 try:
                     print(f"[AUTO-PARSER] {Path(file_path).name}: 0 rows from {parser.__class__.__name__}, trying auto-generation...", file=sys.stderr)
