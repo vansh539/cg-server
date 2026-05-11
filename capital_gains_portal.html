@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CapGains Pro — Capital Gains Automation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy:    #0d1b2a;
+  --navy2:   #1a2d42;
+  --navy3:   #243547;
+  --blue:    #2b7fff;
+  --blue2:   #1a6de8;
+  --teal:    #00c4a7;
+  --amber:   #f59e0b;
+  --red:     #ef4444;
+  --green:   #22c55e;
+  --white:   #ffffff;
+  --off:     #f5f7fa;
+  --border:  #e2e8f0;
+  --text:    #1e293b;
+  --muted:   #64748b;
+  --light:   #94a3b8;
+  --sidebar-w: 240px;
+  --radius:  10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--off);color:var(--text);min-height:100vh;display:flex}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--navy);
+  display:flex;flex-direction:column;padding:0;position:fixed;top:0;left:0;
+  height:100vh;z-index:50;
+}
+.sidebar-brand{
+  padding:22px 20px 18px;border-bottom:1px solid var(--navy3);
+  display:flex;align-items:center;gap:10px;
+}
+.brand-icon{
+  width:36px;height:36px;background:linear-gradient(135deg,var(--blue),var(--teal));
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;
+}
+.brand-name{color:var(--white);font-size:15px;font-weight:700;line-height:1.2}
+.brand-tag{color:var(--light);font-size:10px;font-weight:400;letter-spacing:.5px}
+.sidebar-nav{padding:16px 0;flex:1}
+.nav-section{padding:6px 20px 4px;color:var(--light);font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 20px;
+  color:rgba(255,255,255,.55);font-size:13px;font-weight:500;cursor:pointer;
+  transition:all .15s;border-left:3px solid transparent;margin:1px 0;
+}
+.nav-item:hover{color:var(--white);background:var(--navy2)}
+.nav-item.active{color:var(--white);background:rgba(43,127,255,.15);border-left-color:var(--blue)}
+.nav-item .ni{font-size:15px;width:18px;text-align:center}
+.sidebar-footer{padding:16px 20px;border-top:1px solid var(--navy3)}
+.sidebar-footer p{color:var(--light);font-size:11px;line-height:1.5}
+.sidebar-footer strong{color:rgba(255,255,255,.5);font-size:10px;display:block;margin-bottom:3px;letter-spacing:.4px;text-transform:uppercase}
+
+/* ── MAIN ── */
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{
+  background:var(--white);border-bottom:1px solid var(--border);
+  padding:0 28px;height:58px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:40;
+}
+.topbar-left h1{font-size:16px;font-weight:600;color:var(--text)}
+.topbar-left p{font-size:12px;color:var(--muted)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.badge-fy{
+  background:rgba(43,127,255,.1);color:var(--blue);
+  border:1px solid rgba(43,127,255,.2);border-radius:20px;
+  padding:4px 12px;font-size:11px;font-weight:600;
+}
+.content{padding:24px 28px;flex:1}
+
+/* ── PANELS ── */
+.panel-grid{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start}
+.panel{background:var(--white);border-radius:var(--radius);border:1px solid var(--border)}
+.panel-head{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.panel-head h2{font-size:13px;font-weight:600;color:var(--text)}
+.panel-head .ph-sub{font-size:12px;color:var(--muted)}
+.panel-body{padding:20px}
+
+/* ── FY SELECTOR ── */
+.fy-bar{
+  background:linear-gradient(135deg,var(--navy),var(--navy2));
+  border-radius:var(--radius);padding:14px 18px;margin-bottom:18px;
+  display:flex;align-items:center;gap:14px;
+}
+.fy-bar label{color:rgba(255,255,255,.6);font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;white-space:nowrap}
+.fy-select{
+  flex:1;padding:7px 12px;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.15);border-radius:7px;
+  font-size:13px;font-weight:500;color:var(--white);cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+}
+.fy-select:focus{outline:none;border-color:var(--blue)}
+.fy-select option{background:var(--navy2);color:var(--white)}
+.fy-range{color:rgba(255,255,255,.45);font-size:11px;white-space:nowrap}
+
+/* ── DROP ZONE ── */
+.drop-zone{
+  border:2px dashed var(--border);border-radius:var(--radius);
+  padding:36px 20px;text-align:center;cursor:pointer;transition:all .2s;
+  margin-bottom:14px;background:var(--off);
+}
+.drop-zone:hover,.drop-zone.dragover{
+  border-color:var(--blue);background:rgba(43,127,255,.04);
+}
+.dz-icon{
+  width:48px;height:48px;background:rgba(43,127,255,.1);border-radius:12px;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:20px;
+}
+.drop-zone h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px}
+.drop-zone p{color:var(--muted);font-size:12px;line-height:1.5}
+.drop-zone strong{color:var(--blue)}
+#fileInput{display:none}
+
+/* ── FILE LIST ── */
+.file-list{margin-bottom:14px}
+.file-item{
+  display:flex;align-items:center;padding:8px 10px;background:var(--off);
+  border-radius:7px;margin-bottom:6px;gap:9px;border:1px solid var(--border);
+}
+.file-ext{
+  font-size:9px;font-weight:700;color:var(--blue);background:rgba(43,127,255,.1);
+  padding:3px 6px;border-radius:4px;flex-shrink:0;letter-spacing:.4px;font-family:'DM Mono',monospace;
+}
+.file-name{color:var(--text);font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-size{color:var(--light);font-size:11px;flex-shrink:0}
+.file-rm{background:none;border:none;color:var(--light);cursor:pointer;font-size:16px;flex-shrink:0;line-height:1;padding:0 2px}
+.file-rm:hover{color:var(--red)}
+
+/* ── PROCESS BTN ── */
+.process-btn{
+  width:100%;padding:13px;background:var(--blue);color:var(--white);
+  border:none;border-radius:var(--radius);font-size:14px;font-weight:600;
+  cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.process-btn:hover:not(:disabled){background:var(--blue2)}
+.process-btn:disabled{background:#cbd5e1;cursor:not-allowed;color:var(--white)}
+.dl-btn{
+  width:100%;margin-top:10px;padding:12px;background:var(--teal);color:var(--white);
+  border:none;border-radius:var(--radius);font-size:13px;font-weight:600;
+  cursor:pointer;text-align:center;text-decoration:none;display:none;
+  font-family:'DM Sans',sans-serif;transition:background .15s;
+}
+.dl-btn.show{display:block}
+.dl-btn:hover{background:#00a88e}
+.dl-btn.computax{background:#1d4ed8}
+.dl-btn.computax:hover{background:#1e40af}
+
+/* ── STATUS ── */
+.status-box{border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;display:none;font-size:13px;line-height:1.6}
+.status-box.loading{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;display:block}
+.status-box.success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;display:block}
+.status-box.error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;display:block}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.stat-box{background:var(--off);border-radius:7px;padding:10px 12px;border:1px solid var(--border)}
+.stat-label{font-size:11px;color:var(--muted);margin-bottom:2px}
+.stat-val{font-size:14px;font-weight:700;color:var(--text);font-family:'DM Mono',monospace}
+.stat-full{grid-column:span 2}
+
+/* ── VERIFICATION TABLE ── */
+.verify-section{margin-top:24px}
+.verify-section h2{font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;
+  display:flex;align-items:center;gap:8px}
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{
+  background:var(--navy);color:rgba(255,255,255,.8);font-weight:600;
+  padding:9px 12px;text-align:left;font-size:11px;letter-spacing:.3px;
+  white-space:nowrap;
+}
+td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(43,127,255,.03)}
+.badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;
+}
+.badge.ok{background:rgba(34,197,94,.12);color:#15803d}
+.badge.warn{background:rgba(245,158,11,.12);color:#b45309}
+.badge.err{background:rgba(239,68,68,.12);color:#dc2626}
+.badge.pending{background:rgba(100,116,139,.12);color:var(--muted)}
+.mono{font-family:'DM Mono',monospace;font-size:11px}
+
+/* ── RIGHT PANEL ── */
+.info-card{padding:16px;border-bottom:1px solid var(--border)}
+.info-card:last-child{border-bottom:none}
+.ic-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;
+  display:flex;align-items:center;gap:6px}
+.ic-list{list-style:none}
+.ic-list li{font-size:12px;color:var(--muted);padding:3px 0;display:flex;align-items:center;gap:6px}
+.ic-list li::before{content:'✓';color:var(--teal);font-size:11px;font-weight:700;flex-shrink:0}
+.tag-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag{
+  background:var(--off);border:1px solid var(--border);border-radius:20px;
+  padding:3px 10px;font-size:11px;color:var(--muted);
+}
+
+/* ── SPINNER ── */
+.spinner{
+  display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
+  border-top-color:var(--white);border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;top:16px;left:50%;transform:translateX(-50%);
+  z-index:9999;max-width:560px;width:90%;padding:14px 18px;
+  border-radius:var(--radius);font-size:13px;line-height:1.5;
+  box-shadow:0 8px 32px rgba(0,0,0,.2);display:none;
+  animation:tslide .25s ease;
+}
+.toast.show{display:block}
+.toast.error{background:#991b1b;color:var(--white)}
+.toast.warning{background:#92400e;color:var(--white)}
+.toast.info{background:var(--navy);color:var(--white)}
+@keyframes tslide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.toast-close{float:right;cursor:pointer;font-size:18px;margin-left:12px;opacity:.75}
+
+/* ── MODALS ── */
+.overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:200;align-items:center;justify-content:center;
+}
+.overlay.show{display:flex}
+.modal{
+  background:var(--white);border-radius:14px;padding:28px;
+  max-width:500px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,.2);
+}
+.modal h3{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.modal p{font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.5}
+.modal-btns{display:flex;gap:10px;margin-top:18px}
+.mbtn{flex:1;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+.mbtn.primary{background:var(--blue);color:var(--white)}
+.mbtn.secondary{background:var(--off);color:var(--text);border:1px solid var(--border)}
+.mbtn.primary:hover{background:var(--blue2)}
+
+/* ── OOR table in modal ── */
+.oor-table{border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:4px;max-height:260px;overflow-y:auto}
+.oor-table table{width:100%;font-size:12px}
+.oor-table th{background:var(--navy);color:rgba(255,255,255,.8);padding:8px 12px;font-size:11px;font-weight:600}
+.oor-table td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+.oor-table tr:last-child td{border-bottom:none}
+
+/* ── Client list in modal ── */
+.client-list{border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:4px}
+.client-item{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--off);font-size:13px}
+.client-item:last-child{border-bottom:none}
+.client-item input{margin-right:10px;accent-color:var(--blue)}
+.client-item label{cursor:pointer;flex:1;color:var(--text)}
+.client-item .csrc{font-size:11px;color:var(--light)}
+
+/* ── warn box ── */
+.warn-strip{
+  background:#fef9c3;border:1px solid #fde047;border-radius:7px;
+  padding:9px 12px;margin-top:8px;font-size:12px;color:#713f12;
+  display:flex;align-items:flex-start;gap:7px;cursor:pointer;
+}
+.warn-strip:hover{background:#fef3c7}
+.ws-icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.ws-text{flex:1}
+.ws-link{color:#b45309;font-weight:600;text-decoration:underline}
+
+/* ── note ── */
+.footer-note{font-size:11px;color:var(--light);text-align:center;margin-top:12px}
+
+/* ── progress bar ── */
+.prog-wrap{height:3px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:8px}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--blue),var(--teal));border-radius:3px;width:0%;transition:width .4s}
+
+/* ── empty state ── */
+.empty-state{text-align:center;padding:32px 20px;color:var(--light)}
+.empty-state .es-icon{font-size:32px;margin-bottom:10px}
+.empty-state p{font-size:13px}
+
+@media(max-width:900px){
+  .panel-grid{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .main{margin-left:0}
+}
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ── -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">📊</div>
+    <div>
+      <div class="brand-name">CapGains Pro</div>
+      <div class="brand-tag">CA Tax Automation</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">Workspace</div>
+    <div class="nav-item active" onclick="switchView('processor')">
+      <span class="ni">⚡</span> Process Statements
+    </div>
+    <div class="nav-item" onclick="switchView('verification')">
+      <span class="ni">✅</span> Verification
+    </div>
+    <div class="nav-section" style="margin-top:12px">Info</div>
+
+  </nav>
+  <div class="sidebar-footer">
+    <strong>IntelliTech Solutions</strong>
+    <p>AI-Powered Capital Gains<br>Processing for CA Firms</p>
+  </div>
+</aside>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast">
+  <span class="toast-close" onclick="hideToast()">&#x2715;</span>
+  <span id="toastMsg"></span>
+</div>
+
+<!-- ── MAIN ── -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1 id="pageTitle">Process Statements</h1>
+      <p id="pageSubtitle">Upload broker statements to generate Computax-ready Excel</p>
+    </div>
+    <div class="topbar-right">
+      <span class="badge-fy" id="fyBadge">FY 2025–26</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── PROCESSOR VIEW ── -->
+    <div id="view-processor">
+      <div class="panel-grid">
+
+        <!-- LEFT: Upload Panel -->
+        <div>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>📁 Upload Statements</h2>
+              <span class="ph-sub" id="fileCount">No files selected</span>
+            </div>
+            <div class="panel-body">
+
+              <!-- FY Selector -->
+              <div class="fy-bar">
+                <label>Financial Year</label>
+                <select class="fy-select" id="fySelect" onchange="onFYChange()">
+                  <option value="2020-2021">FY 2020–2021</option>
+                  <option value="2021-2022">FY 2021–2022</option>
+                  <option value="2022-2023">FY 2022–2023</option>
+                  <option value="2023-2024">FY 2023–2024</option>
+                  <option value="2024-2025">FY 2024–2025</option>
+                  <option value="2025-2026" selected>FY 2025–2026</option>
+                  <option value="2026-2027">FY 2026–2027</option>
+                  <option value="2027-2028">FY 2027–2028</option>
+                  <option value="2028-2029">FY 2028–2029</option>
+                  <option value="2029-2030">FY 2029–2030</option>
+                </select>
+                <span class="fy-range" id="fyRange">01 Apr 2025 → 31 Mar 2026</span>
+              </div>
+
+              <!-- Drop Zone -->
+              <div class="drop-zone" id="dropZone">
+                <div class="dz-icon">📂</div>
+                <h3>Drop files here or <strong>browse</strong></h3>
+                <p>PDF, Excel (.xlsx/.xls), ZIP<br>CAMS · Zerodha · Upstox · Nirmal Bang · HDFC · Purnartha · Dezerv & more</p>
+                <input type="file" id="fileInput" multiple accept=".pdf,.xlsx,.xls,.zip,.csv">
+              </div>
+
+              <!-- File List -->
+              <div class="file-list" id="fileList"></div>
+
+              <!-- Status -->
+              <div class="status-box" id="statusBox"></div>
+              <div class="prog-wrap" id="progWrap" style="display:none">
+                <div class="prog-bar" id="progBar"></div>
+              </div>
+
+              <!-- Buttons -->
+              <button class="process-btn" id="processBtn" disabled onclick="processFiles()">
+                ⚡ Process Statements
+              </button>
+              <a class="dl-btn" id="downloadBtn">⬇ Download Full Capital Gains Excel</a>
+              <a class="dl-btn computax" id="computaxDownloadBtn">📊 Download Computax-Ready File (Cols B–W)</a>
+              <p class="footer-note">🔒 Files are processed securely and not stored after processing</p>
+            </div>
+          </div>
+
+          <!-- Verification Table (shown after processing) -->
+          <div class="verify-section" id="verifySection" style="display:none">
+            <h2>✅ Verification Summary <span style="color:var(--muted);font-weight:400;font-size:12px" id="verifySubtitle"></span></h2>
+            <div class="table-wrap">
+              <table id="verifyTable">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Source Name</th>
+                    <th>Process Status</th>
+                    <th>Client Name</th>
+                    <th>Rows Extracted</th>
+                    <th>Out of Range</th>
+                    <th>Sale Value (₹)</th>
+                    <th>Purchase Value (₹)</th>
+                    <th>Capital Gain / Loss (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="verifyBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Info Panel -->
+        <div class="panel">
+          <div class="panel-head"><h2>🔧 How it works</h2></div>
+          <div class="info-card">
+            <div class="ic-title">⚡ Instant processing</div>
+            <ul class="ic-list">
+              <li>Select your Financial Year above</li>
+              <li>Drop one or multiple broker PDFs / Excel files</li>
+              <li>Click "Process Statements"</li>
+              <li>Download Computax-ready Excel in seconds</li>
+            </ul>
+          </div>
+          <div class="info-card">
+            <div class="ic-title">🏦 Supported brokers & formats</div>
+            <div class="tag-row">
+              <span class="tag">Nirmal Bang</span>
+              <span class="tag">HDFC Bank</span>
+              <span class="tag">Purnartha</span>
+              <span class="tag">Zerodha</span>
+              <span class="tag">Upstox</span>
+              <span class="tag">CAMS</span>
+              <span class="tag">Mirae Asset</span>
+              <span class="tag">ICICI PMS</span>
+              <span class="tag">Dezerv</span>
+              <span class="tag">MFAdda</span>
+              <span class="tag">+ more</span>
+            </div>
+          </div>
+          <div class="info-card">
+            <div class="ic-title">📌 Date range filtering</div>
+            <p style="font-size:12px;color:var(--muted);line-height:1.6">
+              Only transactions with a <strong>sale date</strong> falling within the selected Financial Year are included in the output.<br><br>
+              Transactions outside the FY are excluded and flagged — you'll see exactly which ones were skipped and why.
+            </p>
+          </div>
+          <div class="info-card">
+            <div class="ic-title">🔐 Password-protected PDFs</div>
+            <p style="font-size:12px;color:var(--muted);line-height:1.6">
+              Rename the file placing the password before the final dot:<br>
+              <code style="background:var(--off);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px">CAMS.<strong>abc123</strong>.pdf</code>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div><!-- /processor view -->
+
+    <!-- ── VERIFICATION VIEW ── -->
+    <div id="view-verification" style="display:none">
+      <div id="noVerifyData" class="empty-state">
+        <div class="es-icon">📋</div>
+        <p>No processing results yet.<br>Go to <strong>Process Statements</strong> and run at least one file.</p>
+      </div>
+      <div id="verifyFull" style="display:none">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>✅ Verification Report</h2>
+            <span class="ph-sub" id="verifyFYLabel"></span>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <div class="table-wrap" style="border:none;border-radius:0">
+              <table id="verifyTableFull">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Source Name</th>
+                    <th>Process Status</th>
+                    <th>Client Name</th>
+                    <th>Rows Extracted</th>
+                    <th>Out of Range</th>
+                    <th>Sale Value (₹)</th>
+                    <th>Purchase Value (₹)</th>
+                    <th>Capital Gain / Loss (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="verifyBodyFull"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /verify view -->
+
+
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ── OUT-OF-RANGE MODAL ── -->
+<div class="overlay" id="oorOverlay">
+  <div class="modal">
+    <h3>⚠️ Out-of-Range Transactions Excluded</h3>
+    <p id="oorDesc"></p>
+    <div class="oor-table" id="oorTableWrap"></div>
+    <div class="modal-btns">
+      <button class="mbtn primary" onclick="closeModal('oorOverlay')">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MULTIPLE CLIENTS MODAL ── -->
+<div class="overlay" id="clientOverlay">
+  <div class="modal">
+    <h3>👥 Multiple Clients Detected</h3>
+    <p id="clientModalText"></p>
+    <div class="client-list" id="clientList"></div>
+    <div class="modal-btns">
+      <button class="mbtn secondary" onclick="handleClientModal('all')">Process All Together</button>
+      <button class="mbtn primary" onclick="handleClientModal('selected')">Process Selected Only</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const WEBHOOK_URL = 'http://localhost:5000/process';
+const FY_KEY = 'cg_last_fy';
+
+let selectedFiles = [];
+let pendingResult  = null;
+let lastResult     = null;
+let lastFY         = null;
+let verifyRows     = [];
+
+// ── FY helpers ──
+function getFYDates(fy) {
+  const [sy, ey] = fy.split('-').map(Number);
+  return {
+    start: `${sy}-04-01`,
+    end:   `${ey}-03-31`,
+    label: `01 Apr ${sy} → 31 Mar ${ey}`,
+    short: `FY ${sy}–${String(ey).slice(2)}`
+  };
+}
+function onFYChange() {
+  const fy = document.getElementById('fySelect').value;
+  const d  = getFYDates(fy);
+  document.getElementById('fyRange').textContent = d.label;
+  document.getElementById('fyBadge').textContent  = d.short;
+  localStorage.setItem(FY_KEY, fy);
+}
+(function(){
+  const saved = localStorage.getItem(FY_KEY) || '2025-2026';
+  const sel = document.getElementById('fySelect');
+  if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
+  onFYChange();
+})();
+
+// ── VIEW SWITCHING ──
+function switchView(v) {
+  ['processor','verification'].forEach(x => {
+    document.getElementById(`view-${x}`).style.display = x === v ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const idx = {processor:0,verification:1}[v];
+  document.querySelectorAll('.nav-item')[idx]?.classList.add('active');
+  const titles = {
+    processor:    ['Process Statements', 'Upload broker statements to generate Computax-ready Excel'],
+    verification: ['Verification Report', 'Check processed file details and out-of-range transactions'],
+  };
+  document.getElementById('pageTitle').textContent    = titles[v][0];
+  document.getElementById('pageSubtitle').textContent = titles[v][1];
+
+  if (v === 'verification') refreshVerifyFull();
+}
+
+// ── DRAG & DROP ──
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click',    () => fileInput.click());
+fileInput.addEventListener('change',  e  => addFiles(Array.from(e.target.files)));
+dropZone.addEventListener('dragover', e  => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave',()  => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  addFiles(Array.from(e.dataTransfer.files));
+});
+
+function addFiles(files) {
+  files.forEach(f => {
+    if (!selectedFiles.find(x => x.name === f.name && x.size === f.size)) selectedFiles.push(f);
+  });
+  renderFileList();
+}
+function removeFile(idx) { selectedFiles.splice(idx,1); renderFileList(); }
+function fmt(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+function renderFileList() {
+  const fl = document.getElementById('fileList');
+  fl.innerHTML = selectedFiles.map((f,i) => `
+    <div class="file-item">
+      <span class="file-ext">${f.name.split('.').pop().toUpperCase()}</span>
+      <span class="file-name" title="${f.name}">${f.name}</span>
+      <span class="file-size">${fmt(f.size)}</span>
+      <button class="file-rm" onclick="removeFile(${i})" title="Remove">&#x2715;</button>
+    </div>`).join('');
+  document.getElementById('fileCount').textContent =
+    selectedFiles.length ? `${selectedFiles.length} file${selectedFiles.length>1?'s':''} selected` : 'No files selected';
+  document.getElementById('processBtn').disabled = selectedFiles.length === 0;
+  document.getElementById('downloadBtn').classList.remove('show');
+  document.getElementById('computaxDownloadBtn').classList.remove('show');
+  document.getElementById('statusBox').style.display = 'none';
+  document.getElementById('progWrap').style.display = 'none';
+}
+
+// ── STATUS ──
+function showStatus(type, html) {
+  const sb = document.getElementById('statusBox');
+  sb.className = `status-box ${type}`;
+  sb.innerHTML = html;
+  if (type === 'error') showToast('error', html.replace(/<[^>]+>/g,' ').trim().slice(0,200));
+}
+
+// ── PROGRESS ──
+function startProgress() {
+  const pw = document.getElementById('progWrap');
+  const pb = document.getElementById('progBar');
+  pw.style.display = 'block';
+  pb.style.width   = '0%';
+  let pct = 0;
+  window._prog = setInterval(() => {
+    pct = pct < 85 ? pct + (85-pct)*0.06 : pct;
+    pb.style.width = pct + '%';
+  }, 400);
+}
+function endProgress() {
+  clearInterval(window._prog);
+  document.getElementById('progBar').style.width = '100%';
+  setTimeout(() => { document.getElementById('progWrap').style.display = 'none'; }, 600);
+}
+
+// ── MAIN PROCESS ──
+async function processFiles(filesToProcess) {
+  const files = filesToProcess || selectedFiles;
+  if (!files.length) return;
+
+  const fy = document.getElementById('fySelect').value;
+  const { start: fyStart, end: fyEnd, short: fyShort } = getFYDates(fy);
+  lastFY = fy;
+  localStorage.setItem(FY_KEY, fy);
+
+  document.getElementById('processBtn').disabled = true;
+  document.getElementById('downloadBtn').classList.remove('show');
+  document.getElementById('computaxDownloadBtn').classList.remove('show');
+  showStatus('loading', `<span class="spinner"></span>&nbsp; Processing ${files.length} file${files.length>1?'s':''} for ${fyShort}… 15–30 seconds`);
+  startProgress();
+
+  const formData = new FormData();
+  files.forEach(f => formData.append('files', f));
+  formData.append('fy_start', fyStart);
+  formData.append('fy_end',   fyEnd);
+
+  try {
+    const response = await fetch(WEBHOOK_URL, { method:'POST', body: formData });
+    if (!response.ok) throw new Error(`Server error ${response.status}`);
+    const result = await response.json();
+    endProgress();
+
+    if (!result.success || result.error)
+      throw new Error(result.error || result.message || 'Unknown error');
+
+    const oor    = result.out_of_range_count || 0;
+    const errors = result.errors || [];
+
+    // Wrong FY — all rows excluded
+    if (result.total_rows === 0 && oor > 0) {
+      showStatus('error', `❌ <strong>Wrong Financial Year selected.</strong><br>
+        Found <strong>${oor} transactions</strong> in the file but none fall in <strong>${getFYDates(fy).label}</strong>.<br>
+        👉 Change the Financial Year dropdown and try again.`);
+      document.getElementById('processBtn').disabled = false;
+      return;
+    }
+    // Zero rows
+    if (result.total_rows === 0) {
+      const errMsg  = errors.length > 0 ? errors[0] : '';
+      const isPwd   = /password|cannot read|encrypted|decrypt/i.test(errMsg);
+      showStatus('error', isPwd
+        ? `❌ <strong>Password-protected PDF detected.</strong><br>Rename: <code>filename.PASSWORD.pdf</code>`
+        : `❌ <strong>No transactions extracted.</strong><br>File may be unsupported or password-protected.<br>
+           ${errMsg ? '<small>' + errMsg + '</small>' : ''}`);
+      document.getElementById('processBtn').disabled = false;
+      return;
+    }
+
+    const clientNames = Object.keys(result.clients || {});
+    if (clientNames.length > 1 && !filesToProcess) {
+      pendingResult = result;
+      showClientModal(clientNames, result.clients);
+      document.getElementById('processBtn').disabled = false;
+      return;
+    }
+
+    lastResult = result;
+    showSuccess(result, fy, files);
+
+  } catch (err) {
+    endProgress();
+    showStatus('error', `❌ <strong>Error:</strong> ${err.message}<br><small>Make sure the server is running and try again.</small>`);
+  }
+  document.getElementById('processBtn').disabled = false;
+}
+
+// ── SHOW SUCCESS ──
+function showSuccess(result, fy, files) {
+  const cg   = Number(result.total_capital_gain || 0);
+  const fmtN = n => Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits:2 });
+  const sign = cg >= 0 ? '+' : '−';
+  const col  = cg >= 0 ? '#15803d' : '#dc2626';
+  const clientNames = Object.keys(result.clients || {});
+  const oor  = result.out_of_range_count || 0;
+  const oorItems = result.out_of_range_items || [];
+
+  const clientLine = clientNames.length
+    ? `<div style="margin-top:4px;font-size:12px">👤 <strong>${clientNames.join(', ')}</strong></div>` : '';
+
+  let oorWarn = '';
+  if (oor > 0) {
+    oorWarn = `<div class="warn-strip" onclick="showOORModal('${fy}', ${JSON.stringify(oorItems).replace(/"/g,'&quot;')})">
+      <span class="ws-icon">⚠️</span>
+      <span class="ws-text"><strong>${oor} transaction${oor>1?'s':''}</strong> outside FY ${getFYDates(fy).short} were excluded.
+      <span class="ws-link">Click to see details →</span></span>
+    </div>`;
+  }
+
+  showStatus('success', `
+    ✅ Done! <strong>${result.total_rows} transactions</strong> processed — FY ${getFYDates(fy).short}
+    ${clientLine}
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Sale Amount</div>
+        <div class="stat-val">₹${fmtN(result.total_sale_amount||0)}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Purchase Amount</div>
+        <div class="stat-val">₹${fmtN(result.total_purchase_amount||0)}</div>
+      </div>
+      <div class="stat-box stat-full">
+        <div class="stat-label">Net Capital Gain / Loss</div>
+        <div class="stat-val" style="color:${col}">${sign}₹${fmtN(cg)}</div>
+      </div>
+    </div>${oorWarn}`);
+
+  if (result.file_base64) {
+    const blob = b64toBlob(result.file_base64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const dlBtn = document.getElementById('downloadBtn');
+    dlBtn.href = URL.createObjectURL(blob);
+    dlBtn.download = `capital_gains_FY${fy}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    dlBtn.classList.add('show');
+  }
+
+  if (result.computax_base64) {
+    const cBlob = b64toBlob(result.computax_base64, 'application/vnd.ms-excel');
+    const cBtn = document.getElementById('computaxDownloadBtn');
+    cBtn.href = URL.createObjectURL(cBlob);
+    cBtn.download = `computax_ready_FY${fy}_${new Date().toISOString().slice(0,10)}.xls`;
+    cBtn.classList.add('show');
+  }
+
+  // Build verification rows — one per file from file_meta
+  const fileMeta = result.file_meta || [];
+  if (fileMeta.length > 0) {
+    fileMeta.forEach(fm => {
+      const cg = fm.capital_gain || 0;
+      verifyRows.unshift({
+        source:    fm.source,
+        status:    fm.process_status === 'Not Processed' ? 'error'
+                 : fm.process_status === 'Semi-Processed' ? 'warn' : 'ok',
+        statusLabel: fm.process_status,
+        clients:   fm.client_name || '—',
+        rows:      fm.rows_extracted,
+        oor:       fm.oor_count || 0,
+        sale:      fm.sale_amount || 0,
+        purchase:  fm.purchase_amount || 0,
+        cg:        cg,
+        fy:        fy,
+        oorItems:  oorItems,
+        remark:    fm.remark || '',
+      });
+    });
+  } else {
+    // Fallback: single aggregate row if server doesn't return file_meta
+    verifyRows.unshift({
+      source:   (files||selectedFiles).map(f=>f.name.replace(/\.[^/.]+$/,'')).join(', '),
+      status:   'ok',
+      statusLabel: 'Processed',
+      clients:  clientNames.join(', ') || '—',
+      rows:     result.total_rows,
+      oor:      oor,
+      sale:     result.total_sale_amount||0,
+      purchase: result.total_purchase_amount||0,
+      cg:       cg,
+      fy:       fy,
+      oorItems: oorItems,
+    });
+  }
+  renderVerifyTable();
+}
+
+function renderVerifyTable() {
+  const tbody = document.getElementById('verifyBody');
+  if (!verifyRows.length) { document.getElementById('verifySection').style.display='none'; return; }
+  document.getElementById('verifySection').style.display = '';
+  const fmtN = n => Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits:2 });
+  const sign = n => n >= 0 ? '+' : '−';
+  const col  = n => n >= 0 ? '#15803d' : '#dc2626';
+  const statusBadge = r => {
+    if (r.status === 'ok')   return `<span class="badge ok">✓ Processed</span>`;
+    if (r.status === 'warn') return `<span class="badge warn">⚠ Semi-Processed</span>`;
+    return `<span class="badge err">✗ Not Processed</span>`;
+  };
+
+  tbody.innerHTML = verifyRows.map((r,i) => {
+    const oorCell = r.oor > 0
+      ? `<span class="badge warn" style="cursor:pointer" onclick="showOORModal('${r.fy}', ${JSON.stringify(r.oorItems||[]).replace(/"/g,'&quot;')})">
+          ⚠ ${r.oor} excluded
+         </span>`
+      : `<span style="color:var(--light);font-size:12px">—</span>`;
+    return `<tr>
+      <td class="mono" style="color:var(--muted)">${i+1}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.source}">${r.source}</td>
+      <td>${statusBadge(r)}</td>
+      <td>${r.clients}</td>
+      <td class="mono">${r.rows}</td>
+      <td>${oorCell}</td>
+      <td class="mono">₹${fmtN(r.sale)}</td>
+      <td class="mono">₹${fmtN(r.purchase)}</td>
+      <td class="mono" style="color:${col(r.cg)};font-weight:600">${sign(r.cg)}₹${fmtN(r.cg)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('verifySubtitle').textContent = `— ${verifyRows.length} file${verifyRows.length>1?'s':''} processed`;
+}
+
+function refreshVerifyFull() {
+  if (!verifyRows.length) {
+    document.getElementById('noVerifyData').style.display = '';
+    document.getElementById('verifyFull').style.display = 'none';
+    return;
+  }
+  document.getElementById('noVerifyData').style.display = 'none';
+  document.getElementById('verifyFull').style.display   = '';
+  document.getElementById('verifyFYLabel').textContent  = `${verifyRows.length} file${verifyRows.length>1?'s':''} total`;
+
+  const fmtN = n => Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits:2 });
+  const sign = n => n >= 0 ? '+' : '−';
+  const col  = n => n >= 0 ? '#15803d' : '#dc2626';
+  const statusBadge = r => {
+    if (r.status === 'ok')   return `<span class="badge ok">✓ Processed</span>`;
+    if (r.status === 'warn') return `<span class="badge warn">⚠ Semi-Processed</span>`;
+    return `<span class="badge err">✗ Not Processed</span>`;
+  };
+
+  document.getElementById('verifyBodyFull').innerHTML = verifyRows.map((r,i) => {
+    const oorCell = r.oor > 0
+      ? `<span class="badge warn" style="cursor:pointer" onclick="showOORModal('${r.fy}', ${JSON.stringify(r.oorItems||[]).replace(/"/g,'&quot;')})">
+          ⚠ ${r.oor} excluded
+         </span>`
+      : `<span style="color:var(--light);font-size:12px">—</span>`;
+
+    return `<tr>
+      <td class="mono" style="color:var(--muted)">${i+1}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.source}">${r.source}</td>
+      <td>${statusBadge(r)}</td>
+      <td>${r.clients}</td>
+      <td class="mono">${r.rows}</td>
+      <td>${oorCell}</td>
+      <td class="mono">₹${fmtN(r.sale)}</td>
+      <td class="mono">₹${fmtN(r.purchase)}</td>
+      <td class="mono" style="color:${col(r.cg)};font-weight:600">${sign(r.cg)}₹${fmtN(r.cg)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── OOR MODAL ──
+function showOORModal(fy, items) {
+  const fyLabel = getFYDates(fy).label;
+  document.getElementById('oorDesc').innerHTML =
+    `The following ${items.length} transaction${items.length>1?'s':''} had sale dates <strong>outside ${fyLabel}</strong> and were <strong>excluded</strong> from the output Excel. They are not missing — they simply don't fall within the selected Financial Year.`;
+
+  const rows = items.map((it,i) => `<tr>
+    <td class="mono" style="color:var(--muted)">${i+1}</td>
+    <td><strong>${it.name}</strong></td>
+    <td class="mono">${it.sale_date}</td>
+    <td><span class="badge ${it.gain_type==='Long Term'?'ok':'warn'}">${it.gain_type}</span></td>
+  </tr>`).join('');
+
+  document.getElementById('oorTableWrap').innerHTML = `<table>
+    <thead><tr><th>#</th><th>Security</th><th>Sale Date</th><th>Gain Type</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  openModal('oorOverlay');
+}
+
+// ── CLIENT MODAL ──
+function showClientModal(clientNames, clients) {
+  document.getElementById('clientModalText').textContent =
+    `${clientNames.length} different clients detected in the uploaded files. Select which to include:`;
+  document.getElementById('clientList').innerHTML = clientNames.map((n,i) => `
+    <div class="client-item">
+      <input type="checkbox" id="cl_${i}" value="${n}" checked>
+      <label for="cl_${i}">${n}</label>
+      <span class="csrc">${(clients[n]||[]).join(', ')}</span>
+    </div>`).join('');
+  openModal('clientOverlay');
+}
+function handleClientModal(action) {
+  closeModal('clientOverlay');
+  if (action === 'all') { lastResult = pendingResult; showSuccess(pendingResult, lastFY, selectedFiles); return; }
+  const checked = [...document.querySelectorAll('#clientList input:checked')].map(x=>x.value);
+  const cl = pendingResult.clients || {};
+  const srcs = new Set();
+  checked.forEach(n => (cl[n]||[]).forEach(s=>srcs.add(s)));
+  const filtered = selectedFiles.filter(f => srcs.has(f.name.replace(/\.[^/.]+$/,'')));
+  processFiles(filtered.length ? filtered : selectedFiles);
+}
+
+// ── MODAL HELPERS ──
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ── TOAST ──
+function showToast(type, text) {
+  const t = document.getElementById('toast');
+  const m = document.getElementById('toastMsg');
+  t.className = `toast show ${type}`;
+  m.textContent = text.replace(/<[^>]+>/g,' ').slice(0,180);
+  clearTimeout(window._toastT);
+  window._toastT = setTimeout(hideToast, 10000);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+// ── B64 BLOB ──
+function b64toBlob(b64, type) {
+  const chars = atob(b64); const arrays = [];
+  for (let i=0; i<chars.length; i+=512)
+    arrays.push(new Uint8Array([...chars.slice(i,i+512)].map(c=>c.charCodeAt(0))));
+  return new Blob(arrays, {type});
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); });
+});
+</script>
+</body>
+</html>
