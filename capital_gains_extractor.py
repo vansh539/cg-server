@@ -4785,9 +4785,10 @@ def write_output_excel(rows, output_path, file_meta=None):
     _write_verification_sheet(wb, rows, file_meta or [])
 
     wb.save(output_path)
-    # NOTE: Pivot injection removed — static summary table is used instead.
-    # The _post_save_inject_pivot function caused Excel repair errors on all files
-    # because the injected pivot XML had mismatched item counts and missing sharedStrings.
+    try:
+        _post_save_inject_pivot(output_path, len(rows))
+    except Exception as e:
+        print(f"[WARN] Pivot injection failed (static table still present): {e}", file=sys.stderr)
 
 
 def write_computax_excel(rows, output_path, file_meta=None, fy_start=None, fy_end=None):
