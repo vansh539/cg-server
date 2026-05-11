@@ -2932,9 +2932,8 @@ def attempt_auto_parse(file_path, module_globals=None, extractor_path=None):
 class OCRPDFParser:
     """OCR-based fallback for CID-encoded PDFs.
 
-    Converts each page to an image with pdf2image, OCRs with tesseract,
-    then sends the text to local Ollama for structured extraction —
-    using the same prompt and JSON parsing logic as AIFallbackParser.
+    Runs two OCR passes (200 DPI for amounts, 300 DPI for dates in split rows),
+    preprocesses text to remove table artifacts, then sends to Ollama.
     """
 
     def parse(self, file_path, source_name=None):
@@ -2947,51 +2946,165 @@ class OCRPDFParser:
             return []
 
         try:
-            images = convert_from_path(file_path, dpi=200)
+            images_200 = convert_from_path(file_path, dpi=200)
+            images_300 = convert_from_path(file_path, dpi=300)
         except Exception as e:
             print(f"[WARN] OCRPDFParser: pdf2image failed: {e}", file=sys.stderr)
             return []
 
-        ai = AIFallbackParser()
-        chunks = []
-        for i, img in enumerate(images):
+        all_200, all_300 = [], []
+        for i, (img200, img300) in enumerate(zip(images_200, images_300)):
             try:
-                import pytesseract as _tess
-                text = _tess.image_to_string(img)
+                all_200.append(self._preprocess_ocr(pytesseract.image_to_string(img200)))
+                all_300.append(self._preprocess_ocr(pytesseract.image_to_string(img300)))
             except Exception as e:
                 print(f"[WARN] OCRPDFParser: tesseract failed on page {i+1}: {e}", file=sys.stderr)
-                continue
-            if text and len(text.strip()) >= 80:
-                chunks.append(text)
+                all_200.append("")
+                all_300.append("")
 
-        # Always combine all pages — OCR text is sparse, context across pages helps Ollama
-        if len(chunks) > 1:
-            chunks = ["\n\n".join(chunks)]
+        full_200 = "\n\n".join(all_200)
+        full_300 = "\n\n".join(all_300)
 
-        all_rows = []
-        seen_keys = set()
-        for idx, chunk in enumerate(chunks):
-            try:
-                rows = ai._call_ollama(chunk, source, force_json_format=False)
-            except Exception as e:
-                print(f"[WARN] OCRPDFParser chunk {idx+1}/{len(chunks)} Ollama call failed: {e}", file=sys.stderr)
-                continue
-            for r in rows:
-                k = (
-                    r.get("sale_date").strftime("%Y-%m-%d") if r.get("sale_date") else "",
-                    (r.get("share_name") or "").strip().lower(),
-                    round(float(r.get("sale_amt") or 0), 2),
-                    r.get("purchase_date").strftime("%Y-%m-%d") if r.get("purchase_date") else "",
-                )
-                if k in seen_keys:
+        # Try regex parser first — precise for known dense-table formats
+        try:
+            rows = self._regex_parse_cg_table(full_200, full_300, source)
+        except Exception as e:
+            print(f"[WARN] OCRPDFParser regex parse failed: {e}", file=sys.stderr)
+            rows = []
+
+        # Fall back to Ollama if regex got nothing
+        if not rows:
+            ai = AIFallbackParser()
+            page_chunks = []
+            for t200, t300 in zip(all_200, all_300):
+                combined = t200
+                if t300.strip() and t300.strip() != t200.strip():
+                    combined = t200 + "\n\n[Higher-DPI pass:]\n" + t300
+                has_date    = bool(re.search(r'\d{2}-[A-Za-z]{3}-\d{2}', combined))
+                has_amounts = bool(re.search(r'[\d,]{4,}\.\d{2}', combined))
+                if len(combined.strip()) >= 80 and has_date and has_amounts:
+                    page_chunks.append(combined)
+            if page_chunks:
+                chunk = "\n\n".join(page_chunks)
+                try:
+                    rows = ai._call_ollama(chunk, source, force_json_format=False)
+                except Exception as e:
+                    print(f"[WARN] OCRPDFParser Ollama fallback failed: {e}", file=sys.stderr)
+
+        if rows:
+            print(f"[INFO] OCRPDFParser extracted {len(rows)} rows from {Path(file_path).name}", file=sys.stderr)
+        return rows
+
+    def _preprocess_ocr(self, text):
+        """Clean common OCR artifacts from dense financial tables."""
+        text = re.sub(r'(\d)[\]\|](\s)', r'\1\2', text)
+        text = re.sub(r'(\d)[\]\|]$', r'\1', text, flags=re.MULTILINE)
+        lines = text.split('\n')
+        result = []
+        i = 0
+        while i < len(lines):
+            ln = lines[i].strip()
+            if re.match(r'^\d{8,}\s+[\d,]+\.\d+\s*$', ln):
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines) and re.search(r'\d{2}-[A-Za-z]{3}-\d{2}', lines[j]):
+                    result.append(ln + ' ' + lines[j].strip())
+                    i = j + 1
                     continue
-                seen_keys.add(k)
-                all_rows.append(r)
+            result.append(lines[i])
+            i += 1
+        return '\n'.join(result)
 
-        if all_rows:
-            print(f"[INFO] OCRPDFParser extracted {len(all_rows)} rows from "
-                  f"{Path(file_path).name} ({len(chunks)} chunk(s))", file=sys.stderr)
-        return all_rows
+    def _regex_parse_cg_table(self, text_200, text_300, source):
+        """Regex-based parser for dense columnar CG tables (e.g. Axis Bank).
+
+        Column order (200 DPI): folio qty purchase_date purchase_nav purchase_val
+                                 sale_date [|] sale_nav stt sale_val ...
+        Partial rows (split by OCR): folio qty purchase_date sale_val purchase_val
+        300 DPI pass fills in missing sale dates for partial rows.
+        """
+        DATE_RE = r'\d{2}-[A-Za-z]{3}-\d{2,4}'
+        FOLIO_QTY_RE = re.compile(r'^(\d{8,})\s+([\d,]+\.\d+)\s*[\|]?\s*(.+)$')
+
+        # Regex for a complete row's "rest" (after folio+qty):
+        # purchase_date  purchase_nav  purchase_val  sale_date  [| sep]  sale_nav  stt  sale_val
+        FULL_REST_RE = re.compile(
+            r'(\d{2}-[A-Za-z]{3}-\d{2,4})\s+'
+            r'[\d.]+\s+'
+            r'([\d,]+\.\d+)\s+'
+            r'(\d{2}-[A-Za-z]{3}-\d{2,4})'
+            r'[\s\|]+'
+            r'[\d.]+\s+'
+            r'[\d.]+\s+'
+            r'([\d,]+\.\d+)'
+        )
+        # Regex for a partial row's "rest": purchase_date  sale_val  purchase_val
+        PARTIAL_REST_RE = re.compile(
+            r'(\d{2}-[A-Za-z]{3}-\d{2,4})\s+'
+            r'([\d,]+\.\d+)\s+'
+            r'([\d,]+\.\d+)'
+        )
+        # 300 DPI: folio qty [|] purchase_date sale_date (two dates on one row)
+        DATE_ROW_300_RE = re.compile(
+            r'\d{8,}\s+[\d,]+\.\d+\s*[\|]?\s*'
+            r'(\d{2}-[A-Za-z]{3}-\d{2,4})\s+'
+            r'(\d{2}-[A-Za-z]{3}-\d{2,4})'
+        )
+
+        # Build lookup: purchase_date → sale_date from 300 DPI
+        dates_300 = {}
+        for m in DATE_ROW_300_RE.finditer(text_300):
+            pd_str, sd_str = m.groups()
+            pd = parse_date(pd_str)
+            sd = parse_date(sd_str)
+            if pd and sd and pd != sd:
+                dates_300[pd] = sd
+
+        fund_name = None
+        rows = []
+        for line in text_200.split('\n'):
+            ln = line.strip()
+            if not ln:
+                continue
+            # Detect fund name: alphabetic line, no digits, reasonable length
+            if re.match(r'^[A-Za-z]', ln) and not re.search(r'\d{2}-[A-Za-z]{3}', ln) \
+                    and 10 < len(ln) < 100 and 'TOTAL' not in ln.upper():
+                fund_name = ln
+                continue
+            m = FOLIO_QTY_RE.match(ln)
+            if not m or not fund_name:
+                continue
+            folio, qty_str, rest = m.groups()
+            qty = to_float(qty_str)
+            # Try complete row first
+            m2 = FULL_REST_RE.search(rest)
+            if m2:
+                pd_str, pv_str, sd_str, sv_str = m2.groups()
+                rows.append((fund_name, qty, parse_date(pd_str), to_float(pv_str),
+                              parse_date(sd_str), to_float(sv_str)))
+                continue
+            # Try partial row (one date, amounts but no sale date)
+            # Column order: purchase_date  purchase_value  sale_value
+            m3 = PARTIAL_REST_RE.search(rest)
+            if m3:
+                pd_str, purchase_val_str, sale_val_str = m3.groups()
+                pd = parse_date(pd_str)
+                sd = dates_300.get(pd)  # fill from 300 DPI
+                rows.append((fund_name, qty, pd, to_float(purchase_val_str), sd, to_float(sale_val_str)))
+
+        result = []
+        seen = set()
+        for (fund, qty, pd, pv, sd, sv) in rows:
+            if not sd or not sv:
+                continue
+            k = (fund, str(pd), str(sd), round(sv, 2))
+            if k in seen:
+                continue
+            seen.add(k)
+            gt = determine_gain_type(pd, sd, is_equity=True)
+            result.append(make_row(source, fund, '', sd, qty, None, sv, pd, pv or 0, gt, None))
+        return result
 
 
 
