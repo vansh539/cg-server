@@ -297,6 +297,104 @@ def make_row(source, name, isin, sale_date, qty, sale_price, sale_amt,
 
 
 
+def build_validation_report(rows, pdf_st=None, pdf_lt=None, pdf_total=None, parse_failures=0, parser_name=None):
+    """Universal validation: compute extracted totals, compare vs PDF-stated totals (if available).
+
+    Returns a dict with extracted/stated totals, gap, and cause analysis.
+    Works even when pdf_st/pdf_lt/pdf_total are None — in that case only extraction stats are reported.
+    """
+    ext_st = ext_lt = 0.0
+    zero_cost, intraday = [], []
+
+    for r in rows:
+        sale  = r.get('sale_amount') or 0.0
+        cost  = r.get('purchase_amount') or 0.0
+        gain  = sale - cost
+        gtype = r.get('gain_type', '')
+        pdate = r.get('purchase_date')
+        sdate = r.get('sale_date')
+
+        if gtype == 'Short Term':
+            ext_st += gain
+        else:
+            ext_lt += gain
+
+        if cost == 0.0 and sale > 0:
+            zero_cost.append({'name': r.get('share_name'), 'sale': round(sale, 2)})
+        if pdate and sdate and getattr(pdate, 'date', lambda: pdate)() == getattr(sdate, 'date', lambda: sdate)():
+            intraday.append({'name': r.get('share_name'), 'gain': round(gain, 2),
+                             'date': str(getattr(sdate, 'date', lambda: sdate)())})
+
+    ext_total = ext_st + ext_lt
+    gap_total = round(pdf_total - ext_total, 2) if pdf_total is not None else None
+    gap_pct   = round(abs(gap_total) / abs(pdf_total) * 100, 2) if (pdf_total and gap_total is not None) else None
+
+    # Per-category gaps (ST and LT individually)
+    gap_st = round(pdf_st - ext_st, 2) if pdf_st is not None else None
+    gap_lt = round(pdf_lt - ext_lt, 2) if pdf_lt is not None else None
+    gap_st_pct = round(abs(gap_st) / abs(pdf_st) * 100, 2) if (pdf_st and gap_st is not None) else None
+    gap_lt_pct = round(abs(gap_lt) / abs(pdf_lt) * 100, 2) if (pdf_lt and gap_lt is not None) else None
+
+    causes = []
+    if zero_cost:
+        causes.append({
+            'type': 'ZERO_COST_BONUS_SHARES',
+            'count': len(zero_cost),
+            'note': 'Purchase cost is 0 — bonus/rights/demerger shares. Gain = full sale value. '
+                    'Correct per PDF.',
+            'rows': zero_cost[:5],
+        })
+    if intraday:
+        causes.append({
+            'type': 'INTRADAY_TRADES',
+            'count': len(intraday),
+            'note': 'Buy and sell on same date. Broker includes in ST G/L but these are '
+                    'speculative income, not capital gains — correctly excluded from output.',
+            'rows': intraday,
+        })
+    if parse_failures:
+        causes.append({
+            'type': 'PARSE_FAILURES',
+            'count': parse_failures,
+            'note': 'Rows the parser could not reconstruct — dates/amounts unreadable. '
+                    'Each failure may contribute to missing gain.',
+        })
+    # Flag when ST and LT diverge significantly even if totals cancel (gain_type misclassification)
+    if (gap_st_pct is not None and gap_st_pct > 1.0) or (gap_lt_pct is not None and gap_lt_pct > 1.0):
+        causes.append({
+            'type': 'GAIN_TYPE_MISMATCH',
+            'note': (f'ST gap: {gap_st_pct:.1f}% (₹{gap_st:,.2f}) | '
+                     f'LT gap: {gap_lt_pct:.1f}% (₹{gap_lt:,.2f}). '
+                     f'Even if the total is close, rows may be misclassified between ST and LT. '
+                     f'Verify "Shares w/o STT" or borderline-365-day holdings.'),
+        })
+    if gap_pct is not None and gap_pct > 1.0:
+        causes.append({
+            'type': 'AMOUNT_DISCREPANCY',
+            'note': f'Total gain gap is {gap_pct:.1f}% (₹{gap_total:,.2f}). '
+                    f'Review zero-cost rows and parse failures above.',
+        })
+
+    return {
+        'parser':           parser_name,
+        'pdf_st_gain':      pdf_st,
+        'pdf_lt_gain':      pdf_lt,
+        'pdf_total_gain':   pdf_total,
+        'extracted_st_gain':    round(ext_st, 2),
+        'extracted_lt_gain':    round(ext_lt, 2),
+        'extracted_total_gain': round(ext_total, 2),
+        'gap':              gap_total,
+        'gap_pct':          gap_pct,
+        'gap_st':           gap_st,
+        'gap_lt':           gap_lt,
+        'gap_st_pct':       gap_st_pct,
+        'gap_lt_pct':       gap_lt_pct,
+        'rows_extracted':   len(rows),
+        'collapsed_parse_failures': parse_failures,
+        'causes':           causes,
+    }
+
+
 # ─────────────────────────────────────────────
 # DEZERV / CONSOLIDATED CAPITAL GAIN EXCEL
 # ─────────────────────────────────────────────
@@ -385,12 +483,8 @@ class DezervExcelParser:
             days = to_float(g(row, 'days'))
             asset_type = str(g(row, 'asset_type') or '').strip()
 
-            if days is not None:
-                gain_type = "Long Term" if days > 365 else "Short Term"
-            elif sale_date and purchase_date:
-                gain_type = "Long Term" if (sale_date - purchase_date).days > 365 else "Short Term"
-            else:
-                gain_type = "Short Term"
+            is_eq = asset_type.lower() not in ('debt', 'non-equity mf', 'debt mf', 'non equity mf')
+            gain_type = determine_gain_type(purchase_date, sale_date, is_equity=is_eq)
 
             # For Long Term rows: use Indexed Cost as purchase_amount
             # so Capital Gain = Sale - Indexed Cost = LT After Index (tax-relevant figure)
@@ -468,7 +562,7 @@ class ICICIPMSParser:
                     name, isin, sale_date, qty, sale_rate, sale_amt, \
                     purchase_date, purchase_rate, purchase_amt, days, st_gain, lt_gain = row_data
 
-                    gain_type = "Long Term" if (days and days > 365) else "Short Term"
+                    gain_type = determine_gain_type(purchase_date, sale_date, is_equity=True)
                     src = f"{self.source_name}"
                     if current_strategy:
                         src = self.source_name
@@ -733,7 +827,7 @@ class NirmalBangParser:
         if not sold_total or sold_total <= 0:
             return None   # open / unsold position
 
-        gain_type = "Long Term" if (days and days > 365) else "Short Term"
+        gain_type = determine_gain_type(buy_date, sell_date, is_equity=True)
 
         # For cases where broker computed gain uses a different cost basis
         # (e.g. grandfathered cost after splits/bonuses), use gain from after_nums
@@ -830,6 +924,7 @@ class PurnarthaParser:
             for page in pdf.pages:
                 for table in (page.extract_tables() or []):
                     rows.extend(self._parse_table(table))
+        self.last_validation = self._build_validation(rows, pdf_path)
         return rows
 
     def _parse_table(self, table):
@@ -843,7 +938,9 @@ class PurnarthaParser:
 
             # ── Section headers — track but don't parse as data ──
             if "Unlisted Shares" in cell or "Non-Equity MF" in cell or "Debt Instrument" in cell:
-                current_asset_type = "Debt"
+                # "Shares w/o STT" = listed equity sold off-market → 365-day LT threshold
+                # This sub-category is included in the combined header but must use equity rules.
+                current_asset_type = "Equity" if "w/o STT" in cell else "Debt"
                 continue
             if "Listed Shares" in cell or "Equity Mutual Fund" in cell:
                 current_asset_type = "Equity"
@@ -907,17 +1004,53 @@ class PurnarthaParser:
         if not purchase_amt:
             purchase_amt = 0.0
 
-        if days is not None:
-            gain_type = "Long Term" if days > 365 else "Short Term"
-        else:
-            d = (sale_date - purchase_date).days if sale_date and purchase_date else 0
-            gain_type = "Long Term" if d > 365 else "Short Term"
+        is_equity_like = (asset_type != "Debt")
+        gain_type = determine_gain_type(purchase_date, sale_date, is_equity=is_equity_like)
 
         return make_row(
             self.source_name, name, isin,
             sale_date, qty, sale_rate, sale_amt,
             purchase_date, purchase_amt, gain_type, self.client_name,
             asset_type
+        )
+
+    # "ST Gain/Loss  q1 q2 q3 q4 q5  TOTAL  sale  eff_cost"
+    _ST_GAIN_RE = re.compile(
+        r'ST\s+Gain/Loss\s+'
+        r'(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)\s+'
+        r'(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)',
+        re.I,
+    )
+    _LT_GAIN_RE = re.compile(
+        r'LT\s+Gain/Loss\s+'
+        r'(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)\s+'
+        r'(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)\s+(-?[\d,]+\.?\d*)',
+        re.I,
+    )
+
+    def _extract_pdf_summary(self, pdf_path):
+        """Sum ST/LT totals from all Capital Gain/Loss Summary pages (each section has its own page)."""
+        try:
+            st_total = lt_total = 0.0
+            with open_pdf(pdf_path) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text() or ''
+                    m_st = self._ST_GAIN_RE.search(text)
+                    m_lt = self._LT_GAIN_RE.search(text)
+                    if m_st:
+                        st_total += float(m_st.group(6).replace(',', ''))
+                    if m_lt:
+                        lt_total += float(m_lt.group(6).replace(',', ''))
+            total = round(st_total + lt_total, 2)
+            return (round(st_total, 2), round(lt_total, 2), total) if (st_total or lt_total) else (None, None, None)
+        except Exception:
+            return None, None, None
+
+    def _build_validation(self, rows, pdf_path):
+        pdf_st, pdf_lt, pdf_total = self._extract_pdf_summary(pdf_path)
+        return build_validation_report(
+            rows, pdf_st=pdf_st, pdf_lt=pdf_lt, pdf_total=pdf_total,
+            parse_failures=0, parser_name='PurnarthaParser',
         )
 
 
@@ -1178,8 +1311,7 @@ class MiraeAssetParser:
             if not sale_amt or sale_amt <= 0:
                 continue
 
-            days      = (sale_date - purchase_date).days
-            gain_type = "Long Term" if days > 365 else "Short Term"
+            gain_type = determine_gain_type(purchase_date, sale_date, is_equity=True)
 
             rows.append(make_row(
                 self.source_name, current_scheme, current_isin,
@@ -2199,6 +2331,319 @@ class OpulenceWealthParser:
 
 
 # ─────────────────────────────────────────────
+# MOTILAL OSWAL — P&L Transaction Statement PDF
+# ─────────────────────────────────────────────
+
+class MotilalOswalPnLParser:
+    """Parses Motilal Oswal 'Profit and Loss Transaction Statement (All)' PDF.
+
+    Column layout (equity only):
+      Instrument Name | Qty | Purchase Date | Purchase Price | Purchase Cost |
+      Purchase Value | Sell Date | Sell Price | Sell Value | Holding Period |
+      G/L | sellstt | PURSTT | STT | ISIN
+
+    Detection keywords: 'Profit and Loss Transaction Statement' + 'motilaloswal'
+    """
+
+    # Indian ISINs always start with "IN" and always contain digits.
+    # Simple pattern + digit check avoids false matches on "INTERNATIONAL",
+    # "INFRASTRUCTURE" (long words starting with IN, no digits).
+    _ISIN_RE  = re.compile(r'(IN[A-Z0-9]{10})')
+    _FULL_DT  = re.compile(r'(\d{1,2})[\s ]*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s ]*(\d{4})', re.I)
+    _PART_DT  = re.compile(r'(\d{1,2})[\s ]*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b', re.I)
+    _YEAR_RE  = re.compile(r'\b(20\d{2})\b')
+    _SKIP_ROW = re.compile(
+        r'Profit|and Loss|Transaction Statement|Purchase Purchase|Instrument Name|'
+        r'Date Price Cost|Holding Long|Short Term|Long Term|Family |Client |'
+        r'Trading Code|ACCRUED|PRODUCT|Summary|BR/BA|SB Name|SPEC GAIN|Equity\s+0',
+        re.I
+    )
+    _MONTHS = {m: i for i, m in enumerate(
+        ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'], 1)}
+
+    def _find_isin(self, text):
+        """Return the first real ISIN match (has ≥3 digits — rejects company-name words
+        like INTERNATIONAL, INFRASTRUCTURE that start with IN but have no digits)."""
+        for m in self._ISIN_RE.finditer(str(text or '')):
+            if sum(c.isdigit() for c in m.group(1)) >= 3:
+                return m
+        return None
+
+    # Page-1 Summary table: "Equity ... ST_GAIN LT_GAIN ... TOTAL ..."
+    _SUMMARY_RE = re.compile(
+        r'Equity\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+'
+        r'([\d.,]+)\s+([\d.,]+)\s+[\d.,]+\s+([\d.,]+)',
+        re.I
+    )
+
+    def _extract_pdf_summary(self, pdf_path):
+        """Read page-1 Summary table and return (st_gain, lt_gain, total_gain)."""
+        try:
+            with open_pdf(pdf_path) as pdf:
+                text = pdf.pages[0].extract_text() or ''
+            m = self._SUMMARY_RE.search(text)
+            if m:
+                def _n(s): return float(s.replace(',', ''))
+                return _n(m.group(1)), _n(m.group(2)), _n(m.group(3))
+        except Exception:
+            pass
+        return None, None, None
+
+    def parse(self, pdf_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(pdf_path)
+        self.client_name = None
+        rows = []
+        with open_pdf(pdf_path) as pdf:
+            first_text = pdf.pages[0].extract_text() or ""
+            self.client_name = self._extract_client(first_text)
+            for page in pdf.pages:
+                rows.extend(self._parse_page(page))
+        return rows
+
+    def _extract_client(self, text):
+        for pat in [r'Client\s+([A-Z][A-Z\s]+?),', r'Client\s+([A-Z][A-Z\s]+?)\s*\(']:
+            m = re.search(pat, text, re.IGNORECASE)
+            if m:
+                name = m.group(1).strip()
+                if 3 < len(name) < 70:
+                    return name.title()
+        return None
+
+    def _mk_date(self, day, mon, yr):
+        try:
+            return datetime(int(yr), self._MONTHS[str(mon).lower()], int(day))
+        except Exception:
+            return None
+
+    def _parse_date_full(self, s):
+        m = self._FULL_DT.search(str(s or '').replace(' ', ' ').replace('\n', ' '))
+        return self._mk_date(m.group(1), m.group(2), m.group(3)) if m else None
+
+    def _to_f(self, s):
+        s = re.sub(r'[^0-9.\-]', '', str(s or ''))
+        try:
+            return float(s)
+        except Exception:
+            return None
+
+    def _parse_page(self, page):
+        rows = []
+        tables = page.extract_tables()
+        if not tables:
+            return rows
+        for table in tables:
+            for row in table:
+                if not row or not row[0]:
+                    continue
+                cell0 = str(row[0] or '')
+                if self._SKIP_ROW.search(cell0):
+                    continue
+                filled = sum(1 for c in row if c is not None and str(c).strip())
+                has_isin = any(self._find_isin(str(c or '')) for c in row)
+                if not has_isin:
+                    continue
+                if filled >= 8:
+                    r = self._parse_clean(row)
+                elif filled <= 2:
+                    r = self._parse_collapsed(cell0)
+                    if r is None:
+                        self._collapsed_failures = getattr(self, '_collapsed_failures', 0) + 1
+                else:
+                    r = None
+                if r and r.get('sell_value'):
+                    rows.append(r)
+        return rows
+
+    def _parse_clean(self, row):
+        row = list(row)
+        while len(row) < 16:
+            row.append(None)
+        isin_m = self._find_isin(str(row[14] or '') + ' ' + str(row[13] or ''))
+        if not isin_m:
+            return None
+        sell_date = self._parse_date_full(row[6])
+        if not sell_date:
+            return None
+        purch_date = self._parse_date_full(row[2])
+        name = str(row[0] or '').replace('\n', ' ').replace(' ', ' ').strip()
+        return {
+            'name': name, 'isin': isin_m.group(1),
+            'purch_date': purch_date, 'sell_date': sell_date,
+            'sell_price': self._to_f(row[7]),
+            'sell_value': self._to_f(row[8]),
+            'pur_cost':   self._to_f(row[4]),
+        }
+
+    def _parse_collapsed(self, text):
+        """
+        Collapsed cells (all data in col[0]) have the structure:
+          [part_dates_or_name]\n
+          NAME [qty] [full_purch_date] nums... STT{ISIN}\n
+          [years_or_name_cont]
+        """
+        text = text.replace(' ', ' ')
+        parts = [p.strip() for p in text.split('\n') if p.strip()]
+
+        # Find data line (contains ISIN)
+        data_line = next((p for p in parts if self._find_isin(p)), None)
+        if not data_line:
+            joined = text.replace('\n', ' ')
+            if self._find_isin(joined):
+                data_line = joined
+                parts = [data_line]
+            else:
+                return None
+
+        isin_m = self._find_isin(data_line)
+        if not isin_m:
+            return None
+        isin = isin_m.group(1)
+
+        other = [p for p in parts if p != data_line]
+
+        # Categorise other parts: date-fragment lines vs year-only lines vs name lines
+        date_frags = []   # list of ('part', day, mon) or ('full', day, mon, yr)
+        year_pools = []
+        name_parts = []
+
+        for p in other:
+            full_dates = self._FULL_DT.findall(p)
+            part_dates = self._PART_DT.findall(p)
+            years = self._YEAR_RE.findall(p)
+            # Line has date content (not just long company-name words)?
+            has_only_date = part_dates and not re.search(r'[A-Z]{4,}', re.sub(
+                r'\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)',
+                '', p, flags=re.I).strip(), re.I)
+
+            if full_dates:
+                for fd in full_dates:
+                    date_frags.append(('full', fd[0], fd[1], fd[2]))
+            elif part_dates and has_only_date:
+                for pd in part_dates:
+                    date_frags.append(('part', pd[0], pd[1]))
+                year_pools.extend(years)
+            elif years and not part_dates and len(p.split()) <= 3:
+                year_pools.extend(years)
+            else:
+                # Name fragment — also harvest any partial dates
+                for pd in self._PART_DT.findall(p):
+                    date_frags.append(('part', pd[0], pd[1]))
+                year_pools.extend(self._YEAR_RE.findall(p))
+                name_parts.append(p)
+
+        # Full and partial dates in the data line itself
+        full_in_data = self._FULL_DT.findall(data_line)
+        data_no_full = self._FULL_DT.sub('', data_line)
+        part_in_data = self._PART_DT.findall(data_no_full)
+        if not full_in_data:
+            year_pools.extend(self._YEAR_RE.findall(data_line))
+
+        # Resolve purch_date and sell_date
+        purch_date = sell_date = None
+        parts_full_frags = [(d[1], d[2], d[3]) for d in date_frags if d[0] == 'full' and len(d) == 4]
+        parts_part_frags = [(d[1], d[2]) for d in date_frags if d[0] == 'part']
+
+        if len(full_in_data) >= 2:
+            purch_date = self._mk_date(*full_in_data[0])
+            sell_date  = self._mk_date(*full_in_data[1])
+        elif len(full_in_data) == 1:
+            purch_date = self._mk_date(*full_in_data[0])
+            if parts_part_frags and year_pools:
+                sell_date = self._mk_date(parts_part_frags[0][0], parts_part_frags[0][1], year_pools[-1])
+            elif part_in_data and year_pools:
+                sell_date = self._mk_date(part_in_data[0][0], part_in_data[0][1], year_pools[-1])
+        elif len(parts_full_frags) >= 2:
+            purch_date = self._mk_date(*parts_full_frags[0])
+            sell_date  = self._mk_date(*parts_full_frags[1])
+        elif len(parts_part_frags) >= 2 and len(year_pools) >= 2:
+            purch_date = self._mk_date(parts_part_frags[0][0], parts_part_frags[0][1], year_pools[0])
+            sell_date  = self._mk_date(parts_part_frags[1][0], parts_part_frags[1][1], year_pools[1])
+        elif len(parts_part_frags) == 1 and year_pools:
+            sell_date = self._mk_date(parts_part_frags[0][0], parts_part_frags[0][1], year_pools[-1])
+        elif len(parts_full_frags) == 1 and parts_part_frags and year_pools:
+            purch_date = self._mk_date(*parts_full_frags[0])
+            sell_date  = self._mk_date(parts_part_frags[0][0], parts_part_frags[0][1], year_pools[-1])
+
+        if not sell_date:
+            return None
+
+        # Name: prefix from name_parts + leading name in data line
+        name_m = re.match(r'^([A-Z][A-Z\s&\(\)\./\-#]+?)(?=\s+\d)', data_line.strip(), re.I)
+        name_from_data = re.sub(r'\s+', ' ', name_m.group(1)).strip() if name_m else ''
+        full_name = ' '.join(name_parts + ([name_from_data] if name_from_data else [])).strip()
+        if not full_name:
+            return None
+
+        # Numbers: strip name, all dates, ISIN from data line
+        data_clean = data_line[len(name_from_data):].strip() if name_from_data else data_line
+        data_clean = self._FULL_DT.sub('', data_clean)
+        data_clean = self._PART_DT.sub('', data_clean)
+        data_clean = re.sub(self._ISIN_RE.pattern, '', data_clean)
+        nums = re.findall(r'-?\d+(?:\.\d+)?', data_clean)
+        if len(nums) < 4:
+            return None
+
+        return {
+            'name':       full_name,
+            'isin':       isin,
+            'purch_date': purch_date,
+            'sell_date':  sell_date,
+            'sell_price': self._to_f(nums[4]) if len(nums) > 4 else None,
+            'sell_value': self._to_f(nums[5]) if len(nums) > 5 else self._to_f(nums[4]),
+            'pur_cost':   self._to_f(nums[2]) if len(nums) > 2 else None,
+        }
+
+    def _build_row(self, r):
+        """Convert dict from parse helpers to make_row() output."""
+        purch_date = r.get('purch_date')
+        sell_date  = r.get('sell_date')
+        gain_type  = determine_gain_type(purch_date, sell_date, is_equity=True) if purch_date else 'Short Term'
+        return make_row(
+            self.source_name,
+            r['name'],
+            r['isin'],
+            sell_date,
+            None,
+            r.get('sell_price'),
+            r.get('sell_value'),
+            purch_date,
+            r.get('pur_cost') or 0.0,
+            gain_type,
+            self.client_name,
+        )
+
+    def _parse_page_rows(self, page):
+        raw = self._parse_page(page)
+        return [self._build_row(r) for r in raw]
+
+    def parse(self, pdf_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(pdf_path)
+        self.client_name = None
+        self._collapsed_failures = 0
+        rows = []
+        with open_pdf(pdf_path) as pdf:
+            first_text = pdf.pages[0].extract_text() or ""
+            self.client_name = self._extract_client(first_text)
+            for page in pdf.pages:
+                raw = self._parse_page(page)
+                for r in raw:
+                    row = self._build_row(r)
+                    if row:
+                        rows.append(row)
+        self.last_validation = self._build_validation(rows, pdf_path)
+        return rows
+
+    def _build_validation(self, rows, pdf_path):
+        """Delegate to universal build_validation_report using this parser's PDF summary."""
+        pdf_st, pdf_lt, pdf_total = self._extract_pdf_summary(pdf_path)
+        return build_validation_report(
+            rows, pdf_st=pdf_st, pdf_lt=pdf_lt, pdf_total=pdf_total,
+            parse_failures=self._collapsed_failures,
+            parser_name='MotilalOswalPnLParser',
+        )
+
+
+# ─────────────────────────────────────────────
 # MOTILAL OSWAL — GrandFather GainLoss PDF
 # ─────────────────────────────────────────────
 
@@ -2669,9 +3114,7 @@ class FranklinParser:
             purchase_date = min(pdates) if pdates else None
 
             if purchase_date and sale_date:
-                gain_type = ("Long Term"
-                             if (sale_date - purchase_date).days > 365
-                             else "Short Term")
+                gain_type = determine_gain_type(purchase_date, sale_date, is_equity=True)
             else:
                 gain_type = "Long Term"
 
@@ -3883,17 +4326,19 @@ def validate_output_rows(rows):
                 "issue": "WARN-05: Intraday transaction (sale_date == purchase_date) not filtered",
                 "severity": "HIGH"})
 
-        # Check 6: Gain type mismatch
+        # Check 6: Gain type mismatch — threshold differs for equity vs debt
         if sale_date and buy_date:
             days = (sale_date - buy_date).days
-            expected_lt = days > 365
+            row_atype = str(r.get("asset_type","")).lower()
+            lt_threshold = 730 if "debt" in row_atype else 365
+            expected_lt = days > lt_threshold
             if gain_type == "Long Term" and not expected_lt:
                 warnings.append({"row": i+1, "name": name,
                     "issue": f"WARN-06: Marked Long Term but held only {days} days",
                     "severity": "MEDIUM"})
-            elif gain_type == "Short Term" and expected_lt and days > 730:
+            elif gain_type == "Short Term" and expected_lt:
                 warnings.append({"row": i+1, "name": name,
-                    "issue": f"WARN-06: Marked Short Term but held {days} days (>2yr)",
+                    "issue": f"WARN-06: Marked Short Term but held {days} days (>{lt_threshold} day threshold)",
                     "severity": "LOW"})
 
         # Check 7: MF ISIN but classified as Unlisted Security (only warn for obvious equity funds)
@@ -4015,6 +4460,10 @@ def detect_parser(file_path):
             if ("(ISIN:" in _full2 and "FOLIO NUMBER" in _full2_up
                     and "CAPITAL GAIN" in _full2_up):
                 return AnandRathiMFParser()
+            # Motilal Oswal P&L Transaction Statement (equity, lot-level)
+            if ("motilaloswal" in _full2.lower()
+                    and "PROFIT AND LOSS TRANSACTION STATEMENT" in _full2_up):
+                return MotilalOswalPnLParser()
         except Exception:
             pass
 
@@ -4181,9 +4630,12 @@ def _write_verification_sheet(wb, rows, file_meta):
         sctype = str(r.get("scheme_type","")).lower()
         mfcol  = str(r.get("mutual_fund_col","")).lower()
         atype  = str(r.get("asset_type","")).lower()
+        # Check explicit debt from parser FIRST — make_row hardcodes scheme_type="Equity"
+        # so checking atype/mfcol before sctype prevents debt rows being miscategorised.
+        if "debt" in atype or "debt" in mfcol: return False
         if "equity" in sctype or "equity" in mfcol or "equity" in atype: return True
         if "112a" in sec or sec == "111a": return True
-        if "debt" in sctype or "debt" in mfcol or "debt" in atype: return False
+        if "debt" in sctype: return False
         return True
 
     # Aggregate rows by source
@@ -4198,6 +4650,11 @@ def _write_verification_sheet(wb, rows, file_meta):
         "Capital Gains - LT Equity", "Capital Gains - ST Equity",
         "Capital Gains - LT Debt", "Capital Gains - ST Debt",
         "Capital Gains - Others", "Remark",
+        # PDF validation columns
+        "Val Status", "PDF ST Gain", "PDF LT Gain", "PDF Total Gain",
+        "Extracted ST", "Extracted LT", "Extracted Total",
+        "Gap ST (₹)", "Gap ST %", "Gap LT (₹)", "Gap LT %",
+        "Gap Total (₹)", "Gap Total %", "Causes",
     ]
     vh_font  = Font(bold=True, size=9)
     vh_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -4246,29 +4703,67 @@ def _write_verification_sheet(wb, rows, file_meta):
             elif gt == "Short Term":        st_debt += cg
             else:                           others  += cg
 
+        # Pull pdf_validation from file_meta entry (raw build_validation_report() dict)
+        _pv = fm.get("pdf_validation") or {}
+        if _pv:
+            _gap_pct     = _pv.get("gap_pct") or 0
+            _gap_st_pct  = _pv.get("gap_st_pct") or 0
+            _gap_lt_pct  = _pv.get("gap_lt_pct") or 0
+            _worst       = max(_gap_pct, _gap_st_pct, _gap_lt_pct)
+            val_status   = "OK" if _worst < 0.5 else ("WARN" if _worst < 3.0 else "REVIEW")
+            causes_text  = "; ".join(c.get("note","") for c in (_pv.get("causes") or []))
+        else:
+            val_status  = "NO_VAL"
+            causes_text = ""
+
         ver_values = [
             src, status, client, pan,
             round(sale_val,2), round(purch_val,2),
             round(lt_eq,2), round(st_eq,2),
             round(lt_debt,2), round(st_debt,2),
             round(others,2), remark,
+            # validation columns (raw build_validation_report keys)
+            val_status,
+            _pv.get("pdf_st_gain"),    _pv.get("pdf_lt_gain"),    _pv.get("pdf_total_gain"),
+            _pv.get("extracted_st_gain"), _pv.get("extracted_lt_gain"), _pv.get("extracted_total_gain"),
+            _pv.get("gap_st"),  _pv.get("gap_st_pct"),
+            _pv.get("gap_lt"),  _pv.get("gap_lt_pct"),
+            _pv.get("gap"),     _pv.get("gap_pct"),
+            causes_text,
         ]
+        VAL_STATUS_COLOURS = {"OK": "C6EFCE", "WARN": "FFEB9C", "REVIEW": "FFC7CE", "NO_VAL": "EDEDED"}
+        # column indices for number formatting (1-based)
+        MONEY_COLS = {5,6,7,8,9,10,11, 14,15,16,17,18,19,20,22,24}
+        PCT_COLS   = {21, 23, 25}
         row_fill = PatternFill("solid", fgColor="EBF3FB") if vi % 2 == 0 else None
         for ci, val in enumerate(ver_values, 1):
             cell = ws.cell(vi, ci, val)
             cell.font = Font(size=9)
             cell.alignment = Alignment(horizontal="left", vertical="center")
             if row_fill: cell.fill = row_fill
-            if ci in (5,6,7,8,9,10,11): cell.number_format = '#,##0.00'
-            # Colour the status cell
+            if ci in MONEY_COLS and val is not None: cell.number_format = '#,##0.00'
+            if ci in PCT_COLS   and val is not None: cell.number_format = '0.00"%"'
+            # Process Status colour
             if ci == 2:
                 sc = STATUS_COLOURS.get(status)
                 if sc:
                     cell.fill = PatternFill("solid", fgColor=sc)
                     cell.font = Font(bold=True, size=9)
                     cell.alignment = Alignment(horizontal="center", vertical="center")
+            # Val Status colour (col 13)
+            if ci == 13:
+                vc = VAL_STATUS_COLOURS.get(val_status, "EDEDED")
+                cell.fill = PatternFill("solid", fgColor=vc)
+                cell.font = Font(bold=True, size=9)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            # Red text for gap cells that are non-trivial
+            if ci in {21, 23, 25} and val is not None and abs(val) >= 1.0:
+                cell.font = Font(size=9, color="C00000", bold=True)
+            # Causes cell wrap
+            if ci == 26:
+                cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
-    # Grand total row
+    # Grand total row (original cols only)
     last_r = data_rows + 2
     ws.cell(last_r, 1, "GRAND TOTAL").font = Font(bold=True, size=9)
     for ci in range(5, 12):
@@ -4278,7 +4773,8 @@ def _write_verification_sheet(wb, rows, file_meta):
         cell.number_format = '#,##0.00'
         cell.font = Font(bold=True, size=9)
 
-    ver_widths = [30, 16, 22, 14, 16, 16, 22, 22, 18, 18, 18, 30]
+    ver_widths = [30, 16, 22, 14, 16, 16, 22, 22, 18, 18, 18, 30,
+                  10, 14, 14, 14, 14, 14, 14, 13, 9, 13, 9, 13, 9, 45]
     for ci, w in enumerate(ver_widths, 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = "A2"
@@ -4305,36 +4801,34 @@ _PT_CACHE_DEF_RELS = '''\
 </Relationships>'''
 
 # PT1: Gain Type → Source → Share Type  (left table, cols A-D)
+# No pre-populated <items>/<rowItems>/<colItems> — Excel fills these on refresh.
+# Removed non-standard dataField="1" attr and baseField/baseItem on dataFields.
 _PT1_XML = '''\
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
- xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
- mc:Ignorable="xr" xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision"
  name="PivotTable1" cacheId="11"
  applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0"
  applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1"
- dataCaption="Values" updatedVersion="6" minRefreshableVersion="3"
- showDrill="0" useAutoFormatting="1" itemPrintTitles="1" createdVersion="8"
+ dataCaption="Values" createdVersion="6" updatedVersion="6" minRefreshableVersion="3"
+ useAutoFormatting="1" itemPrintTitles="1"
  indent="0" outline="1" outlineData="1" multipleFieldFilters="0">
- <location ref="A3:D50" firstHeaderRow="0" firstDataRow="1" firstDataCol="1"/>
+ <location ref="A3:D50" firstHeaderRow="1" firstDataRow="2" firstDataCol="1" rowPageCount="0" colPageCount="0"/>
  <pivotFields count="25">
-  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"><items count="1"><item t="default"/></items></pivotField>
+  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"><items count="1"><item t="default"/></items></pivotField>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField numFmtId="2" showAll="0" defaultSubtotal="0"/>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField dataField="1" numFmtId="2" showAll="0" defaultSubtotal="0"/>
+  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField dataField="1" numFmtId="2" showAll="0" defaultSubtotal="0"/>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"><items count="1"><item t="default"/></items></pivotField>
+  <pivotField/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
@@ -4342,88 +4836,68 @@ _PT1_XML = '''\
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField dataField="1" numFmtId="2" showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField/>
  </pivotFields>
  <rowFields count="3"><field x="14"/><field x="0"/><field x="2"/></rowFields>
- <rowItems count="1"><i t="grand"><x/></i></rowItems>
  <colFields count="1"><field x="-2"/></colFields>
- <colItems count="3"><i><x/></i><i i="1"><x v="1"/></i><i i="2"><x v="2"/></i></colItems>
  <dataFields count="3">
-  <dataField name="Sum of Sale Amount" fld="7" baseField="0" baseItem="0" numFmtId="2"/>
-  <dataField name="Sum of Purchase Amt" fld="12" baseField="0" baseItem="0" numFmtId="2"/>
-  <dataField name="Sum of Capital Gain / Loss" fld="24" baseField="0" baseItem="0" numFmtId="2"/>
+  <dataField name="Sum of Sale Amount" fld="7" numFmtId="2"/>
+  <dataField name="Sum of Purchase Amt" fld="12" numFmtId="2"/>
+  <dataField name="Sum of Capital Gain / Loss" fld="24" numFmtId="2"/>
  </dataFields>
  <pivotTableStyleInfo name="PivotStyleLight16" showRowHeaders="1" showColHeaders="1"
   showRowStripes="0" showColStripes="0" showLastColumn="1"/>
- <extLst>
-  <ext uri="{962EF5D1-5CA2-4c93-8EF4-DBF5C05439D2}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">
-   <x14:pivotTableDefinition hideValuesRow="1" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"/>
-  </ext>
-  <ext uri="{747A6164-185A-40DC-8AA5-F01512510D54}" xmlns:xpdl="http://schemas.microsoft.com/office/spreadsheetml/2016/pivotdefaultlayout">
-   <xpdl:pivotTableDefinition16 EnabledSubtotalsDefault="0" SubtotalsOnTopDefault="0"/>
-  </ext>
- </extLst>
 </pivotTableDefinition>'''
 
 # PT2: Gain Type → Share Type  (right table, cols F-I, no Source level)
 _PT2_XML = '''\
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
- xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
- mc:Ignorable="xr" xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision"
  name="PivotTable2" cacheId="11"
  applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0"
  applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1"
- dataCaption="Values" updatedVersion="6" minRefreshableVersion="3"
- showDrill="0" useAutoFormatting="1" itemPrintTitles="1" createdVersion="8"
+ dataCaption="Values" createdVersion="6" updatedVersion="6" minRefreshableVersion="3"
+ useAutoFormatting="1" itemPrintTitles="1"
  indent="0" outline="1" outlineData="1" multipleFieldFilters="0">
- <location ref="F3:I50" firstHeaderRow="0" firstDataRow="1" firstDataCol="1"/>
+ <location ref="F3:I50" firstHeaderRow="1" firstDataRow="2" firstDataCol="1" rowPageCount="0" colPageCount="0"/>
  <pivotFields count="25">
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"><items count="1"><item t="default"/></items></pivotField>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField numFmtId="2" showAll="0" defaultSubtotal="0"/>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField dataField="1" numFmtId="2" showAll="0" defaultSubtotal="0"/>
+  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField dataField="1" numFmtId="2" showAll="0" defaultSubtotal="0"/>
-  <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"><items count="1"><item t="default"/></items></pivotField>
+  <pivotField/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField axis="axisRow" showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
   <pivotField showAll="0" defaultSubtotal="0"/>
-  <pivotField dataField="1" numFmtId="2" showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField showAll="0" defaultSubtotal="0"/>
+  <pivotField/>
  </pivotFields>
  <rowFields count="2"><field x="14"/><field x="2"/></rowFields>
- <rowItems count="1"><i t="grand"><x/></i></rowItems>
  <colFields count="1"><field x="-2"/></colFields>
- <colItems count="3"><i><x/></i><i i="1"><x v="1"/></i><i i="2"><x v="2"/></i></colItems>
  <dataFields count="3">
-  <dataField name="Sum of Sale Amount" fld="7" baseField="0" baseItem="0" numFmtId="2"/>
-  <dataField name="Sum of Purchase Amt" fld="12" baseField="0" baseItem="0" numFmtId="2"/>
-  <dataField name="Sum of Capital Gain / Loss" fld="24" baseField="0" baseItem="0" numFmtId="2"/>
+  <dataField name="Sum of Sale Amount" fld="7" numFmtId="2"/>
+  <dataField name="Sum of Purchase Amt" fld="12" numFmtId="2"/>
+  <dataField name="Sum of Capital Gain / Loss" fld="24" numFmtId="2"/>
  </dataFields>
  <pivotTableStyleInfo name="PivotStyleLight16" showRowHeaders="1" showColHeaders="1"
   showRowStripes="0" showColStripes="0" showLastColumn="1"/>
- <extLst>
-  <ext uri="{962EF5D1-5CA2-4c93-8EF4-DBF5C05439D2}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">
-   <x14:pivotTableDefinition hideValuesRow="1" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"/>
-  </ext>
-  <ext uri="{747A6164-185A-40DC-8AA5-F01512510D54}" xmlns:xpdl="http://schemas.microsoft.com/office/spreadsheetml/2016/pivotdefaultlayout">
-   <xpdl:pivotTableDefinition16 EnabledSubtotalsDefault="0" SubtotalsOnTopDefault="0"/>
-  </ext>
- </extLst>
 </pivotTableDefinition>'''
 
 _PT_TABLE_RELS = '''\
@@ -4445,53 +4919,13 @@ def _post_save_inject_pivot(output_path, row_count):
     And patches workbook.xml, workbook.xml.rels, sheet2.xml.rels,
     [Content_Types].xml to wire everything together.
     """
-    import zipfile, shutil, re, os
+    import zipfile, shutil, re, os, string as _string
 
-    # Dynamic cache range — only actual data rows, no empty rows below
-    # Capital Gains sheet: row 2 = header, rows 3..N = data
-    last_data_row = row_count + 2   # +1 for header row 2, +1 for 1-based
+    # Capital Gains sheet: row 2 = column headers, rows 3..N = data
+    last_data_row = row_count + 2   # header on row 2, data rows 3..(row_count+2)
 
-    # ── Cache definition with EXACT last row (no blank rows in pivot) ──
-    cache_def = f'''\
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
- xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
- xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
- mc:Ignorable="xr" xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision"
- r:id="rId1" refreshedBy="CapGains Pro" refreshedDate="0"
- createdVersion="8" refreshedVersion="6" minRefreshableVersion="3"
- recordCount="0" refreshOnLoad="1">
- <cacheSource type="worksheet">
-  <worksheetSource ref="A2:Y{last_data_row}" sheet="Capital Gains"/>
- </cacheSource>
- <cacheFields count="25">
-  <cacheField name="Source_x000a_(Statement Name)" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Share Name_x000a_(Select/Fill share name)" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Share Type_x000a_(Listed/unlisted,etc.)" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="ISIN Code" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Sale Date_x000a_(dd/mm/yyyy) Format" numFmtId="14"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Quantity" numFmtId="0"><sharedItems containsBlank="1" containsNumber="1" containsNonDate="1" containsInteger="1" minValue="0" maxValue="999999"/></cacheField>
-  <cacheField name="Sale Price per share" numFmtId="2"><sharedItems containsBlank="1" containsNumber="1" containsNonDate="1" minValue="0" maxValue="999999"/></cacheField>
-  <cacheField name="Sale Amount_x000a_" numFmtId="2"><sharedItems containsBlank="1" containsNumber="1" containsNonDate="1" containsSemiMixedTypes="0" minValue="0" maxValue="999999999"/></cacheField>
-  <cacheField name="Market price per share on 31/01/2018" numFmtId="2"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Total Market Value as on 31/01/2018  (In case of Long Term Transaction Tax)" numFmtId="2"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Transfer_x000a_Expenses_x000a_" numFmtId="2"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Purchase_x000a_Date (dd/mm/yyyy) Format" numFmtId="14"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Purchase_x000a_Amt" numFmtId="2"><sharedItems containsBlank="1" containsNumber="1" containsNonDate="1" containsSemiMixedTypes="0" minValue="0" maxValue="999999999"/></cacheField>
-  <cacheField name="Fair Market Value in case of Unquated Shares (Only for Non Resident)" numFmtId="2"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Gain Type_x000a_(Short/Long Term)" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Sale Period_x000a_(Do not fill if sale date is filled)" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Purchase Yr._x000a_(Do not fill if purch. Date is filled)" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="1st Proviso u/s 48 applied" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Other Special Rate For NRI " numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Bonds &amp; Debenture etc.. (No Indexing) " numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Mutual Funds" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="select Section for 94(7)/97(8) applicable on short term only" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Dividend  (applicable on short term only)" numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="." numFmtId="0"><sharedItems containsBlank="1"/></cacheField>
-  <cacheField name="Capital Gain / Loss" numFmtId="2"><sharedItems containsBlank="1" containsNumber="1" containsNonDate="1" containsSemiMixedTypes="0"/></cacheField>
- </cacheFields>
-</pivotCacheDefinition>'''
+    # numFmtId per column A-Y (0-indexed): 0=general, 2=number, 14=date
+    _CACHE_NUM_FMTS = [0, 0, 0, 0, 14, 0, 2, 2, 2, 2, 2, 14, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
 
     tmp = output_path + "._pivot_tmp"
     shutil.copy2(output_path, tmp)
@@ -4503,11 +4937,74 @@ def _post_save_inject_pivot(output_path, row_count):
             wb_xml       = zin.read("xl/workbook.xml").decode("utf-8")
             wb_rels      = zin.read("xl/_rels/workbook.xml.rels").decode("utf-8")
             ct_xml       = zin.read("[Content_Types].xml").decode("utf-8")
+            styles_xml   = zin.read("xl/styles.xml").decode("utf-8")
+            sh1_xml      = zin.read("xl/worksheets/sheet1.xml").decode("utf-8")
+
+            # ── Read actual column headers from sheet1 row 2 (A-Y) ───────
+            # Build cache field names dynamically so they always match the
+            # real sheet headers — hardcoded names caused Excel repair dialogs
+            # when trailing spaces / newlines differed by even one character.
+            _row2_m = re.search(r'<row r="2".*?</row>', sh1_xml, re.DOTALL)
+            _col_map = {}
+            if _row2_m:
+                for _ref, _content in re.findall(r'<c r="([A-Y])2"[^>]*>(.*?)</c>',
+                                                  _row2_m.group(0), re.DOTALL):
+                    _t = re.search(r'<t[^>]*>(.*?)</t>', _content, re.DOTALL)
+                    _col_map[_ref] = _t.group(1) if _t else ''
+            # Encode cell text as OOXML cache field name (newlines → _x000a_)
+            _actual_headers = [
+                _col_map.get(c, '').replace('\n', '_x000a_').replace('\r', '')
+                for c in _string.ascii_uppercase[:25]
+            ]
+            _cache_fields_xml = '\n'.join(
+                f'  <cacheField name="{h}" numFmtId="{nf}"><sharedItems containsBlank="1"/></cacheField>'
+                for h, nf in zip(_actual_headers, _CACHE_NUM_FMTS)
+            )
+            cache_def = f'''\
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+ r:id="rId1" createdVersion="6" refreshedVersion="6" minRefreshableVersion="3"
+ recordCount="0" refreshOnLoad="1">
+ <cacheSource type="worksheet">
+  <worksheetSource ref="A2:Y{last_data_row}" sheet="Capital Gains"/>
+ </cacheSource>
+ <cacheFields count="25">
+{_cache_fields_xml}
+ </cacheFields>
+</pivotCacheDefinition>'''
+
             sh2_rels_path = "xl/worksheets/_rels/sheet2.xml.rels"
             sh2_rels = zin.read(sh2_rels_path).decode("utf-8") if sh2_rels_path in names else \
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>'
 
+            # ── Clear static cell data from Summary sheet ─────────────
+            # openpyxl writes a pre-built static table into sheet2 cells.
+            # Those cells conflict with the pivot table ranges (A3:D50, F3:I50),
+            # causing Excel's "found a problem / repaired content" dialog.
+            # Wipe sheetData so the pivot tables own their ranges cleanly.
+            sh2_path = "xl/worksheets/sheet2.xml"
+            if sh2_path in names:
+                sh2_xml = zin.read(sh2_path).decode("utf-8")
+                sh2_xml = re.sub(r'<dimension[^/]*/>', '<dimension ref="A1"/>', sh2_xml)
+                sh2_xml = re.sub(r'<sheetData>.*?</sheetData>', '<sheetData/>', sh2_xml, flags=re.DOTALL)
+            else:
+                sh2_xml = None
+
+            # ── Patch styles.xml ─────────────────────────────────
+            # openpyxl omits <name> from font elements it writes — OOXML requires it.
+            # Also fix bare <patternFill/> which needs explicit patternType attribute.
+            def _add_font_name(m):
+                inner = m.group(1)
+                if '<name ' in inner:
+                    return m.group(0)
+                return '<font><name val="Calibri"/>' + inner + '</font>'
+            styles_xml = re.sub(r'<font>(.*?)</font>', _add_font_name, styles_xml, flags=re.DOTALL)
+            styles_xml = styles_xml.replace('<patternFill/>', '<patternFill patternType="none"/>')
+
             # ── Patch workbook.xml ────────────────────────────────
+            # Remove empty <workbookProtection/> — invalid without attributes in strict OOXML.
+            wb_xml = wb_xml.replace('<workbookProtection/>', '')
             if "<pivotCaches>" not in wb_xml:
                 wb_xml = wb_xml.replace(
                     "</workbook>",
@@ -4571,8 +5068,25 @@ def _post_save_inject_pivot(output_path, row_count):
                         zout.writestr(item, wb_rels.encode("utf-8"))
                     elif fn == "[Content_Types].xml":
                         zout.writestr(item, ct_xml.encode("utf-8"))
+                    elif fn == "xl/styles.xml":
+                        zout.writestr(item, styles_xml.encode("utf-8"))
                     elif fn == sh2_rels_path:
                         zout.writestr(item, sh2_rels.encode("utf-8"))
+                    elif fn == sh2_path and sh2_xml is not None:
+                        zout.writestr(item, sh2_xml.encode("utf-8"))
+                    elif fn.startswith("xl/worksheets/") and fn.endswith(".xml"):
+                        ws_xml = zin.read(fn).decode("utf-8")
+                        # Strip empty <v></v> openpyxl writes for uncalculated formula cells
+                        ws_xml = re.sub(r'<v/>', '', ws_xml)
+                        ws_xml = re.sub(r'<v></v>', '', ws_xml)
+                        # Fix inlineStr cells with no <is> child — missing child is invalid
+                        # OOXML and triggers the "found a problem" repair dialog every open.
+                        ws_xml = re.sub(
+                            r'(<c[^>]*t="inlineStr"[^>]*>)\s*</c>',
+                            r'\1<is><t/></is></c>',
+                            ws_xml
+                        )
+                        zout.writestr(item, ws_xml.encode("utf-8"))
                     else:
                         zout.writestr(item, zin.read(fn))
 
@@ -4962,16 +5476,20 @@ def process_file(file_path):
     if ext == '.zip':
         extracted = extract_zip(file_path)
         all_rows = []
+        any_sub_error = False
         for ef in extracted:
             try:
-                sub_rows, _ = process_file(ef)
+                sub_rows, sub_err = process_file(ef)
                 all_rows.extend(sub_rows)
+                if sub_err:
+                    any_sub_error = True
             except Exception as e:
                 print(f"[WARN] {ef}: {e}", file=sys.stderr)
+                any_sub_error = True
             finally:
                 try: os.unlink(ef)
                 except: pass
-        return all_rows, False
+        return all_rows, any_sub_error and len(all_rows) == 0
 
     parser = detect_parser(file_path)
     if not parser:
@@ -5073,6 +5591,20 @@ def process_file(file_path):
             if name:
                 r["share_name"] = name
 
+        # Capture validation report after all fallbacks — so OCR/auto-parser rows are included
+        _val_report = None
+        if hasattr(parser, 'last_validation') and parser.last_validation:
+            _val_report = parser.last_validation
+        elif rows:
+            _val_report = build_validation_report(
+                rows, pdf_st=None, pdf_lt=None, pdf_total=None,
+                parse_failures=0, parser_name=parser.__class__.__name__,
+            )
+        if _val_report:
+            if not hasattr(builtins, '_cge_validation_reports'):
+                builtins._cge_validation_reports = {}
+            builtins._cge_validation_reports[file_path] = _val_report
+
         if rows:
             print(f"[INFO] Extracted {len(rows)} rows from {Path(file_path).name}", file=sys.stderr)
 
@@ -5107,6 +5639,7 @@ def main():
     all_rows  = []
     clients   = {}
     file_meta = []   # one entry per input file
+    import builtins as builtins  # needed for validation report registry
 
     for f in args.files:
         source = source_name_from_file(f)
@@ -5115,6 +5648,7 @@ def main():
         for r in rows:
             cn = r.get("client_name")
             if cn: clients.setdefault(cn, set()).add(source)
+        _val = (getattr(builtins, '_cge_validation_reports', {}) or {}).get(f)
         file_meta.append({
             "source":       source,
             "_file_path":   f,              # for error lookup
@@ -5125,6 +5659,7 @@ def main():
             "pan":          next((r.get("pan")         for r in rows if r.get("pan")),          ""),
             "remark":       "",
             "process_status": "",        # filled after filter
+            "pdf_validation": _val,      # validation report (parsers that support it)
         })
 
     # ── date range filter ──
@@ -5220,8 +5755,44 @@ def main():
     import builtins
     _process_errors = getattr(builtins, '_cge_process_errors', {})
 
-    file_meta_out = [
-        {
+    file_meta_out = []
+    for fm in file_meta:
+        _val = fm.get("pdf_validation") or {}
+        # Build clear, human-readable validation summary for this file
+        _val_summary = None
+        if _val:
+            gap = _val.get("gap")
+            gap_pct = _val.get("gap_pct")
+            gap_st = _val.get("gap_st")
+            gap_lt = _val.get("gap_lt")
+            gap_st_pct = _val.get("gap_st_pct")
+            gap_lt_pct = _val.get("gap_lt_pct")
+            max_cat_gap = max(gap_st_pct or 0, gap_lt_pct or 0)
+            worst_gap = max(gap_pct or 0, max_cat_gap)
+            _val_summary = {
+                "pdf_stated": {
+                    "st_gain":    _val.get("pdf_st_gain"),
+                    "lt_gain":    _val.get("pdf_lt_gain"),
+                    "total_gain": _val.get("pdf_total_gain"),
+                },
+                "extracted": {
+                    "st_gain":    _val.get("extracted_st_gain"),
+                    "lt_gain":    _val.get("extracted_lt_gain"),
+                    "total_gain": _val.get("extracted_total_gain"),
+                },
+                "gap":          gap,
+                "gap_pct":      gap_pct,
+                "gap_st":       gap_st,
+                "gap_lt":       gap_lt,
+                "gap_st_pct":   gap_st_pct,
+                "gap_lt_pct":   gap_lt_pct,
+                "status":    "OK" if worst_gap < 0.5
+                             else ("WARN" if worst_gap < 3.0 else "REVIEW"),
+                "rows_before_filters": _val.get("rows_extracted"),
+                "collapsed_parse_failures": _val.get("collapsed_parse_failures", 0),
+                "causes":    _val.get("causes", []),
+            }
+        file_meta_out.append({
             "source":              fm["source"],
             "process_status":      fm["process_status"],
             "client_name":         fm.get("client_name", ""),
@@ -5235,9 +5806,8 @@ def main():
                 (e.replace("NOT_PROCESSED: ", "") for e in _process_errors.get(fm.get("_file_path",""), [])
                  if e.startswith("NOT_PROCESSED:")), ""
             ),
-        }
-        for fm in file_meta
-    ]
+            "pdf_validation":      _val_summary,
+        })
 
     result = {
         "total_rows":            len(all_rows),
