@@ -634,12 +634,36 @@ class ICICIPMSParser:
 # ─────────────────────────────────────────────
 
 class CAMSParser:
+    # Last line of CAMS statement: "Total  <ST>  <LT>"
+    _TOTAL_RE = re.compile(r'^Total\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)', re.M)
+
+    def _extract_pdf_summary(self, pdf_path):
+        """Read the grand-total ST/LT line from the CAMS statement last page."""
+        try:
+            with open_pdf(pdf_path) as pdf:
+                # Total line appears on the last page
+                text = pdf.pages[-1].extract_text() or ''
+            m = self._TOTAL_RE.search(text)
+            if m:
+                st = float(m.group(1).replace(',', ''))
+                lt = float(m.group(2).replace(',', ''))
+                return round(st, 2), round(lt, 2), round(st + lt, 2)
+        except Exception:
+            pass
+        return None, None, None
+
     def parse(self, pdf_path, source_name=None):
         self.source_name = source_name or source_name_from_file(pdf_path)
         with open_pdf(pdf_path) as pdf:
             full_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
         self.client_name = extract_client_name(full_text)
-        return self._parse_text(full_text)
+        rows = self._parse_text(full_text)
+        pdf_st, pdf_lt, pdf_total = self._extract_pdf_summary(pdf_path)
+        self.last_validation = build_validation_report(
+            rows, pdf_st=pdf_st, pdf_lt=pdf_lt, pdf_total=pdf_total,
+            parse_failures=0, parser_name='CAMSParser',
+        )
+        return rows
 
     def _parse_text(self, text):
         rows = []
@@ -729,13 +753,36 @@ class NirmalBangParser:
     """Parses Nirmal Bang Short-Term/Long-Term P&L reports.
     Emits one row per individual purchase lot (not per scrip summary).
     """
+    # Summary line: "Short Term (Less than 365 days)  sale  cost  gain  gain"
+    _ST_SUMM_RE = re.compile(r'Short\s+Term\s*\([^)]+\)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)', re.I)
+    _LT_SUMM_RE = re.compile(r'Long\s+Term\s*\([^)]+\)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)', re.I)
+
+    def _extract_pdf_summary(self, pdf_path):
+        try:
+            with open_pdf(pdf_path) as pdf:
+                text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            ms = self._ST_SUMM_RE.search(text)
+            ml = self._LT_SUMM_RE.search(text)
+            if ms:
+                st = float(ms.group(3).replace(',', ''))  # 3rd number = gain
+                lt = float(ml.group(3).replace(',', '')) if ml else 0.0
+                return round(st, 2), round(lt, 2), round(st + lt, 2)
+        except Exception:
+            pass
+        return None, None, None
 
     def parse(self, pdf_path, source_name=None):
         self.source_name = source_name or source_name_from_file(pdf_path)
         with open_pdf(pdf_path) as pdf:
             full_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
         self.client_name = extract_client_name(full_text)
-        return self._parse_text(full_text)
+        rows = self._parse_text(full_text)
+        pdf_st, pdf_lt, pdf_total = self._extract_pdf_summary(pdf_path)
+        self.last_validation = build_validation_report(
+            rows, pdf_st=pdf_st, pdf_lt=pdf_lt, pdf_total=pdf_total,
+            parse_failures=0, parser_name='NirmalBangParser',
+        )
+        return rows
 
     def _parse_text(self, text):
         rows = []
@@ -3578,6 +3625,23 @@ class AnandRathiMFParser:
     _ISIN_RE = re.compile(r'(?:ISIN\s*:?\s*|\[ISIN:\s*)(INF[A-Z0-9]{6,12})', re.I)
     _GF_CUTOFF = datetime(2018, 1, 31)
 
+    # AnandRathi / AssetPlus CAMS grand total: "Total  <ST>  <LT>"
+    _TOTAL_RE = re.compile(r'^Total\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)', re.M)
+
+    def _extract_pdf_summary(self, pdf_path):
+        """Read grand-total ST/LT from the last page of AnandRathi MF statements."""
+        try:
+            with open_pdf(pdf_path) as pdf:
+                text = pdf.pages[-1].extract_text() or ''
+            m = self._TOTAL_RE.search(text)
+            if m:
+                st = float(m.group(1).replace(',', ''))
+                lt = float(m.group(2).replace(',', ''))
+                return round(st, 2), round(lt, 2), round(st + lt, 2)
+        except Exception:
+            pass
+        return None, None, None
+
     def parse(self, pdf_path, source_name=None):
         self.source_name = source_name or source_name_from_file(pdf_path)
         self.client_name = None
@@ -3585,7 +3649,13 @@ class AnandRathiMFParser:
             pages_text = [p.extract_text() or "" for p in pdf.pages]
         full_text = "\n".join(pages_text)
         self.client_name = self._extract_client(pages_text[0] if pages_text else "")
-        return self._parse_full_text(full_text)
+        rows = self._parse_full_text(full_text)
+        pdf_st, pdf_lt, pdf_total = self._extract_pdf_summary(pdf_path)
+        self.last_validation = build_validation_report(
+            rows, pdf_st=pdf_st, pdf_lt=pdf_lt, pdf_total=pdf_total,
+            parse_failures=0, parser_name='AnandRathiMFParser',
+        )
+        return rows
 
     def _extract_client(self, text):
         SKIP = {'CAPITAL','GAIN','FINANCIAL','YEAR','REPORT','STATEMENT','PAN',
@@ -3992,6 +4062,30 @@ class KuveraParser:
 
     _ISIN_RE  = re.compile(r'\[ISIN:\s*(INF[A-Z0-9]+)\]', re.I)
     _GF_CUTOFF = datetime(2018, 1, 31)
+    # "Short Term Capital Gains ₹ 2,800.87" or "Total ₹ 2,800.87 ₹ 0"
+    _ST_RE = re.compile(r'Short\s+Term\s+Capital\s+Gains\s+[₹Rs.]*\s*([-\d,]+\.?\d*)', re.I)
+    _LT_RE = re.compile(r'Long\s+Term\s+Capital\s+Gains\s+[₹Rs.]*\s*([-\d,]+\.?\d*)', re.I)
+    _TOT_RE = re.compile(r'^Total\s+[₹Rs.]*\s*([-\d,]+\.?\d*)\s+[₹Rs.]*\s*([-\d,]+\.?\d*)', re.M)
+
+    def _extract_pdf_summary(self, pdf_path):
+        """Extract ST/LT totals from Kuvera summary page."""
+        try:
+            with open_pdf(pdf_path) as pdf:
+                text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            ms = self._ST_RE.search(text)
+            ml = self._LT_RE.search(text)
+            if ms and ml:
+                st = float(ms.group(1).replace(',', ''))
+                lt = float(ml.group(1).replace(',', ''))
+                return round(st, 2), round(lt, 2), round(st + lt, 2)
+            mt = self._TOT_RE.search(text)
+            if mt:
+                st = float(mt.group(1).replace(',', ''))
+                lt = float(mt.group(2).replace(',', ''))
+                return round(st, 2), round(lt, 2), round(st + lt, 2)
+        except Exception:
+            pass
+        return None, None, None
 
     def parse(self, pdf_path, source_name=None):
         self.source_name = source_name or source_name_from_file(pdf_path)
@@ -4001,7 +4095,13 @@ class KuveraParser:
         full_text = "\n".join(pages_text)
         m = re.search(r'Name\s+([A-Za-z][A-Za-z\s\.]+?)\n', full_text)
         if m: self.client_name = m.group(1).strip().title()
-        return self._parse_text(full_text)
+        rows = self._parse_text(full_text)
+        pdf_st, pdf_lt, pdf_total = self._extract_pdf_summary(pdf_path)
+        self.last_validation = build_validation_report(
+            rows, pdf_st=pdf_st, pdf_lt=pdf_lt, pdf_total=pdf_total,
+            parse_failures=0, parser_name='KuveraParser',
+        )
+        return rows
 
     def _parse_text(self, text):
         rows = []
