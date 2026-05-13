@@ -1,4 +1,4 @@
-import os, subprocess, tempfile, base64, json, re
+import os, sys, subprocess, tempfile, base64, json, re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -38,7 +38,7 @@ def process():
     out          = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx').name
     computax_out = tempfile.NamedTemporaryFile(delete=False, suffix='.xls').name
 
-    cmd = ['python3', SCRIPT] + saved + ['-o', out, '--computax-output', computax_out]
+    cmd = [sys.executable, SCRIPT] + saved + ['-o', out, '--computax-output', computax_out]
     if fy_start: cmd += ['--fy-start', fy_start]
     if fy_end:   cmd += ['--fy-end',   fy_end]
 

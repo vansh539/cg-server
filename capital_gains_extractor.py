@@ -3207,11 +3207,223 @@ class FranklinParser:
 
 
 
-# Triggered automatically when no specialist parser
-# extracts any rows from an unknown broker format.
-# Uses LOCAL OLLAMA — no API key, no internet needed.
-# Configure via env: OLLAMA_URL (default http://localhost:11434),
-#                    OLLAMA_MODEL (default llama3.1:8b)
+# ─────────────────────────────────────────────
+# PDF TABLE FALLBACK PARSER (no LLM, no internet)
+# ─────────────────────────────────────────────
+
+class PDFTableFallbackParser:
+    """Extracts capital gains rows from unknown PDFs using pdfplumber's native
+    table detection. No LLM required — works on any machine with no extra setup.
+    Uses header keywords + value heuristics to map columns to standard fields.
+    """
+
+    _DATE_RE  = re.compile(r'^\d{2}[-/]\d{2}[-/]\d{4}$|^\d{1,2}-[A-Za-z]{3}-\d{4}$', re.I)
+    _NUM_RE   = re.compile(r'^[\d,]+\.?\d*$')
+    _SKIP_ROW = re.compile(r'^(total|grand total|sub.?total|net|nil|opening|closing|balance)$', re.I)
+
+    def parse(self, pdf_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(pdf_path)
+        self.client_name = None
+        rows = []
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                full_text = "\n".join(p.extract_text() or "" for p in pdf.pages[:2])
+                self.client_name = extract_client_name(full_text)
+                for page in pdf.pages:
+                    for settings in [
+                        {"vertical_strategy": "lines",  "horizontal_strategy": "lines"},
+                        {"vertical_strategy": "text",   "horizontal_strategy": "text"},
+                    ]:
+                        tables = page.extract_tables(table_settings=settings)
+                        if not tables:
+                            continue
+                        for tbl in tables:
+                            rows.extend(self._process_table(tbl))
+                        if rows:
+                            break
+        except Exception as e:
+            print(f"[WARN] PDFTableFallbackParser: {e}", file=sys.stderr)
+
+        # Deduplicate across pages
+        seen, unique = set(), []
+        for r in rows:
+            k = (str(r.get("sale_date")), str(r.get("purchase_date")),
+                 (r.get("share_name") or "").lower()[:40],
+                 round(float(r.get("sale_amount") or 0), 0))
+            if k not in seen:
+                seen.add(k)
+                unique.append(r)
+        return unique
+
+    def _process_table(self, table):
+        if not table or len(table) < 2:
+            return []
+        clean = [[str(c or "").strip().replace("\n", " ") for c in row] for row in table]
+        if len(clean[0]) < 3:
+            return []
+
+        # Find header row — first row with at least 2 non-numeric cells
+        header_idx = 0
+        for i, row in enumerate(clean[:4]):
+            if sum(1 for c in row if c and not self._NUM_RE.match(c.replace(",", ""))) >= 2:
+                header_idx = i
+                break
+
+        header    = [c.lower() for c in clean[header_idx]]
+        data_rows = clean[header_idx + 1:]
+        if not data_rows:
+            return []
+
+        col_map   = self._detect_columns(header, data_rows)
+        required  = {"name", "sale_date", "purchase_date", "sale_amt", "purchase_amt"}
+        if not required.issubset(col_map.values()):
+            return []
+
+        field_col = {v: k for k, v in col_map.items()}
+        rows = []
+        for row in data_rows:
+            if len(row) <= max(field_col.values()):
+                continue
+            name = row[field_col["name"]].strip()
+            if not name or self._SKIP_ROW.match(name):
+                continue
+
+            sale_date     = parse_date(row[field_col["sale_date"]])
+            purchase_date = parse_date(row[field_col["purchase_date"]])
+            if not sale_date or not purchase_date or sale_date <= purchase_date:
+                continue
+
+            sale_amt  = to_float(row[field_col["sale_amt"]].replace(",", ""))
+            purch_amt = to_float(row[field_col["purchase_amt"]].replace(",", ""))
+            if not sale_amt or sale_amt <= 0 or not purch_amt:
+                continue
+
+            qty        = to_float(row[field_col["qty"]].replace(",", "")) if "qty" in field_col else None
+            sale_price = to_float(row[field_col["sale_price"]].replace(",", "")) if "sale_price" in field_col else None
+            isin       = row[field_col["isin"]].strip() if "isin" in field_col else ""
+
+            if "gain_type" in field_col:
+                gt_raw = row[field_col["gain_type"]].lower()
+                if "short" in gt_raw:
+                    gain_type = "Short Term"
+                elif "long" in gt_raw:
+                    gain_type = "Long Term"
+                else:
+                    gain_type = determine_gain_type(purchase_date, sale_date, is_equity=True)
+            else:
+                gain_type = determine_gain_type(purchase_date, sale_date, is_equity=True)
+
+            rows.append(make_row(
+                self.source_name, name, isin,
+                sale_date, qty, sale_price, round(sale_amt, 4),
+                purchase_date, round(purch_amt, 4),
+                gain_type, self.client_name,
+            ))
+        return rows
+
+    def _detect_columns(self, header, data_rows):
+        """Map column index → field type using header keywords then value samples."""
+        n = len(header)
+        samples = []
+        for ci in range(n):
+            samples.append([r[ci] for r in data_rows[:8] if ci < len(r) and r[ci]])
+
+        col_map     = {}
+        date_cols   = []
+        amount_cols = []
+
+        for ci, h in enumerate(header):
+            if "isin" in h:
+                col_map[ci] = "isin"
+            elif any(k in h for k in ("security", "fund", "scheme", "stock", "scrip",
+                                       "asset", "instrument", "company", "description")):
+                if "name" not in col_map.values():
+                    col_map[ci] = "name"
+            elif "name" in h and "name" not in col_map.values():
+                col_map[ci] = "name"
+            elif any(k in h for k in ("qty", "quantity", "units", "shares", "no. of")):
+                col_map[ci] = "qty"
+            elif any(k in h for k in ("short", "long", "gain type", "type of gain", "term")):
+                col_map[ci] = "gain_type"
+            elif any(k in h for k in ("sale date", "sell date", "date of sale",
+                                       "redemption date", "date of redemption")):
+                col_map[ci] = "sale_date"
+            elif any(k in h for k in ("purchase date", "buy date", "acquisition date",
+                                       "date of purchase", "date of acquisition")):
+                col_map[ci] = "purchase_date"
+            elif "date" in h or h == "dt":
+                date_cols.append(ci)
+            elif any(k in h for k in ("sale amount", "sale value", "sell amount",
+                                       "proceeds", "consideration", "redemption amount")):
+                col_map[ci] = "sale_amt"
+            elif any(k in h for k in ("sale price", "sell price", "nav on sale", "selling price")):
+                col_map[ci] = "sale_price"
+            elif any(k in h for k in ("purchase amount", "cost", "buy amount",
+                                       "acquisition amount", "investment amount")):
+                col_map[ci] = "purchase_amt"
+            elif any(k in h for k in ("amount", "value", "price")):
+                amount_cols.append(ci)
+
+        # Value-based date detection for unclassified "date" columns
+        unclassified_dates = [ci for ci in date_cols if ci not in col_map
+                              and any(self._DATE_RE.match(v) for v in samples[ci])]
+        if (len(unclassified_dates) >= 2
+                and "purchase_date" not in col_map.values()
+                and "sale_date" not in col_map.values()):
+            meds = []
+            for ci in unclassified_dates[:2]:
+                parsed = [parse_date(v) for v in samples[ci] if self._DATE_RE.match(v)]
+                parsed = [d for d in parsed if d]
+                if parsed:
+                    meds.append((sum(d.toordinal() for d in parsed) / len(parsed), ci))
+            if len(meds) == 2:
+                meds.sort()
+                col_map[meds[0][1]] = "purchase_date"
+                col_map[meds[1][1]] = "sale_date"
+
+        # Value-based amount detection for unclassified "amount/value/price" columns
+        unclassified_amts = [
+            ci for ci in amount_cols if ci not in col_map
+            and any(to_float(v.replace(",", "")) and to_float(v.replace(",", "")) > 100
+                    for v in samples[ci])
+        ]
+        if (len(unclassified_amts) >= 2
+                and "purchase_amt" not in col_map.values()
+                and "sale_amt" not in col_map.values()):
+            avgs = []
+            for ci in unclassified_amts[:3]:
+                vals = [to_float(v.replace(",", "")) for v in samples[ci]]
+                vals = [v for v in vals if v and v > 0]
+                avgs.append((sum(vals) / len(vals) if vals else 0, ci))
+            avgs.sort(reverse=True)
+            col_map[avgs[0][1]] = "sale_amt"
+            if len(avgs) >= 2:
+                col_map[avgs[1][1]] = "purchase_amt"
+
+        # Last resort: find name column by text content
+        if "name" not in col_map.values():
+            for ci in range(n):
+                if ci in col_map:
+                    continue
+                text_hits = sum(
+                    1 for v in samples[ci]
+                    if v and len(v) > 3
+                    and not self._DATE_RE.match(v)
+                    and not self._NUM_RE.match(v.replace(",", ""))
+                    and re.search(r"[A-Za-z]{3,}", v)
+                )
+                if text_hits >= 2:
+                    col_map[ci] = "name"
+                    break
+
+        return col_map
+
+
+# ─────────────────────────────────────────────
+# AI FALLBACK PARSER (Ollama, optional)
+# Triggered only when PDFTableFallbackParser also returns 0 rows.
+# Silently skipped if Ollama is not installed / not running.
+# Configure via env: OLLAMA_URL, OLLAMA_MODEL
 # ─────────────────────────────────────────────
 
 class AIFallbackParser:
@@ -3296,8 +3508,10 @@ JSON array:"""
         return all_rows
 
     def _call_ollama(self, text, source, force_json_format=True):
-        """One Ollama API call. Returns list of make_row dicts."""
+        """One Ollama API call. Returns list of make_row dicts.
+        Returns [] silently if Ollama is not installed / not running."""
         import urllib.request
+        import urllib.error
 
         ollama_url   = os.environ.get('OLLAMA_URL', 'http://localhost:11434').rstrip('/')
         ollama_model = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
@@ -3323,9 +3537,14 @@ JSON array:"""
             headers={"content-type": "application/json"},
             method="POST"
         )
-        # Local LLMs are slower — give plenty of time
-        with urllib.request.urlopen(req, timeout=300) as resp:
-            body = json.loads(resp.read().decode())
+        try:
+            # Local LLMs are slower — give plenty of time
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                body = json.loads(resp.read().decode())
+        except (urllib.error.URLError, OSError):
+            # Ollama not installed or not running — skip silently
+            print(f"[INFO] Ollama not available — skipping AI fallback", file=sys.stderr)
+            return []
 
         raw = (body.get("response") or "").strip()
         raw = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.MULTILINE)
@@ -3436,18 +3655,31 @@ JSON array:"""
 def attempt_auto_parse(file_path, module_globals=None, extractor_path=None):
     """Auto-fallback called when a matched parser returns 0 rows.
 
-    Tries the local-Ollama AIFallbackParser. Returns (rows, parser_name, error_str).
-
-    Args kept for backward compatibility with the call site:
-        module_globals, extractor_path — currently unused (reserved for future
-        dynamic-class generation), accepted to avoid TypeError.
+    Order:
+      1. PDFTableFallbackParser — pdfplumber native table extraction, no LLM, always works
+      2. AIFallbackParser (Ollama) — only if step 1 returns nothing; silently skipped if Ollama not running
     """
+    ext = Path(file_path).suffix.lower()
+
+    # Step 1: pdfplumber table extraction (PDFs only, no LLM needed)
+    if ext == ".pdf":
+        try:
+            tbl_parser = PDFTableFallbackParser()
+            rows = tbl_parser.parse(file_path)
+            if rows:
+                print(f"[INFO] PDFTableFallbackParser extracted {len(rows)} rows from "
+                      f"{Path(file_path).name}", file=sys.stderr)
+                return rows, "PDFTableFallbackParser", None
+        except Exception as e:
+            print(f"[WARN] PDFTableFallbackParser error: {e}", file=sys.stderr)
+
+    # Step 2: Ollama (optional, silently skipped if not running)
     try:
         parser = AIFallbackParser()
         rows = parser.parse(file_path)
         if rows:
             return rows, "AIFallbackParser(Ollama)", None
-        return [], "AIFallbackParser(Ollama)", "Ollama returned 0 rows (model may not have understood the format, or Ollama not running)"
+        return [], "AIFallbackParser(Ollama)", "No rows extracted (Ollama may not be running or format not recognised)"
     except Exception as e:
         return [], "AIFallbackParser(Ollama)", f"{type(e).__name__}: {e}"
 
