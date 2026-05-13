@@ -1,1 +1,4 @@
 capital_gains_portal.html
+.license_keys/
+license*.lic
+generate_license.py

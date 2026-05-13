@@ -34,8 +34,18 @@ timeout /t 4 /nobreak >nul
 netstat -ano | find "LISTENING" | find ":5000" >nul 2>&1
 if errorlevel 1 (
     echo.
-    echo ERROR: Server failed to start. Check server_log.txt for details.
-    echo Common fix: run Install.bat to install missing packages.
+    echo ERROR: Server failed to start.
+    echo.
+    :: Show server log which may contain license error or machine ID
+    if exist "%~dp0server_log.txt" (
+        type "%~dp0server_log.txt"
+    )
+    echo.
+    echo If you see a LICENSE ERROR above, send the Machine ID shown
+    echo to your provider to get a license.lic file.
+    echo Then place license.lic in this folder and try again.
+    echo.
+    echo If you see a different error, run Install.bat first.
     pause
     exit /b 1
 )

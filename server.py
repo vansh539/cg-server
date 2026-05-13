@@ -1,6 +1,16 @@
 import os, sys, subprocess, tempfile, base64, json, re
+from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+# ── License check — must pass before server starts ───────────────────────────
+try:
+    from license_check import check_and_exit_if_invalid
+    _lic = check_and_exit_if_invalid(Path(__file__).parent)
+    print(f"[LICENSE] Valid — {_lic['client_name']} — expires {_lic['expiry']} ({_lic['days_left']} days left)")
+except ImportError:
+    pass  # license_check.py not present (dev mode)
+# ─────────────────────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
 CORS(app, origins="*", methods=["GET","POST","OPTIONS"], allow_headers=["Content-Type"])
