@@ -793,8 +793,19 @@ class NirmalBangParser:
 
     def _parse_text(self, text):
         rows = []
+        # Normalize soft hyphens (U+00AD) to nothing — they split numbers across lines
+        text = text.replace('­', '')
         lines = text.split("\n")
         pending = []   # lot rows buffered until we find their ISIN
+        orphan_nums = []  # large numbers from a preceding line (split bought/sold totals)
+
+        skip = {'Bought Quantity', 'Bought Amount', 'Short Term PL', 'Long Term PL',
+                'Speculative PL', 'Final Total', 'Capital Gain Type', 'Buy Date',
+                'Client Code', 'Client Name', 'Date From', 'NIRMAL BANG',
+                'Compliance', 'SEBI Regn', 'Page No', 'Disclaimer',
+                'Scrip Code', 'Quantity Cut off', 'Os Purchase', 'Os Sales',
+                'Short Term -', 'Long Term -', '^ -', 'No. of',
+                'B-2 /', 'CIN Number'}
 
         for line in lines:
             line = line.strip()
@@ -809,20 +820,27 @@ class NirmalBangParser:
                     r["isin"] = isin
                     rows.append(r)
                 pending = []
+                orphan_nums = []
                 continue
 
-            # Skip non-transaction lines
-            skip = ['Bought Quantity', 'Bought Amount', 'Short Term PL', 'Long Term PL',
-                    'Speculative PL', 'Final Total', 'Capital Gain Type', 'Buy Date',
-                    'Client Code', 'Client Name', 'Date From', 'NIRMAL BANG',
-                    'Compliance', 'SEBI Regn', 'Page No', 'Disclaimer',
-                    'Scrip Code', 'Quantity Cut off', 'Os Purchase', 'Os Sales',
-                    'Short Term -', 'Long Term -', '^ -', 'No. of',
-                    'B-2 /', 'CIN Number']
             if any(s in line for s in skip):
+                orphan_nums = []
                 continue
 
-            txn = self._parse_lot_line(line)
+            # Detect orphan-number lines: no letters, no date, contains large numbers
+            # These are bought/sold totals that Nirmal Bang PDFs sometimes place on a
+            # separate line above the transaction due to column overflow + soft hyphens.
+            has_date    = bool(re.search(r'\d{2}/\d{2}/\d{4}', line))
+            has_letters = bool(re.search(r'[A-Za-z]', line))
+            if not has_date and not has_letters:
+                candidates = [to_float(n) for n in re.findall(r'[\d,]+\.?\d*', line)
+                              if to_float(n) and to_float(n) > 1000]
+                if candidates:
+                    orphan_nums = candidates
+                    continue
+
+            txn = self._parse_lot_line(line, orphan_nums=orphan_nums)
+            orphan_nums = []
             if txn:
                 pending.append(txn)
 
@@ -830,13 +848,14 @@ class NirmalBangParser:
         rows.extend(pending)
         return rows
 
-    def _parse_lot_line(self, line):
+    def _parse_lot_line(self, line, orphan_nums=None):
         """Parse a single lot-level P&L line.
 
         Formats seen:
           BuyDate Code Name Days Qty BuyRate BoughtTotal SellRate SoldTotal SellDate [Gains...]
           BuyDate Code Name Days Qty CutoffRate BuyRate BoughtTotal SellRate SoldTotal SellDate [Gains...]
           BuyDate Code Name Days Qty CutoffRate BuyRate BoughtTotal SellDate Gains...  (sell amt in gains)
+          (orphan_nums): bought/sold totals were on a preceding line due to PDF column overflow
         """
         # Need exactly 2 dates (buy and sell)
         dates = re.findall(r'\d{2}/\d{2}/\d{4}', line)
@@ -871,8 +890,8 @@ class NirmalBangParser:
         # Numbers after sell date (gains, but first positive may be sold_total)
         after_nums = [to_float(g) for g in re.findall(r'-?[\d,]+\.?\d*', after) if to_float(g) is not None]
 
-        # Find amounts — pass after_nums so it can use sold_total from after section
-        result = self._find_amounts(nums, after_nums)
+        # Find amounts — pass after_nums and any orphan totals from preceding line
+        result = self._find_amounts(nums, after_nums, orphan_nums=orphan_nums or [])
         if not result:
             return None
 
@@ -899,7 +918,7 @@ class NirmalBangParser:
             buy_date, effective_purchase, gain_type, self.client_name
         )
 
-    def _find_amounts(self, nums, after_nums=None):
+    def _find_amounts(self, nums, after_nums=None, orphan_nums=None):
         """Detect qty, buy_rate, bought_total, sell_rate, sold_total.
 
         Column formats (with cutoff = split-adjusted / grandfathered reference price):
@@ -912,7 +931,8 @@ class NirmalBangParser:
         if len(nums) < 3:
             return None
 
-        after_nums = after_nums or []
+        after_nums  = after_nums  or []
+        orphan_nums = orphan_nums or []
         tol = lambda b: max(2, b * 0.02)   # 2% tolerance for Indian comma formatting
 
         def try_find(q, r, b, rest_nums, extra_after):
@@ -964,6 +984,19 @@ class NirmalBangParser:
             q, buy_r, sell_r = nums[0], nums[2], nums[3]
             if 0 < q <= 1_000_000:
                 return q, buy_r, q * buy_r, sell_r, q * sell_r
+
+        # Orphan fallback: bought/sold totals were on a preceding PDF line
+        # orphan_nums[0] = bought_total, orphan_nums[1] = sold_total
+        if len(orphan_nums) >= 2 and len(nums) >= 2:
+            q = nums[0]
+            if 0 < q <= 1_000_000:
+                bought_t = orphan_nums[0]
+                sold_t   = orphan_nums[1]
+                # Find buy_rate: the value in nums satisfying qty × buy_rate ≈ bought_total
+                for buy_r in nums[1:]:
+                    if buy_r > 0 and abs(buy_r * q - bought_t) < tol(bought_t):
+                        sell_r = sold_t / q if q > 0 else buy_r
+                        return q, buy_r, bought_t, sell_r, sold_t
 
         return None
 
@@ -5961,11 +5994,17 @@ def process_file(file_path):
                 had_error = True
 
         # Rule 5: skip intra-day transactions (sale_date == purchase_date)
-        rows = [
+        intraday_rows = [
             r for r in rows
-            if not (r.get("sale_date") and r.get("purchase_date")
-                    and r["sale_date"] == r["purchase_date"])
+            if r.get("sale_date") and r.get("purchase_date")
+            and r["sale_date"] == r["purchase_date"]
         ]
+        if intraday_rows:
+            if not hasattr(builtins, '_cge_intraday_counts'):
+                builtins._cge_intraday_counts = {}
+            src = source_name_from_file(file_path)
+            builtins._cge_intraday_counts[src] = len(intraday_rows)
+        rows = [r for r in rows if r not in intraday_rows]
         # Rule 6: clean share names
         for r in rows:
             name = r.get("share_name") or ""
@@ -6074,11 +6113,12 @@ def main():
     for r in all_rows:
         rows_by_source.setdefault(r.get("source",""), []).append(r)
 
+    intraday_counts = getattr(builtins, '_cge_intraday_counts', {})
     for fm in file_meta:
         remaining = len(rows_by_source.get(fm["source"], []))
         if fm["had_error"] or (remaining == 0 and fm["oor_count"] == 0):
             fm["process_status"] = "Not Processed"
-        elif fm["oor_count"] > 0:
+        elif fm["oor_count"] > 0 or intraday_counts.get(fm["source"], 0) > 0:
             fm["process_status"] = "Semi-Processed"
         else:
             fm["process_status"] = "Processed"
