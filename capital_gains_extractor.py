@@ -230,12 +230,18 @@ def _determine_share_type(name, asset_type=None):
     if "unlisted" in nl or "unlisted" in al:
         return "Unlisted Security"
 
-    # Rule 2: explicit equity signals win immediately
+    # Rule 2a: international/overseas FOFs are non-equity for Indian tax purposes
+    _NON_EQUITY_FOF_KW = ["nasdaq", "nyse", "global x", "global electric",
+                          "passive fof", "etf fof", "international fund",
+                          "overseas fund", "global fund", "us equity fof"]
+    if any(kw in nl for kw in _NON_EQUITY_FOF_KW):
+        return "Unlisted Security"
+
+    # Rule 2b: explicit equity signals win
     _EQUITY_KW = ["share", "fund of fund", "fof", "equity fund", "equity mutual",
                   "large cap", "mid cap", "small cap", "multicap", "flexi cap",
                   "bluechip", "blue chip", "contra", "thematic", "sectoral",
-                  "elss", "index fund", "nifty", "sensex", "nasdaq", "nyse",
-                  "global x", "global electric", "passive fof", "etf fof",
+                  "elss", "index fund", "nifty", "sensex",
                   "emerging bluechip"]
     if any(kw in nl for kw in _EQUITY_KW):
         return "Transaction Tax"
@@ -248,13 +254,15 @@ def _determine_share_type(name, asset_type=None):
                 "debt fund", "short term fund", "low duration"]
     if any(kw in nl for kw in _DEBT_KW):
         return "Unlisted Security"
-    
+
     # Debt bond specifically (but NOT "bond fund" which is debt, NOR "bond etf")
     if "bond" in nl and "fund" not in nl:
         return "Unlisted Security"
 
-    # Rule 4: asset_type guidance
+    # Rule 4: asset_type guidance — check "non-equity" before "equity" to avoid substring match
     if "debt" in al:
+        return "Unlisted Security"
+    if "non-equity" in al or al == "non equity":
         return "Unlisted Security"
     if "equity" in al:
         return "Transaction Tax"
@@ -361,10 +369,11 @@ def build_validation_report(rows, pdf_st=None, pdf_lt=None, pdf_total=None, pars
         })
     # Flag when ST and LT diverge significantly even if totals cancel (gain_type misclassification)
     if (gap_st_pct is not None and gap_st_pct > 1.0) or (gap_lt_pct is not None and gap_lt_pct > 1.0):
+        _st_str = f"{gap_st_pct:.1f}% (₹{gap_st:,.2f})" if gap_st_pct is not None else "n/a"
+        _lt_str = f"{gap_lt_pct:.1f}% (₹{gap_lt:,.2f})" if gap_lt_pct is not None else "n/a"
         causes.append({
             'type': 'GAIN_TYPE_MISMATCH',
-            'note': (f'ST gap: {gap_st_pct:.1f}% (₹{gap_st:,.2f}) | '
-                     f'LT gap: {gap_lt_pct:.1f}% (₹{gap_lt:,.2f}). '
+            'note': (f'ST gap: {_st_str} | LT gap: {_lt_str}. '
                      f'Even if the total is close, rows may be misclassified between ST and LT. '
                      f'Verify "Shares w/o STT" or borderline-365-day holdings.'),
         })
@@ -724,23 +733,38 @@ class CAMSParser:
                 for pl in purchase_lines:
                     pm = re.match(
                         r'(?:Switch In|Switch-In|Equity Switch In|SIP Purchase|Purchase|Systematic(?:\s+Investment)?|IDCW Reinvest(?:ment)?|Transfer In|Bonus)\s+'
-                        r'(\d{2}-\w{3}-\d{4}|\d{2}-\w+-\d{4})\s+([\d,\.]+)\s+([\d,\.]+)\s+([\d,\.]+)', pl
+                        r'(\d{2}-\w{3}-\d{4}|\d{2}-\w+-\d{4})\s+([\d,\.]+)\s+([\d,\.]+)\s+([\d,\.]+)'
+                        r'(?:\s+([\d,\.]+)\s+([\d,\.]+))?', pl
                     )
                     if not pm: continue
                     purchase_date = parse_date(pm.group(1))
                     lot_units = to_float(pm.group(3))
                     unit_cost = to_float(pm.group(4))
+                    gf_nav = to_float(pm.group(6)) if pm.group(6) else None
                     if not lot_units or not unit_cost: continue
 
+                    # Apply Section 112A grandfathering: use Jan-31-2018 FMV when
+                    # purchase pre-dates the cutoff and GF cost exceeds original cost
+                    GF_CUTOFF = datetime(2018, 1, 31)
+                    effective_unit_cost = unit_cost
+                    market_price_31jan2018 = None
+                    total_market_value_31jan2018 = None
+                    if gf_nav and purchase_date and purchase_date <= GF_CUTOFF and gf_nav > unit_cost:
+                        effective_unit_cost = gf_nav
+                        market_price_31jan2018 = gf_nav
+                        total_market_value_31jan2018 = round(lot_units * gf_nav, 4)
+
                     lot_sale_amount = (lot_units / redeemed_units * sale_amount) if redeemed_units else 0
-                    lot_purchase_amount = lot_units * unit_cost
+                    lot_purchase_amount = lot_units * effective_unit_cost
                     is_equity = (current_scheme_type == "Equity")
                     gain_type = determine_gain_type(purchase_date, sale_date, is_equity)
 
                     rows.append(make_row(
                         self.source_name, current_scheme, current_isin,
                         sale_date, lot_units, sale_price, round(lot_sale_amount, 4),
-                        purchase_date, round(lot_purchase_amount, 4), gain_type, self.client_name
+                        purchase_date, round(lot_purchase_amount, 4), gain_type, self.client_name,
+                        market_price_31jan2018=market_price_31jan2018,
+                        total_market_value_31jan2018=total_market_value_31jan2018,
                     ))
         return rows
 
@@ -753,33 +777,16 @@ class NirmalBangParser:
     """Parses Nirmal Bang Short-Term/Long-Term P&L reports.
     Emits one row per individual purchase lot (not per scrip summary).
     """
-    # Summary line: "Short Term (Less than 365 days)  sale  cost  gain  gain"
-    _ST_SUMM_RE = re.compile(r'Short\s+Term\s*\([^)]+\)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)', re.I)
-    _LT_SUMM_RE = re.compile(r'Long\s+Term\s*\([^)]+\)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)', re.I)
-
-    def _extract_pdf_summary(self, pdf_path):
-        try:
-            with open_pdf(pdf_path) as pdf:
-                text = "\n".join(p.extract_text() or "" for p in pdf.pages)
-            ms = self._ST_SUMM_RE.search(text)
-            ml = self._LT_SUMM_RE.search(text)
-            if ms:
-                st = float(ms.group(3).replace(',', ''))  # 3rd number = gain
-                lt = float(ml.group(3).replace(',', '')) if ml else 0.0
-                return round(st, 2), round(lt, 2), round(st + lt, 2)
-        except Exception:
-            pass
-        return None, None, None
-
     def parse(self, pdf_path, source_name=None):
         self.source_name = source_name or source_name_from_file(pdf_path)
         with open_pdf(pdf_path) as pdf:
             full_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
         self.client_name = extract_client_name(full_text)
         rows = self._parse_text(full_text)
-        pdf_st, pdf_lt, pdf_total = self._extract_pdf_summary(pdf_path)
+        # NirmalBang statement totals cover the full broker period, not just extracted lots,
+        # so PDF vs extracted comparison would be misleading — extraction stats only.
         self.last_validation = build_validation_report(
-            rows, pdf_st=pdf_st, pdf_lt=pdf_lt, pdf_total=pdf_total,
+            rows, pdf_st=None, pdf_lt=None, pdf_total=None,
             parse_failures=0, parser_name='NirmalBangParser',
         )
         return rows
@@ -917,10 +924,15 @@ class NirmalBangParser:
                 s_r, s_b = rest_nums[0], rest_nums[1]
                 if s_b > 0:
                     return q, r, b, s_r, s_b
+            # Case A': single rest_num is sell_rate → compute sold from qty × sell_rate
+            if len(rest_nums) == 1 and rest_nums[0] > 0:
+                s_r = rest_nums[0]
+                s_b = q * s_r
+                return q, r, b, s_r, s_b
             # Case B: sold_total is first number in after_nums
             # ONLY when after has >= 2 numbers (sold + gain/tax)
             # With 1 after number it's the gain, not sold_total
-            if len(extra_after) >= 2 and extra_after[0] > 0:
+            if len(rest_nums) == 0 and len(extra_after) >= 2 and extra_after[0] > 0:
                 s_b = extra_after[0]
                 s_r = s_b / q if q > 0 else r
                 return q, r, b, s_r, s_b
@@ -945,6 +957,13 @@ class NirmalBangParser:
                 res = try_find(q, r, b, nums[3:], after_nums)
                 if res:
                     return res
+
+        # Zero-cutoff fallback (ANGEL ONE / bonus-share format):
+        # [qty, 0.0, buy_rate, sell_rate, ...] — cutoff field is literally 0
+        if len(nums) >= 4 and nums[1] == 0.0 and nums[2] > 0 and nums[3] > 0:
+            q, buy_r, sell_r = nums[0], nums[2], nums[3]
+            if 0 < q <= 1_000_000:
+                return q, buy_r, q * buy_r, sell_r, q * sell_r
 
         return None
 
@@ -1261,10 +1280,16 @@ class MiraeAssetParser:
                 return name.title()
         return extract_client_name(text)
 
+    _NON_EQUITY_FOF_KW = ["nasdaq", "nyse", "global x", "global electric",
+                          "passive fof", "etf fof", "international fund",
+                          "overseas fund", "global fund", "us equity fof"]
+
     def _parse_text(self, text):
         rows = []
-        current_scheme = None
-        current_isin   = None
+        current_scheme   = None
+        current_isin     = None
+        current_is_equity = True
+        current_asset_type = None
 
         for raw in text.split("\n"):
             line = raw.strip()
@@ -1276,6 +1301,13 @@ class MiraeAssetParser:
             if isin_m and re.search(r'Fund|ETF|Plan|Scheme', line, re.I):
                 current_isin   = isin_m.group(1)
                 current_scheme = re.sub(r'\s*\(.*?\)\s*$', '', line).strip()
+                nl = current_scheme.lower()
+                if any(kw in nl for kw in self._NON_EQUITY_FOF_KW):
+                    current_is_equity  = False
+                    current_asset_type = "Non-Equity"
+                else:
+                    current_is_equity  = True
+                    current_asset_type = None
                 continue
 
             if not current_scheme:
@@ -1358,13 +1390,14 @@ class MiraeAssetParser:
             if not sale_amt or sale_amt <= 0:
                 continue
 
-            gain_type = determine_gain_type(purchase_date, sale_date, is_equity=True)
+            gain_type = determine_gain_type(purchase_date, sale_date, is_equity=current_is_equity)
 
             rows.append(make_row(
                 self.source_name, current_scheme, current_isin,
                 sale_date, purchase_units, sale_nav, round(sale_amt, 4),
                 purchase_date, round(purchase_amt, 4), gain_type,
                 self.client_name,
+                asset_type=current_asset_type,
                 market_price_31jan2018=fmv_price,
                 total_market_value_31jan2018=fmv_total,
             ))
@@ -3708,6 +3741,21 @@ class AnandRathiMFParser:
                 elif pending_name and len(pending_name) > 4:
                     current_scheme = pending_name
                 pending_name = None
+                # Infer asset type from fund name when no explicit DEBT/EQUITY section header
+                if current_scheme:
+                    _sname_u = current_scheme.upper()
+                    _debt_kw = ('LIQUID','OVERNIGHT','ULTRA SHORT','SHORT DURATION',
+                                'MONEY MARKET','GILT','G-SEC','DYNAMIC BOND',
+                                'CORPORATE BOND','FLOATING RATE','FIXED MATURITY',
+                                'FMP','BANKING AND PSU','CREDIT RISK','ARBITRAGE',
+                                'SHORT TERM FUND','DEBT FUND')
+                    _equity_kw = ('EQUITY','ELSS','LARGE CAP','MID CAP','SMALL CAP',
+                                  'MULTI CAP','FLEXI CAP','BLUECHIP','BLUE CHIP',
+                                  'FLEXICAP','BALANCED ADVANTAGE','HYBRID')
+                    if any(k in _sname_u for k in _debt_kw):
+                        current_asset = "Debt"
+                    elif any(k in _sname_u for k in _equity_kw):
+                        current_asset = "Equity"
                 # Flush pending lots (from Echowin-style where data came before ISIN)
                 for pending_item in pending_lots:
                     # pending_lots items can be 2-tuple (line, asset) or 3-tuple (line, asset, scheme)
@@ -3867,7 +3915,7 @@ class AnandRathiMFParser:
                 # Heuristic: if n has 3 decimal places OR n < 500 with decimal part, it's units
                 n_str = str(n)
                 decimal_places = len(n_str.split('.')[-1]) if '.' in n_str else 0
-                is_units_candidate = (decimal_places >= 2 and n < 5000) or n < 100
+                is_units_candidate = (decimal_places >= 1 and n < 5000) or n < 100
                 if is_units_candidate and not amount_between:
                     units_found = True
                     # Update qty with this more accurate value
@@ -3882,7 +3930,11 @@ class AnandRathiMFParser:
         positive_after = [n for n in large_after if n > 100]
 
         buy_amt  = amount_between[0] if amount_between else None
-        sell_amt = positive_after[0] if positive_after else None
+        # Skip leading per-unit NAV: if first value is < 10% of second, it's a unit price not amount
+        if len(positive_after) >= 2 and positive_after[0] < positive_after[1] * 0.1:
+            sell_amt = positive_after[1]
+        else:
+            sell_amt = positive_after[0] if positive_after else None
 
         # Fallback: if no sell_amt in after, use last amount from between
         if not sell_amt and len(amount_between) >= 2:
