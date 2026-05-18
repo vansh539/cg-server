@@ -583,6 +583,36 @@ function onFYChange() {
   onFYChange();
 })();
 
+// ── FILE FAIL CARDS (reused in zero-rows + showSuccess) ──
+function buildFileFailCards(fileMeta) {
+  const failed = (fileMeta || []).filter(fm => fm.process_status === 'Not Processed');
+  if (!failed.length) return '';
+  const items = failed.map(fm => {
+    const reason = fm.not_processed_reason || '';
+    const lines  = reason.split('\n').map(l => l.trim()).filter(Boolean);
+    let title  = lines[0] || 'Could not read this file.';
+    let detail = lines.slice(1).join(' ') || '';
+    if (title.startsWith('SCANNED_IMAGE_PDF:'))   title = '🖼️ Scanned image — no text layer';
+    else if (title.startsWith('CID_ENCODED_FONT:')) title = '🔤 Font encoding issue';
+    else if (title.startsWith('No parser matched')) title = '❓ Unrecognised file format';
+    else if (title.includes('0 rows'))             title = '⚠️ File opened but no transactions found';
+    const todoMatch = detail.match(/What to do:\s*(.+)/i);
+    const todo = todoMatch ? todoMatch[1] : detail;
+    return `<div style="margin:8px 0;padding:10px 12px;background:#fff8f0;border:1px solid #fcd34d;border-radius:6px">
+      <div style="font-weight:600;color:#92400e;margin-bottom:4px">📄 ${fm.source}</div>
+      <div style="color:#78350f;font-size:12px;margin-bottom:${todo?'4px':'0'}">${title}</div>
+      ${todo ? `<div style="color:#b45309;font-size:12px">👉 ${todo}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:10px">
+    <div style="font-weight:700;color:#92400e;margin-bottom:4px">
+      ⚠️ ${failed.length} file${failed.length>1?'s':''} could not be processed:
+    </div>
+    ${items}
+    <div style="font-size:11px;color:#9ca3af;margin-top:6px">Fix the issue above and re-upload the affected files.</div>
+  </div>`;
+}
+
 // ── VIEW SWITCHING ──
 function switchView(v) {
   ['processor','verification'].forEach(x => {
@@ -693,7 +723,11 @@ async function processFiles(filesToProcess) {
 
   try {
     const response = await fetch(WEBHOOK_URL, { method:'POST', body: formData });
-    if (!response.ok) throw new Error(`Server error ${response.status}`);
+    if (!response.ok) {
+      let errMsg = `Server error ${response.status}`;
+      try { const b = await response.json(); if (b && b.error) errMsg = b.error; } catch {}
+      throw new Error(errMsg);
+    }
     const result = await response.json();
     endProgress();
 
@@ -713,12 +747,17 @@ async function processFiles(filesToProcess) {
     }
     // Zero rows
     if (result.total_rows === 0) {
-      const errMsg  = errors.length > 0 ? errors[0] : '';
-      const isPwd   = /password|cannot read|encrypted|decrypt/i.test(errMsg);
-      showStatus('error', isPwd
-        ? `❌ <strong>Password-protected PDF detected.</strong><br>Rename: <code>filename.PASSWORD.pdf</code>`
-        : `❌ <strong>No transactions extracted.</strong><br>File may be unsupported or password-protected.<br>
+      const errMsg     = errors.length > 0 ? errors[0] : '';
+      const isPwd      = /password|cannot read|encrypted|decrypt/i.test(errMsg);
+      const failCards  = buildFileFailCards(result.file_meta);
+      if (failCards) {
+        showStatus('error', `❌ <strong>No transactions extracted.</strong>${failCards}`);
+      } else if (isPwd) {
+        showStatus('error', `❌ <strong>Password-protected PDF detected.</strong><br>Rename the file to: <code>filename.PASSWORD.pdf</code>`);
+      } else {
+        showStatus('error', `❌ <strong>No transactions extracted.</strong><br>File may be unsupported or password-protected.<br>
            ${errMsg ? '<small>' + errMsg + '</small>' : ''}`);
+      }
       document.getElementById('processBtn').disabled = false;
       return;
     }
@@ -763,6 +802,9 @@ function showSuccess(result, fy, files) {
     </div>`;
   }
 
+  // Build "not processed" alert for any files that failed
+  const failWarn = buildFileFailCards(result.file_meta);
+
   showStatus('success', `
     ✅ Done! <strong>${result.total_rows} transactions</strong> processed — FY ${getFYDates(fy).short}
     ${clientLine}
@@ -779,7 +821,7 @@ function showSuccess(result, fy, files) {
         <div class="stat-label">Net Capital Gain / Loss</div>
         <div class="stat-val" style="color:${col}">${sign}₹${fmtN(cg)}</div>
       </div>
-    </div>${oorWarn}`);
+    </div>${oorWarn}${failWarn}`);
 
   if (result.file_base64) {
     const blob = b64toBlob(result.file_base64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -817,6 +859,7 @@ function showSuccess(result, fy, files) {
         fy:        fy,
         oorItems:  oorItems,
         remark:    fm.remark || '',
+        not_processed_reason: fm.not_processed_reason || '',
         pdfVal:    pv,
       });
     });
@@ -857,7 +900,9 @@ function _buildVerifyRow(r, i, maxWidth) {
   const statusBadge = r => {
     if (r.status === 'ok')   return `<span class="badge ok">✓ Processed</span>`;
     if (r.status === 'warn') return `<span class="badge warn">⚠ Semi-Processed</span>`;
-    return `<span class="badge err">✗ Not Processed</span>`;
+    const reason = r.not_processed_reason || '';
+    const tip = reason ? reason.split('\n')[0].replace(/^[A-Z_]+:\s*/,'').slice(0,80) : '';
+    return `<span class="badge err" title="${tip}" style="cursor:help">✗ Not Processed${tip ? ' ⓘ' : ''}</span>`;
   };
   const oorCell = r.oor > 0
     ? `<span class="badge warn" style="cursor:pointer" onclick="showOORModal('${r.fy}', ${JSON.stringify(r.oorItems||[]).replace(/"/g,'&quot;')})">⚠ ${r.oor} excluded</span>`
