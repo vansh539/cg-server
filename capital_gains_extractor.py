@@ -6520,19 +6520,30 @@ def process_file(file_path):
 
         # Rule: If 0 rows, diagnose the exact reason
         if len(rows) == 0:
-            # Check for CID-encoded (unreadable) PDF
             trip_reason = f"Parser {parser.__class__.__name__} matched but extracted 0 rows."
             try:
                 with open_pdf(file_path) as _chk:
+                    # Check for completely image-based (scanned) PDF — no text on any page
+                    all_text = " ".join((_p.extract_text() or "") for _p in _chk.pages).strip()
                     sample = (_chk.pages[0].extract_text() or '')[:300]
-                    if '(cid:' in sample:
+                    if not all_text:
                         trip_reason = (
-                            f"CID-encoded font — PDF uses a proprietary embedded font that cannot "
-                            f"be decoded by standard text extraction. "
-                            f"This is common with Axis Bank and Canara Rebeco statements. "
-                            f"Parser attempted: {parser.__class__.__name__}. "
-                            f"Resolution: Ask the issuer to provide a text-readable PDF, or "
-                            f"open the PDF and re-save it as a new PDF using Adobe Acrobat / Mac Preview."
+                            "SCANNED_IMAGE_PDF: This PDF appears to be a scanned image — "
+                            "it has no readable text layer. The tool cannot extract data from "
+                            "image-only PDFs.\n"
+                            "What to do: Log in to the mutual fund / broker portal and download "
+                            "a fresh digital statement (not a scan). Digital statements have "
+                            "selectable text. If you only have a scanned copy, open it in "
+                            "Adobe Acrobat, use 'Recognize Text (OCR)', then re-save and upload."
+                        )
+                    elif '(cid:' in sample:
+                        trip_reason = (
+                            "CID_ENCODED_FONT: PDF uses a proprietary embedded font that cannot "
+                            "be decoded by standard text extraction. This is common with Axis Bank "
+                            "and Canara Robeco statements.\n"
+                            "What to do: Open this PDF in Adobe Acrobat or Mac Preview, "
+                            "then File → Print → Save as PDF to create a re-encoded copy, "
+                            "and upload that instead."
                         )
             except Exception:
                 pass
@@ -6614,8 +6625,26 @@ def process_file(file_path):
 
     except Exception as e:
         trip = f"Exception during parsing with {parser.__class__.__name__}: {type(e).__name__}: {e}"
+        # Check if failure is because PDF is image-only (scanned)
+        if ext == '.pdf':
+            try:
+                import pdfplumber as _pl
+                with _pl.open(file_path) as _chk:
+                    all_text = " ".join((_p.extract_text() or "") for _p in _chk.pages).strip()
+                if not all_text:
+                    trip = (
+                        "SCANNED_IMAGE_PDF: This PDF appears to be a scanned image — "
+                        "it has no readable text layer. The tool cannot extract data from "
+                        "image-only PDFs.\n"
+                        "What to do: Log in to the mutual fund / broker portal and download "
+                        "a fresh digital statement (not a scan). Digital statements have "
+                        "selectable text. If you only have a scanned copy, open it in "
+                        "Adobe Acrobat, use 'Recognize Text (OCR)', then re-save and upload."
+                    )
+            except Exception:
+                pass
         _errors.append(f"NOT_PROCESSED: {trip}")
-        print(f"[ERROR] {file_path}: {trip}", file=sys.stderr)
+        print(f"[ERROR] {Path(file_path).name}: {trip.split(chr(10))[0]}", file=sys.stderr)
         if not hasattr(builtins, '_cge_process_errors'):
             builtins._cge_process_errors = {}
         builtins._cge_process_errors[file_path] = _errors
@@ -6700,10 +6729,32 @@ def main():
             fm["process_status"] = "Processed"
 
     if not all_rows:
+        import builtins as _b0
+        _pe0 = getattr(_b0, '_cge_process_errors', {})
+        _fmo0 = []
+        for _fm0 in file_meta:
+            _fmo0.append({
+                "source":               _fm0["source"],
+                "process_status":       _fm0["process_status"],
+                "client_name":          _fm0.get("client_name", ""),
+                "rows_extracted":       0,
+                "oor_count":            _fm0.get("oor_count", 0),
+                "sale_amount":          0,
+                "purchase_amount":      0,
+                "capital_gain":         0,
+                "remark":               _fm0.get("remark", ""),
+                "not_processed_reason": next(
+                    (e.replace("NOT_PROCESSED: ", "")
+                     for e in _pe0.get(_fm0.get("_file_path", ""), [])
+                     if e.startswith("NOT_PROCESSED:")), ""
+                ),
+                "pdf_validation": None,
+            })
         result = {"total_rows":0,"total_sale_amount":0,"total_purchase_amount":0,
                   "total_capital_gain":0,"output_file":args.output,"clients":{},
                   "out_of_range_count":out_of_range_count,
-                  "out_of_range_items":out_of_range_items}
+                  "out_of_range_items":out_of_range_items,
+                  "file_meta": _fmo0}
         print(json.dumps(result)); return
 
     write_output_excel(all_rows, args.output, file_meta)
