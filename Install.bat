@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 title Capital Gains Tool - First Time Setup
 echo ============================================
 echo   Capital Gains Tool - First Time Setup
@@ -26,7 +27,7 @@ echo Installing required packages...
 echo This may take a few minutes on first run.
 echo.
 
-pip install -r requirements.txt
+pip install -r "%~dp0requirements.txt"
 if errorlevel 1 (
     echo.
     echo ERROR: Package installation failed.

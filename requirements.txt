@@ -6,3 +6,5 @@ flask-cors
 gunicorn
 pikepdf
 cryptography
+xlrd
+xlwt

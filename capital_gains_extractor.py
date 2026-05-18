@@ -4763,7 +4763,8 @@ def validate_output_rows(rows):
             _debt_kw = ["debt", "liquid", "overnight", "duration", "money market",
                         "credit risk", "floater", "gilt", "banking and psu",
                         "ultra short", "short term", "ultra-short", "low duration",
-                        "fixed maturity", "corporate bond", "income", "arbitrage"]
+                        "fixed maturity", "corporate bond", "income", "arbitrage",
+                        "bond fund", "bond ", " bond", "all seasons"]
             if not any(kw in name.lower() for kw in _debt_kw):
                 warnings.append({"row": i+1, "name": name,
                     "issue": "WARN-07: MF ISIN (INF...) classified as Unlisted Security — check if equity MF",
@@ -4773,14 +4774,567 @@ def validate_output_rows(rows):
 
 
 
+# ─────────────────────────────────────────────
+# ANGEL ONE EXCEL PARSER
+# ─────────────────────────────────────────────
+class AngelOneExcelParser:
+    """Parses Angel One capital gains XLSX files.
+    Sheet: Equity+Bonds+SGB Trade Details
+    Delivery P&L section columns: ISIN, Scrip Name, Qty, Buy Date, Sell Date,
+      Avg Buy Price, Buy Value, Avg Sell Price, Sell Value, Cost Of Acquisition,
+      Charges and Statutory Levies, STT, Net Profit/Loss,
+      Long term taxable income, Short term taxable income, Purchase Type, Type of instrument
+    """
+    def parse(self, file_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(file_path)
+        self.client_name = None
+        rows = []
+        try:
+            import warnings as _w
+            with _w.catch_warnings():
+                _w.simplefilter("ignore")
+                wb = openpyxl.load_workbook(file_path, data_only=True)
+
+            # Try to extract client name from Summary sheet
+            if 'Summary' in wb.sheetnames:
+                ws_sum = wb['Summary']
+                for row in ws_sum.iter_rows(values_only=True):
+                    for cell in row:
+                        if cell and 'client name' in str(cell).lower():
+                            idx = list(row).index(cell)
+                            if idx + 1 < len(row) and row[idx + 1]:
+                                self.client_name = str(row[idx + 1]).strip().title()
+                                break
+                    if self.client_name:
+                        break
+
+            # Also try "Client Name" row in the equity sheet header
+            target_sheet = None
+            for sname in wb.sheetnames:
+                if 'equity' in sname.lower() or 'trade' in sname.lower():
+                    target_sheet = sname
+                    break
+            if not target_sheet:
+                return rows
+
+            ws = wb[target_sheet]
+            all_rows = [list(r) for r in ws.iter_rows(values_only=True)]
+
+            # Find client name from early rows
+            for r in all_rows[:15]:
+                cells = [str(c).strip() if c is not None else '' for c in r]
+                for i, c in enumerate(cells):
+                    if 'client name' in c.lower() and i + 1 < len(cells) and cells[i+1]:
+                        self.client_name = cells[i+1].title()
+
+            # Find the Delivery P&L header row
+            delivery_hdr_idx = None
+            col = {}
+            for i, r in enumerate(all_rows):
+                cells = [str(c).strip().lower() if c is not None else '' for c in r]
+                if 'buy date' in cells and 'sell date' in cells and 'buy value' in cells:
+                    delivery_hdr_idx = i
+                    for j, h in enumerate(cells):
+                        if h == 'isin':                             col.setdefault('isin', j)
+                        elif 'scrip name' in h:                     col.setdefault('name', j)
+                        elif h == 'qty' or h == 'quantity':         col.setdefault('qty', j)
+                        elif h == 'buy date':                       col.setdefault('buy_date', j)
+                        elif h == 'sell date':                      col.setdefault('sell_date', j)
+                        elif h == 'avg buy price':                  col.setdefault('buy_rate', j)
+                        elif h == 'buy value':                      col.setdefault('buy_value', j)
+                        elif h == 'avg sell price':                 col.setdefault('sell_rate', j)
+                        elif h == 'sell value':                     col.setdefault('sell_value', j)
+                        elif 'charges and statutory' in h:         col.setdefault('charges', j)
+                        elif h == 'stt':                            col.setdefault('stt', j)
+                        elif 'long term taxable' in h:              col.setdefault('lt_income', j)
+                        elif 'short term taxable' in h:             col.setdefault('st_income', j)
+                        elif 'type of instrument' in h:             col.setdefault('instrument', j)
+                    break
+
+            if delivery_hdr_idx is None:
+                return rows
+
+            def gv(r, field):
+                idx = col.get(field)
+                if idx is None or idx >= len(r): return None
+                v = r[idx]
+                return None if (v is None or str(v).strip() in ('', 'None')) else v
+
+            for r in all_rows[delivery_hdr_idx + 1:]:
+                cells_str = [str(c).strip() if c is not None else '' for c in r]
+                # Stop when we reach an empty section or "Sub total" / next header
+                first = cells_str[0] if cells_str else ''
+                if any(k in first.lower() for k in ('sub total', 'grand total', 'intraday', 'unrealised')):
+                    break
+                # Check if this looks like a header row (no ISIN)
+                isin_val = str(gv(r, 'isin') or '').strip()
+                if not isin_val or not isin_val.startswith('IN'):
+                    continue
+
+                name_val     = str(gv(r, 'name') or '').strip()
+                qty          = to_float(gv(r, 'qty'))
+                buy_date     = parse_date(str(gv(r, 'buy_date') or ''))
+                sell_date    = parse_date(str(gv(r, 'sell_date') or ''))
+                buy_rate     = to_float(gv(r, 'buy_rate'))
+                buy_value    = to_float(gv(r, 'buy_value'))
+                sell_rate    = to_float(gv(r, 'sell_rate'))
+                sell_value   = to_float(gv(r, 'sell_value'))
+                charges      = to_float(gv(r, 'charges')) or 0
+                lt_income    = to_float(gv(r, 'lt_income'))
+                st_income    = to_float(gv(r, 'st_income'))
+
+                if not sell_date or not name_val:
+                    continue
+                if not sell_value:
+                    if qty and sell_rate: sell_value = qty * sell_rate
+                    else: continue
+                if not buy_value or buy_value == 0:
+                    if qty and buy_rate: buy_value = qty * buy_rate
+                    else: buy_value = 0.0
+
+                # Determine gain type from the "Long/Short term taxable income" columns
+                if lt_income is not None and lt_income != 0:
+                    gain_type = 'Long Term'
+                elif st_income is not None and st_income != 0:
+                    gain_type = 'Short Term'
+                else:
+                    gain_type = determine_gain_type(buy_date, sell_date, True)
+
+                # Charges and Statutory Levies = transfer expenses (brokerage + GST + SEBI charges)
+                transfer_exp = charges if charges else None
+
+                rows.append(make_row(
+                    self.source_name, name_val, isin_val,
+                    sell_date, qty, sell_rate, sell_value,
+                    buy_date, buy_value, gain_type, self.client_name,
+                    transfer_expenses=transfer_exp,
+                ))
+        except Exception as e:
+            print(f"[WARN] AngelOneExcelParser: {e}", file=sys.stderr)
+        return rows
+
+
+# ─────────────────────────────────────────────
+# ICICI DIRECT TAB-SEPARATED (.xls) PARSER
+# ─────────────────────────────────────────────
+class ICICIDirectTSVParser:
+    """Parses ICICIDirect EQ Capital Gains files saved as tab-separated .xls.
+    Columns: Stock Symbol | ISIN | Qty | Sale Date | Sale Rate | Sale Value |
+             Sale Expenses | Purchase Date | Purchase Rate |
+             Price as on 31st Jan 2018 | Purchase Price Considered |
+             Purchase Value | Purchase Expenses | Profit/Loss(-)
+    """
+    def parse(self, file_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(file_path)
+        self.client_name = None
+        rows = []
+        GF_CUTOFF = datetime(2018, 1, 31)
+
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+        except Exception:
+            return rows
+
+        lines = [l.rstrip('\r') for l in content.split('\n')]
+
+        # Extract client name
+        for line in lines[:5]:
+            parts = line.split('\t')
+            if len(parts) >= 2 and parts[0].strip().lower() == 'name':
+                self.client_name = parts[1].strip().title()
+                break
+
+        # Find header row
+        col = {}
+        hdr_idx = None
+        for i, line in enumerate(lines):
+            parts = [p.strip().lower() for p in line.split('\t')]
+            if 'stock symbol' in parts and 'isin' in parts:
+                hdr_idx = i
+                for j, h in enumerate(parts):
+                    if h == 'stock symbol':                     col.setdefault('name', j)
+                    elif h == 'isin':                           col['isin'] = j
+                    elif h == 'qty':                            col['qty'] = j
+                    elif h == 'sale date':                      col['sale_date'] = j
+                    elif h == 'sale rate':                      col['sale_rate'] = j
+                    elif h == 'sale value':                     col['sale_value'] = j
+                    elif h == 'sale expenses':                  col['sale_exp'] = j
+                    elif h == 'purchase date':                  col['buy_date'] = j
+                    elif h == 'purchase rate':                  col['buy_rate'] = j
+                    elif '31st jan' in h or '31/01/2018' in h: col['fmv_price'] = j
+                    elif h == 'purchase value':                 col['buy_value'] = j
+                    elif h == 'purchase expenses':              col['buy_exp'] = j
+                break
+        if hdr_idx is None:
+            return rows
+
+        def g(parts, field):
+            idx = col.get(field)
+            if idx is None or idx >= len(parts): return None
+            v = parts[idx].strip()
+            return v if v and v.upper() != 'NA' else None
+
+        current_gain_type = 'Short Term'
+        for line in lines[hdr_idx + 1:]:
+            parts = line.split('\t')
+            first = parts[0].strip() if parts else ''
+
+            if 'short term' in first.lower():   current_gain_type = 'Short Term';  continue
+            if 'long term'  in first.lower():   current_gain_type = 'Long Term';   continue
+            if not first or 'sub total' in first.lower() or 'total' in first.lower() or 'note' in first.lower():
+                continue
+
+            name = first
+            if not name or name.lower() in ('nan', ''): continue
+
+            sale_date  = parse_date(g(parts, 'sale_date') or '')
+            buy_date   = parse_date(g(parts, 'buy_date')  or '')
+            if not sale_date: continue
+
+            qty        = to_float(g(parts, 'qty'))
+            sale_rate  = to_float(g(parts, 'sale_rate'))
+            sale_value = to_float(g(parts, 'sale_value'))
+            buy_rate   = to_float(g(parts, 'buy_rate'))
+            buy_value  = to_float(g(parts, 'buy_value'))
+            sale_exp   = to_float(g(parts, 'sale_exp'))  or 0
+            buy_exp    = to_float(g(parts, 'buy_exp'))   or 0
+            fmv_price  = to_float(g(parts, 'fmv_price'))
+            isin_val   = g(parts, 'isin') or ''
+
+            if not sale_value:
+                if qty and sale_rate: sale_value = qty * sale_rate
+                else: continue
+            if not buy_value or buy_value == 0:
+                if qty and buy_rate and buy_rate != 0: buy_value = qty * buy_rate
+                else: buy_value = 0.0
+
+            fmv_total = None
+            if fmv_price and fmv_price > 0 and qty and buy_date and buy_date <= GF_CUTOFF:
+                fmv_total = round(fmv_price * qty, 4)
+
+            transfer_exp = (sale_exp + buy_exp) if (sale_exp or buy_exp) else None
+
+            rows.append(make_row(
+                self.source_name, name, isin_val,
+                sale_date, qty, sale_rate, sale_value,
+                buy_date, buy_value, current_gain_type, self.client_name,
+                market_price_31jan2018=fmv_price if fmv_total else None,
+                total_market_value_31jan2018=fmv_total,
+                transfer_expenses=transfer_exp,
+            ))
+        return rows
+
+
+# ─────────────────────────────────────────────
+# ICICI DIRECT EQUITY PDF PARSER
+# ─────────────────────────────────────────────
+class ICICIDirectEquityPDFParser:
+    """Parses ICICIDirect Equity Capital Gain PDF statements.
+    Format: table with columns Description, Stocks, ISIN, Qty,
+            Sale Date, Sale Rate, Sale Value, Sale Expenses,
+            Purchase Date, Purchase Rate, Purchase Value, Purchase Expenses, Profit/Loss
+    Sections: Short Term Capital Gain, Long Term Capital Gain, Speculation Income
+    """
+    _ISIN_RE = re.compile(r'\b(IN[EF][A-Z0-9]{9,12})\b')
+    _DATE_RE = re.compile(r'\d{2}-(?:\d{2}|\w{3})-\d{2,4}', re.I)
+
+    def parse(self, pdf_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(pdf_path)
+        self.client_name = None
+        rows = []
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                pages_text = [p.extract_text() or "" for p in pdf.pages]
+            full_text = "\n".join(pages_text)
+
+            # Client name: look for "Account" or "Name" in first page
+            m = re.search(r'Account\s*\d+\s+Name\s+([A-Z][A-Z\s]+?)(?:\n|Capital)', full_text[:500])
+            if m: self.client_name = m.group(1).strip().title()
+
+            rows = self._parse_text(full_text)
+        except Exception as e:
+            print(f"[WARN] ICICIDirectEquityPDFParser: {e}", file=sys.stderr)
+        return rows
+
+    def _parse_text(self, text):
+        rows = []
+        current_section = 'Short Term'
+        lines = text.split('\n')
+
+        for line in lines:
+            lu = line.upper()
+
+            # Section markers
+            if 'SHORT TERM' in lu and 'CAPITAL GAIN' in lu:
+                current_section = 'Short Term'
+            elif 'LONG TERM' in lu and 'CAPITAL GAIN' in lu:
+                current_section = 'Long Term'
+            elif 'SPECULATION' in lu:
+                current_section = None  # skip speculation/intraday
+
+            if current_section is None:
+                # Check if we're back to a capital gain section
+                if 'SHORT TERM' in lu or 'LONG TERM' in lu:
+                    pass  # handled above
+                continue
+
+            isin_m = self._ISIN_RE.search(line)
+            if not isin_m:
+                continue
+
+            isin = isin_m.group(1)
+
+            # Symbol: last UPPERCASE word before ISIN
+            before = line[:isin_m.start()]
+            before_clean = re.sub(
+                r'Short\s+Term|Long\s+Term|Speculation|Capital\s+Gain|\(STT\s+paid\)',
+                '', before, flags=re.I
+            ).strip()
+            parts_before = before_clean.split()
+            symbol = parts_before[-1] if parts_before else ''
+            if not symbol or not symbol.replace('-','').isalnum():
+                continue
+
+            # After ISIN: QTY SALE_DATE SALE_RATE SALE_VALUE SALE_EXP BUY_DATE BUY_RATE BUY_VALUE BUY_EXP P/L
+            after = line[isin_m.end():].strip()
+            dates = self._DATE_RE.findall(after)
+            if len(dates) < 2:
+                continue
+
+            after_no_dates = self._DATE_RE.sub(' ', after)
+            raw_nums = re.findall(r'-?[\d,]+\.?\d*', after_no_dates)
+            floats = []
+            for n in raw_nums:
+                try:
+                    v = float(n.replace(',', ''))
+                    floats.append(v)
+                except ValueError:
+                    pass
+
+            if len(floats) < 6:
+                continue
+
+            try:
+                qty        = floats[0]
+                sale_rate  = floats[1]
+                sale_value = floats[2]
+                sale_exp   = floats[3] if floats[3] < sale_value else 0  # sanity check
+                buy_rate   = floats[4] if len(floats) > 4 else 0
+                buy_value  = floats[5] if len(floats) > 5 else 0
+                buy_exp    = floats[6] if len(floats) > 6 and floats[6] < buy_value else 0
+            except IndexError:
+                continue
+
+            sale_date = parse_date(dates[0])
+            buy_date  = parse_date(dates[1])
+            if not sale_date or not buy_date:
+                continue
+            if not sale_value or sale_value <= 0:
+                continue
+
+            transfer_exp = (sale_exp + buy_exp) if (sale_exp or buy_exp) else None
+
+            rows.append(make_row(
+                self.source_name, symbol, isin,
+                sale_date, qty, sale_rate, sale_value,
+                buy_date, buy_value, current_section, self.client_name,
+                transfer_expenses=transfer_exp,
+            ))
+
+        # Deduplicate
+        seen, unique = set(), []
+        for r in rows:
+            k = (str(r.get('sale_date')), str(r.get('purchase_date')),
+                 (r.get('share_name') or '').lower()[:20],
+                 round(float(r.get('sale_amount') or 0), 0))
+            if k not in seen:
+                seen.add(k)
+                unique.append(r)
+        return unique
+
+
+# ─────────────────────────────────────────────
+# CAMS XLS PARSER (Excel .xls with TRXN_DETAILS)
+# ─────────────────────────────────────────────
+class CAMSXLSParser:
+    """Parses CAMS Capital Gain / Loss Statement in XLS format.
+    Sheet: TRXN_DETAILS — each row is one purchase-lot matched to a redemption.
+    Columns: AMC Name, Folio No, ASSET CLASS, NAME, STATUS, PAN, GUARDIAN_PAN,
+             Scheme Name, Desc, Date (sale), Units, Amount (sale), Price (sale NAV), STT,
+             Desc_1 (buy type), Date_1 (buy), PurhUnit, RedUnits, Unit Cost,
+             Indexed Cost, Grandfathered Units, NAV 31/01/2018,
+             Market Value 31/01/2018, Short Term, LT With Index, LT Without Index, ...
+    """
+    _ISIN_RE = re.compile(r'ISIN\s*:\s*(IN[EF][A-Z0-9]{9,12})', re.I)
+    _GF_CUTOFF = datetime(2018, 1, 31)
+
+    def parse(self, file_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(file_path)
+        self.client_name = None
+        rows = []
+        try:
+            import xlrd
+            wb = xlrd.open_workbook(file_path)
+
+            # Client name from INVESTOR_DETAILS
+            if 'INVESTOR_DETAILS' in wb.sheet_names():
+                ws_inv = wb.sheet_by_name('INVESTOR_DETAILS')
+                for ri in range(ws_inv.nrows):
+                    row_vals = ws_inv.row_values(ri)
+                    if 'INV_NAME' in str(row_vals):
+                        continue
+                    if len(row_vals) >= 2 and row_vals[1] and str(row_vals[1]).strip():
+                        self.client_name = str(row_vals[1]).strip().title()
+                        break
+
+            if 'TRXN_DETAILS' not in wb.sheet_names():
+                return rows
+            ws = wb.sheet_by_name('TRXN_DETAILS')
+
+            # Find header row
+            hdr_idx = None
+            col = {}
+            for ri in range(min(10, ws.nrows)):
+                row_vals = ws.row_values(ri)
+                row_str = [str(v).strip() for v in row_vals]
+                if 'Scheme Name' in row_str or 'AMC Name' in row_str:
+                    hdr_idx = ri
+                    for j, h in enumerate(row_str):
+                        hl = h.lower().strip()
+                        if hl == 'amc name':            col['amc'] = j
+                        elif hl == 'asset class':       col['asset_class'] = j
+                        elif hl == 'name':              col['inv_name'] = j
+                        elif hl == 'scheme name':       col['scheme'] = j
+                        elif hl == 'desc':              col['desc'] = j
+                        elif hl == 'date':              col['sale_date'] = j
+                        elif hl == 'units':             col['units'] = j
+                        elif hl == 'amount':            col['amount'] = j
+                        elif hl == 'price':             col['price'] = j
+                        elif hl == 'stt':               col['stt'] = j
+                        elif hl == 'desc_1':            col['desc_1'] = j
+                        elif hl == 'date_1':            col['buy_date'] = j
+                        elif hl == 'purhunit':          col['purch_unit'] = j
+                        elif hl == 'redunits':          col['red_units'] = j
+                        elif hl == 'unit cost':         col['unit_cost'] = j
+                        elif hl == 'indexed cost':      col['indexed_cost'] = j
+                        elif 'grandfathered units' in hl: col['gf_units'] = j
+                        elif 'nav as on' in hl or 'grandfathered nav' in hl: col['gf_nav'] = j
+                        elif 'market value as on' in hl: col['gf_value'] = j
+                        elif hl == 'short term':        col['st_gain'] = j
+                        elif 'long term with' in hl:    col['lt_with'] = j
+                        elif 'long term without' in hl: col['lt_without'] = j
+                    break
+            if hdr_idx is None:
+                return rows
+
+            def gv(row_vals, field):
+                idx = col.get(field)
+                if idx is None or idx >= len(row_vals): return None
+                v = row_vals[idx]
+                if v == '' or v is None: return None
+                return v
+
+            for ri in range(hdr_idx + 1, ws.nrows):
+                row_vals = ws.row_values(ri)
+                if not any(str(v).strip() for v in row_vals):
+                    continue
+
+                scheme_raw = str(gv(row_vals, 'scheme') or '')
+                if not scheme_raw.strip():
+                    continue
+
+                # Extract ISIN from scheme name
+                isin_m = self._ISIN_RE.search(scheme_raw)
+                isin = isin_m.group(1) if isin_m else ''
+                # Clean scheme name (remove ISIN suffix)
+                scheme_name = re.sub(r',?\s*ISIN\s*:.*', '', scheme_raw, flags=re.I).strip()
+
+                asset_class = str(gv(row_vals, 'asset_class') or '').upper()
+                is_equity = 'EQUITY' in asset_class
+
+                desc = str(gv(row_vals, 'desc') or '').strip()
+                # Only process redemptions/switch-outs (not purchases)
+                if not any(k in desc.lower() for k in ('redemption', 'switch', 'dividend payout')):
+                    continue
+
+                sale_date_raw = gv(row_vals, 'sale_date')
+                buy_date_raw  = gv(row_vals, 'buy_date')
+                sale_date = parse_date(str(sale_date_raw or ''))
+                buy_date  = parse_date(str(buy_date_raw  or ''))
+                if not sale_date:
+                    continue
+
+                price     = to_float(gv(row_vals, 'price'))   or 0
+                red_units = to_float(gv(row_vals, 'red_units')) or 0
+                unit_cost = to_float(gv(row_vals, 'unit_cost')) or 0
+                gf_value  = to_float(gv(row_vals, 'gf_value'))
+
+                if red_units <= 0:
+                    continue
+
+                sale_amount     = round(red_units * price, 4)
+                purchase_amount = round(red_units * unit_cost, 4)
+
+                # Grandfathering for equity pre-2018
+                fmv_total = None
+                if (is_equity and gf_value and gf_value > 0
+                        and buy_date and buy_date <= self._GF_CUTOFF):
+                    fmv_total = round(gf_value, 4)
+
+                gain_type = determine_gain_type(buy_date, sale_date, is_equity)
+
+                # Client name
+                if not self.client_name:
+                    inv = str(gv(row_vals, 'inv_name') or '').strip()
+                    if inv:
+                        self.client_name = inv.title()
+
+                rows.append(make_row(
+                    self.source_name, scheme_name, isin,
+                    sale_date, red_units, price, sale_amount,
+                    buy_date, purchase_amount, gain_type, self.client_name,
+                    asset_type='Equity' if is_equity else 'Debt',
+                    total_market_value_31jan2018=fmv_total,
+                ))
+
+        except ImportError:
+            print("[WARN] CAMSXLSParser: xlrd not installed. Run: pip install xlrd", file=sys.stderr)
+        except Exception as e:
+            print(f"[WARN] CAMSXLSParser: {e}", file=sys.stderr)
+        return rows
+
+
 def detect_parser(file_path):
     ext = Path(file_path).suffix.lower()
 
     if ext in ('.xlsx', '.xls'):
+        # Check if file is actually an ASCII text/TSV file (ICICIDirect disguises .xls as TSV)
+        try:
+            with open(file_path, 'rb') as _f:
+                _sig = _f.read(8)
+            # Real XLS = D0CF (CFBF), real XLSX = PK (zip). Anything else = text/HTML
+            if not (_sig[:2] == b'\xD0\xCF' or _sig[:2] == b'PK'):
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as _tf:
+                    _snip = _tf.read(300)
+                if ('Stock Symbol' in _snip or 'Capital Gain' in _snip or
+                        ('Account' in _snip and 'ISIN' in _snip)):
+                    return ICICIDirectTSVParser()
+        except Exception:
+            pass
+
         try:
             xl = pd.ExcelFile(file_path)
             sheets = xl.sheet_names
             sheets_lower = [s.lower() for s in sheets]
+
+            # Angel One — "Equity+Bonds+SGB Trade Details" sheet
+            if any('equity+bonds+sgb' in s or 'equity+bonds' in s for s in sheets_lower):
+                return AngelOneExcelParser()
+
+            # CAMS XLS — TRXN_DETAILS sheet
+            if 'trxn_details' in sheets_lower:
+                return CAMSXLSParser()
 
             # Groww Stocks — Trade Level + Scrip Level
             if 'trade level' in sheets_lower and 'scrip level' in sheets_lower:
@@ -4789,7 +5343,7 @@ def detect_parser(file_path):
             # Groww Stocks — Flat format (single sheet with sections)
             df_peek0 = pd.read_excel(file_path, sheet_name=sheets[0], header=None, nrows=5)
             peek_text = ' '.join(str(v) for row in df_peek0.values for v in row if pd.notna(v)).lower()
-            if ('unique client code' in peek_text or 'groww' in peek_text or 
+            if ('unique client code' in peek_text or 'groww' in peek_text or
                     'stock name' in peek_text) and 'capital gains' in peek_text:
                 return GrowwStocksFlatParser()
 
@@ -4885,6 +5439,9 @@ def detect_parser(file_path):
             pass
 
         # ── STANDARD CHECKS (keyword-based on page 1 only) ──
+        # ICICIDirect equity P&L PDF: "Equity Capital Gain" with Sale/Purchase Expenses columns
+        if "EQUITY CAPITAL GAIN" in text and "SALE" in text and "PURCHASE" in text and "EXPENSES" in text:
+            return ICICIDirectEquityPDFParser()
         if "ICICI PRUDENTIAL PMS" in text or ("STATEMENT OF CAPITAL GAIN" in text and "ICICI" in text):
             return ICICIPMSParser()
         if "MUTUALFUNDSADDA" in text or ("DEBT SHORT TERM" in text and "STP" in text):
@@ -5716,10 +6273,29 @@ def write_output_excel(rows, output_path, file_meta=None):
     _write_verification_sheet(wb, rows, file_meta or [])
 
     wb.save(output_path)
+    # Fix openpyxl quirks that cause Excel "repair" dialogs:
+    #  - bare <patternFill/> → must have patternType attribute
+    #  - missing <name> in <font> elements → required by OOXML spec
     try:
-        _post_save_inject_pivot(output_path, len(rows))
-    except Exception as e:
-        print(f"[WARN] Pivot injection failed (static table still present): {e}", file=sys.stderr)
+        import zipfile as _zf, shutil as _sh
+        _tmp = output_path + "._fix_tmp"
+        _sh.copy2(output_path, _tmp)
+        with _zf.ZipFile(_tmp, "r") as _zin, _zf.ZipFile(output_path, "w", _zf.ZIP_DEFLATED) as _zout:
+            for _item in _zin.infolist():
+                _data = _zin.read(_item.filename)
+                if _item.filename == "xl/styles.xml":
+                    _xml = _data.decode("utf-8")
+                    _xml = _xml.replace('<patternFill/>', '<patternFill patternType="none"/>')
+                    def _add_font_name(_m):
+                        _inner = _m.group(1)
+                        if '<name ' in _inner: return _m.group(0)
+                        return '<font><name val="Calibri"/>' + _inner + '</font>'
+                    _xml = re.sub(r'<font>(.*?)</font>', _add_font_name, _xml, flags=re.DOTALL)
+                    _data = _xml.encode("utf-8")
+                _zout.writestr(_item, _data)
+        os.remove(_tmp)
+    except Exception as _e:
+        print(f"[WARN] styles fix skipped: {_e}", file=sys.stderr)
 
 
 def write_computax_excel(rows, output_path, file_meta=None, fy_start=None, fy_end=None):

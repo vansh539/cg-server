@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 title Capital Gains Tool
 echo ============================================
 echo   Capital Gains Tool - Starting...
@@ -9,6 +10,17 @@ echo.
 python --version >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Python not found. Please run Install.bat first.
+    pause
+    exit /b 1
+)
+
+:: Check required packages are installed
+python -c "import flask, pdfplumber, openpyxl" >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo ERROR: Required packages are not installed.
+    echo Please run Install.bat first, then try again.
+    echo.
     pause
     exit /b 1
 )
