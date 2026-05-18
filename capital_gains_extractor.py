@@ -6344,16 +6344,17 @@ def write_computax_excel(rows, output_path, file_meta=None, fy_start=None, fy_en
         # O=14, P=15, Q=16, R=17, S=18, U=20, V=21
         BLANK_COLS = {14, 15, 16, 17, 18, 20, 21}
 
-        # FY period label: "2024-25" from user-selected FY (fy_start → fy_end)
+        # Assessment Year = FY end year + 1  (FY 2024-25 → AY 2025-26)
         if fy_start and fy_end:
-            ay_label = f"{fy_start.year}-{str(fy_end.year)[-2:]}"
+            ay_label = f"{fy_end.year}-{str(fy_end.year + 1)[-2:]}"
         elif fy_end:
-            ay_label = f"{fy_end.year - 1}-{str(fy_end.year)[-2:]}"
+            ay_label = f"{fy_end.year}-{str(fy_end.year + 1)[-2:]}"
         else:
             sale_dates = [r["sale_date"] for r in rows if r.get("sale_date")]
             if sale_dates:
-                end_yr = max(d.year for d in sale_dates)
-                ay_label = f"{end_yr - 1}-{str(end_yr)[-2:]}"
+                mx = max(sale_dates)
+                fy_end_yr = mx.year if mx.month <= 3 else mx.year + 1
+                ay_label = f"{fy_end_yr}-{str(fy_end_yr + 1)[-2:]}"
             else:
                 ay_label = ""
 
@@ -6403,17 +6404,17 @@ def write_computax_excel(rows, output_path, file_meta=None, fy_start=None, fy_en
         # Blank columns (1-indexed within computax, matching col letters O-V)
         BLANK_COLS_OX = {15, 16, 17, 18, 19, 21, 22}  # 1-based col indices
 
-        # Derive assessment year
-        # FY period label: "2024-25" from user-selected FY
+        # Assessment Year = FY end year + 1  (FY 2024-25 → AY 2025-26)
         if fy_start and fy_end:
-            ay_label = f"{fy_start.year}-{str(fy_end.year)[-2:]}"
+            ay_label = f"{fy_end.year}-{str(fy_end.year + 1)[-2:]}"
         elif fy_end:
-            ay_label = f"{fy_end.year - 1}-{str(fy_end.year)[-2:]}"
+            ay_label = f"{fy_end.year}-{str(fy_end.year + 1)[-2:]}"
         else:
             sale_dates = [r["sale_date"] for r in rows if r.get("sale_date")]
             if sale_dates:
-                end_yr = max(d.year for d in sale_dates)
-                ay_label = f"{end_yr - 1}-{str(end_yr)[-2:]}"
+                mx = max(sale_dates)
+                fy_end_yr = mx.year if mx.month <= 3 else mx.year + 1
+                ay_label = f"{fy_end_yr}-{str(fy_end_yr + 1)[-2:]}"
             else:
                 ay_label = ""
 
