@@ -4515,6 +4515,154 @@ class KuveraParser:
             total_market_value_31jan2018=fmv_total,
         )
 
+# ─────────────────────────────────────────────
+# CAMS SECTION A/B/C PDF PARSER
+# ─────────────────────────────────────────────
+class CAMSSectionABCParser:
+    """Parses CAMS-generated capital gain PDFs where each row contains
+    both Section A (purchase) and Section B (redemption) inline.
+
+    Used by: Motilal Oswal MF, UTI MF, and other CAMS-platform AMCs
+    that generate 'Section A : Subscriptions | Section B : Redemptions | Section C : Gains' layout.
+
+    Row format (buy keyword + date + nums + Redemption + date + nums):
+      [Buy type] [DD-MM-YYYY] units units nav buy_amt [nav31jan gf_cost]×2
+      Redemption [DD-MM-YYYY] units sell_amt sell_nav [...gains]
+    """
+
+    _BUY_KW  = re.compile(
+        r'\b(Purchase|Systematic|Sys\.\s*Investment|Switch\s*In|Div\.?\s*Reinv)\b', re.I)
+    _DATE_RE = re.compile(r'\d{2}-\d{2}-\d{4}')
+    _NUM_RE  = re.compile(r'[\d,]+\.?\d*')
+    _GF_DATE = datetime(2018, 1, 31)
+
+    def parse(self, pdf_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(pdf_path)
+        self.client_name = None
+        rows = []
+
+        with open_pdf(pdf_path) as pdf:
+            pages_text = [p.extract_text() or '' for p in pdf.pages]
+        full_text = '\n'.join(pages_text)
+
+        # Client name
+        m = re.search(
+            r'Name\s*:\s*([A-Z][A-Z\s]+?)(?:\s+Status|\s+S/O|\s+Folio|$)',
+            full_text, re.I | re.M)
+        if m:
+            self.client_name = ' '.join(m.group(1).split()).title()
+
+        # PAN
+        pan = None
+        m = re.search(r'PAN\s*(?:No\s*)?:?\s*([A-Z]{5}\d{4}[A-Z])', full_text, re.I)
+        if m:
+            pan = m.group(1).upper()
+
+        # Split into scheme blocks on "Section A : Subscriptions"
+        parts = re.split(r'Section A\s*:\s*Subscriptions', full_text, flags=re.I)
+
+        for i in range(1, len(parts)):
+            scheme, isin = self._extract_scheme_isin(parts[i - 1])
+            if not scheme:
+                continue
+
+            is_equity = not any(k in scheme.lower() for k in
+                                ['debt', 'liquid', 'bond fund', 'money market',
+                                 'overnight', 'gilt', 'arbitrage'])
+
+            for line in parts[i].split('\n'):
+                r = self._parse_data_line(
+                    line.strip(), scheme, isin, is_equity, pan)
+                if r:
+                    rows.append(r)
+
+        return rows
+
+    def _extract_scheme_isin(self, preceding_text):
+        """Get scheme name and ISIN from text before 'Section A'."""
+        lines = [l.strip() for l in preceding_text.split('\n') if l.strip()]
+        scheme = ''
+        isin   = ''
+        for line in reversed(lines[-8:]):
+            m = re.search(r'(INF[A-Z0-9]{6,12})', line)
+            if m:
+                isin = m.group(1)
+            # Remove ISIN, trailing stats, leading EQUITY/DEBT label
+            cand = re.sub(r'\(?\s*INF[A-Z0-9]+\s*\)?|ISIN\s*:\s*INF[A-Z0-9]+', '', line).strip()
+            cand = re.sub(r'\s+\d[\d,.]*(?:\s+\d[\d,.]*)+\s*$', '', cand).strip()
+            cand = re.sub(r'^(EQUITY|DEBT)\s+', '', cand, flags=re.I).strip()
+            cand = cand.strip(' -–')
+            if 10 < len(cand) < 120 and not cand[0].isdigit():
+                scheme = cand
+                break
+        return scheme, isin
+
+    def _parse_data_line(self, line, scheme, isin, is_equity, pan):
+        """Parse one merged Section A+B row."""
+        red_m = re.search(r'\bRedemption\b', line, re.I)
+        if not red_m:
+            return None
+        if not self._BUY_KW.search(line[:red_m.start()]):
+            return None
+
+        buy_part  = line[:red_m.start()]
+        sell_part = line[red_m.start():]
+
+        # Buy date
+        buy_dates = self._DATE_RE.findall(buy_part)
+        if not buy_dates:
+            return None
+        buy_date = parse_date(buy_dates[0])
+        if not buy_date:
+            return None
+
+        # Sell date
+        sell_dates = self._DATE_RE.findall(sell_part)
+        if not sell_dates:
+            return None
+        sell_date = parse_date(sell_dates[0])
+        if not sell_date:
+            return None
+
+        # Buy numbers: units units nav buy_amount [nav31jan gf_cost nav31jan gf_cost]
+        clean_buy = re.sub(r'\d{2}-\d{2}-\d{4}', '', buy_part)
+        buy_nums = [to_float(n) for n in self._NUM_RE.findall(clean_buy)
+                    if to_float(n) is not None and to_float(n) > 0]
+        if len(buy_nums) < 4:
+            return None
+        buy_amount = buy_nums[3]  # 4th number = original purchase amount
+
+        # Grandfathering: pre-2018 purchases have NAV31Jan + GF cost as columns 5,6
+        fmv_total = None
+        if buy_date <= self._GF_DATE and len(buy_nums) >= 6:
+            gf_cost = buy_nums[5]
+            nav_31jan = buy_nums[4]
+            # GF cost is meaningful when NAV31Jan ≠ original NAV (appreciation)
+            if nav_31jan > 0 and abs(nav_31jan - buy_nums[2]) > 0.001:
+                fmv_total = gf_cost
+
+        # Sell numbers: units sell_amount sell_nav [...gains]
+        clean_sell = re.sub(r'Redemption\s*', '', sell_part, flags=re.I)
+        clean_sell = re.sub(r'\d{2}-\d{2}-\d{4}', '', clean_sell)
+        sell_nums = [to_float(n) for n in self._NUM_RE.findall(clean_sell)
+                     if to_float(n) is not None and to_float(n) > 0]
+        if len(sell_nums) < 2:
+            return None
+        sell_amount = sell_nums[1]   # 2nd number = sell amount (1st = units)
+
+        gain_type = determine_gain_type(buy_date, sell_date, is_equity=is_equity)
+
+        r = make_row(
+            self.source_name, scheme, isin,
+            sell_date, None, None, sell_amount,
+            buy_date, buy_amount, gain_type, self.client_name,
+            total_market_value_31jan2018=fmv_total,
+        )
+        if pan:
+            r['pan'] = pan
+        return r
+
+
 class SBIMFParser:
     """Parses SBI Mutual Fund Investment Gain/Loss Statement PDFs.
 
@@ -4591,29 +4739,20 @@ class SBIMFParser:
                 continue
             if not current_scheme: continue
 
-            # ── Parse all numbers in line ─────────────────────────────
-            nums_raw = re.findall(r'[\d,]+\.?\d*', stripped)
-            nums_pos = [to_float(n) for n in nums_raw if to_float(n) is not None and to_float(n) > 100]
-
-            # ── Standalone purchase total (SBI prints it on its own line) ──
-            # Pattern: single number > 10000 on its own line, no letters
-            if (len(nums_raw) == 1 and nums_pos
-                    and nums_pos[0] > 10000 and nums_pos[0] < 50000000
-                    and not re.search(r'[A-Za-z]', stripped)
-                    and total_purchase is None):
-                total_purchase = nums_pos[0]
-                continue
-
-            # ── 3-number summary line (LT gains) ──────────────────────
-            # Pattern: "93578.000 293225.07999 139086.46000" 
-            if (len(nums_pos) == 3 and lt_gain_no_idx is None
-                    and not re.search(r'[A-Za-z]', stripped)):
-                # Heuristic: middle value is LT_no_idx, last is LT_with_idx
-                lt_gain_no_idx = nums_pos[1]
-                continue
-
-            # ── Skip "Total" summary line ─────────────────────────────
+            # ── Total summary line → derive total_purchase ──────────
+            # Format: "Total [units] [total_sell] [other] [0] [total_gain] ..."
             if stripped.upper().startswith('TOTAL'):
+                tnums = [to_float(n) for n in re.findall(r'[\d,]+\.?\d*', stripped)
+                         if to_float(n) is not None]  # keep zeros
+                if len(tnums) >= 5 and tnums[1] > 1000:
+                    total_purchase = tnums[1] - tnums[4]   # total_sell − total_gain
+                elif len(tnums) >= 2 and tnums[1] > 1000:
+                    total_purchase = tnums[1]
+                continue
+
+            # ── Skip standalone numbers (folio IDs, page numbers) ───
+            nums_raw = re.findall(r'[\d,]+\.?\d*', stripped)
+            if (len(nums_raw) <= 2 and not re.search(r'[A-Za-z]', stripped)):
                 continue
 
             # ── Redemption line ───────────────────────────────────────
@@ -4622,10 +4761,17 @@ class SBIMFParser:
                 if not dates: continue
                 sell_date = parse_date(dates[0])
                 if not sell_date: continue
-                all_nums = [to_float(n) for n in re.findall(r'[\d,]+\.?\d*', stripped)
-                            if to_float(n) is not None and to_float(n) > 0]
-                if not all_nums: continue
-                sell_amt = max(all_nums)
+                # Numbers AFTER the date: [units, sell_amt_or_nav, nav, ...]
+                after_date = re.sub(r'^.*?' + re.escape(dates[0]), '', stripped)
+                after_nums = [to_float(n) for n in re.findall(r'[\d,]+\.?\d*', after_date)
+                              if to_float(n) is not None and to_float(n) > 0]
+                if len(after_nums) < 2: continue
+                units_r, second = after_nums[0], after_nums[1]
+                # If second >> units, it's the explicit sell amount; else compute units × nav
+                if second > units_r * 1.5:
+                    sell_amt = second
+                else:
+                    sell_amt = round(units_r * second, 2)
                 if sell_amt > 100:
                     redemptions.append((sell_date, sell_amt))
                 continue
@@ -4669,9 +4815,10 @@ class SBIMFParser:
             else:
                 buy_amt = round(sell_amt * 0.7, 2)  # last resort
 
-            is_eq = any(k in scheme.lower() for k in
-                        ['equity','bluechip','flexi','small cap','mid cap',
-                         'large cap','multi cap','us ','balanced'])
+            # Assume equity unless scheme has explicit debt keywords
+            is_eq = not any(k in scheme.lower() for k in
+                            ['debt','liquid','bond fund','money market',
+                             'overnight','gilt','arbitrage'])
             gain_type = determine_gain_type(earliest_date, sell_date, is_equity=is_eq)
 
             rows.append(make_row(
@@ -4911,6 +5058,107 @@ class AngelOneExcelParser:
                 ))
         except Exception as e:
             print(f"[WARN] AngelOneExcelParser: {e}", file=sys.stderr)
+        return rows
+
+
+# ─────────────────────────────────────────────
+# ICICI SECURITIES EXCEL PARSER
+# ─────────────────────────────────────────────
+class ICICISecuritiesExcelParser:
+    """Parses ICICI Securities capital gain Excel files (.xlsx).
+
+    Sheet: contains 'CapitalGains' or truncated variant.
+    Columns (row 4, 0-indexed):
+      Stock Symbol | ISIN | Qty | Sale Date | Sale Rate | Sale Value |
+      Sale Expenses | Purchase Date | Purchase Rate |
+      Price as on 31st Jan 2018 | Purchase Price Considered |
+      Purchase Value | Purchase Expenses | Profit/Loss(-)
+
+    Sections: 'Short Term Capital Gain (STT paid)' / 'Long Term Capital Gain (STT paid)'
+    """
+
+    _GF_DATE = datetime(2018, 1, 31)
+
+    def parse(self, file_path, source_name=None):
+        self.source_name = source_name or source_name_from_file(file_path)
+        self.client_name = None
+        rows = []
+
+        try:
+            wb = openpyxl.load_workbook(file_path, data_only=True)
+        except Exception as e:
+            print(f"[ERROR] ICICISecuritiesExcelParser: {e}", file=sys.stderr)
+            return rows
+
+        ws = wb.active
+        all_rows = list(ws.iter_rows(values_only=True))
+
+        current_gain_type = None   # 'Short Term' or 'Long Term'
+
+        for row in all_rows:
+            # Client name row
+            if row[0] == 'Name' and row[1]:
+                self.client_name = str(row[1]).strip().title()
+                continue
+
+            # Section headers
+            if isinstance(row[0], str):
+                low = row[0].lower()
+                if 'short term capital gain' in low:
+                    current_gain_type = 'Short Term'
+                    continue
+                elif 'long term capital gain' in low:
+                    current_gain_type = 'Long Term'
+                    continue
+                # Skip header and note rows
+                if row[0] in ('Stock Symbol', 'Account', 'Capital Gain') or 'note:' in low:
+                    continue
+                # Disclaimer / notes block → stop parsing
+                if 'icici securities' in low and 'tool' in low:
+                    break
+
+            # Data row: must have a valid sale_date (datetime) in col 3
+            if not isinstance(row[3], datetime):
+                continue
+
+            stock_sym  = str(row[0]).strip() if row[0] else ''
+            isin       = str(row[1]).strip() if row[1] else ''
+            qty        = to_float(row[2])
+            sale_date  = row[3]
+            sale_amt   = to_float(row[5]) or 0
+            sale_exp   = to_float(row[6]) or 0
+            purch_date = row[7] if isinstance(row[7], datetime) else None
+            price_31jan = row[9]   # 'NA' or float
+            purch_amt  = to_float(row[11]) or 0
+            purch_exp  = to_float(row[12]) or 0
+
+            if not stock_sym or sale_amt == 0:
+                continue
+
+            # Grandfathering
+            fmv_total = None
+            if (purch_date and purch_date <= self._GF_DATE
+                    and price_31jan not in (None, 'NA', 'na', '')):
+                fmv_per_unit = to_float(price_31jan)
+                if fmv_per_unit and qty:
+                    fmv_total = round(qty * fmv_per_unit, 2)
+
+            transfer_exp = round(sale_exp + purch_exp, 2) if (sale_exp or purch_exp) else None
+
+            # Gain type from section header; fallback to holding period
+            if current_gain_type:
+                gain_type = current_gain_type
+            else:
+                gain_type = determine_gain_type(purch_date, sale_date, is_equity=True)
+
+            rows.append(make_row(
+                self.source_name, stock_sym, isin,
+                sale_date, qty, None, sale_amt,
+                purch_date, purch_amt, gain_type, self.client_name,
+                total_market_value_31jan2018=fmv_total,
+                transfer_expenses=transfer_exp,
+            ))
+
         return rows
 
 
@@ -5364,6 +5612,13 @@ def detect_parser(file_path):
                 if 'grandfathered nav' in full_text.lower() or 'Grandfathered Nav' in full_text:
                     return MFCapGainsParser()
 
+            # ICICI Securities equity capital gain Excel
+            df_peek_ici = pd.read_excel(file_path, sheet_name=sheets[0], header=None, nrows=6)
+            peek_ici = ' '.join(str(v) for row in df_peek_ici.values for v in row if pd.notna(v)).lower()
+            if ('stock symbol' in peek_ici and 'sale value' in peek_ici
+                    and 'purchase value' in peek_ici):
+                return ICICISecuritiesExcelParser()
+
             # Opulence Wealth — Cost of Acquisition column in header
             df_peek = pd.read_excel(file_path, sheet_name=sheets[0], header=None, nrows=6)
             top_text = ' '.join(str(v) for row in df_peek.values for v in row if pd.notna(v))
@@ -5431,6 +5686,10 @@ def detect_parser(file_path):
             if ("(ISIN:" in _full2 and "FOLIO NUMBER" in _full2_up
                     and "CAPITAL GAIN" in _full2_up):
                 return AnandRathiMFParser()
+            # CAMS Section A/B/C format (Motilal MF, UTI MF, other CAMS-platform AMCs)
+            if ("SECTION A : SUBSCRIPTIONS" in _full2_up
+                    and "SECTION B : REDEMPTIONS" in _full2_up):
+                return CAMSSectionABCParser()
             # Motilal Oswal P&L Transaction Statement (equity, lot-level)
             if ("motilaloswal" in _full2.lower()
                     and "PROFIT AND LOSS TRANSACTION STATEMENT" in _full2_up):
