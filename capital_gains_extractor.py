@@ -4683,11 +4683,14 @@ class SBIMFParser:
     def parse(self, pdf_path, source_name=None):
         self.source_name = source_name or source_name_from_file(pdf_path)
         self.client_name = None
+        self.pan = None
         with open_pdf(pdf_path) as pdf:
             pages_text = [p.extract_text() or "" for p in pdf.pages]
         full_text = "\n".join(pages_text)
         m = re.search(r'Name:\s*([A-Z][A-Z\s]+?)(?:\s+Status|\s+PAN|$)', full_text, re.I)
         if m: self.client_name = m.group(1).strip().title()
+        mp = re.search(r'\bPAN\s*:\s*([A-Z]{5}\d{4}[A-Z])', full_text, re.I)
+        if mp: self.pan = mp.group(1).upper()
         return self._parse_text(full_text)
 
     def _parse_text(self, text):
@@ -4725,6 +4728,12 @@ class SBIMFParser:
                         redemptions, lots, total_purchase, lt_gain_no_idx))
                 current_isin   = m.group(1)
                 current_scheme = m.group(2).strip()
+                # Fund name may wrap to next line (e.g. "SBI Energy Fund -\nDirect Growth")
+                if current_scheme.endswith('-') and i < len(lines):
+                    nxt = lines[i].strip()
+                    if nxt and not self._ISIN_SCHEME_RE.match(nxt) and not re.search(r'\d{2}-[A-Za-z]', nxt):
+                        current_scheme = (current_scheme + ' ' + nxt).strip()
+                        i += 1
                 lots = []; redemptions = []
                 total_purchase = None; lt_gain_no_idx = None
                 continue
@@ -4821,11 +4830,14 @@ class SBIMFParser:
                              'overnight','gilt','arbitrage'])
             gain_type = determine_gain_type(earliest_date, sell_date, is_equity=is_eq)
 
-            rows.append(make_row(
+            r = make_row(
                 self.source_name, scheme, isin or '',
                 sell_date, None, None, sell_amt,
                 earliest_date, buy_amt, gain_type, self.client_name,
-            ))
+            )
+            if getattr(self, 'pan', None):
+                r['pan'] = self.pan
+            rows.append(r)
         return rows
 
 def validate_output_rows(rows):
