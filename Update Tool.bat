@@ -28,7 +28,7 @@ powershell -Command "& {
     if (-not $dest) { $dest = Get-Location }
     foreach ($f in $files) {
         try {
-            $url = '$base/' + $f
+            $url = "$base/$f"
             $out = Join-Path $dest $f
             Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
             Write-Host ('  Updated: ' + $f)
