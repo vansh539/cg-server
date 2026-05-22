@@ -179,6 +179,7 @@ def open_pdf(pdf_path, password=None):
 
 def extract_client_name(text):
     patterns = [
+        r'NAME\s*:\s*([A-Za-z][A-Za-z\s\.]+?)(?:\s+STATUS|\s+PAN)',
         r'(?:Client Name|Name|Investor Name|Account)\s*[:\-]\s*([A-Z][A-Z\s\.]+?)(?:\s*\n|\s*PAN|\s*Account)',
         r'SANTHI SRI VOORA|SANJAY DEVUDU',  # fallback specific
     ]
@@ -644,7 +645,7 @@ class ICICIPMSParser:
 
 class CAMSParser:
     # Last line of CAMS statement: "Total  <ST>  <LT>"
-    _TOTAL_RE = re.compile(r'^Total\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)', re.M)
+    _TOTAL_RE = re.compile(r'^Total\s+([-\d,]+\.?\d*)\s+([-\d,]+\.?\d*)\s*$', re.M)
 
     def _extract_pdf_summary(self, pdf_path):
         """Read the grand-total ST/LT line from the CAMS statement last page."""
@@ -689,7 +690,7 @@ class CAMSParser:
             line = line.strip()
             if re.search(r'Debt|Liquid|Money Market|Overnight|Ultra Short', line, re.I):
                 current_scheme_type = "Debt"
-            elif re.search(r'Equity|ELSS|Large|Mid|Small|Multi|Flexi|Balanced|Hybrid', line, re.I):
+            elif re.search(r'(?<!Non-)Equity|ELSS|Large|Mid|Small|Multi|Flexi|Balanced|Hybrid', line, re.I):
                 current_scheme_type = "Equity"
 
             # ISIN detection
@@ -4657,6 +4658,7 @@ class CAMSSectionABCParser:
             sell_date, None, None, sell_amount,
             buy_date, buy_amount, gain_type, self.client_name,
             total_market_value_31jan2018=fmv_total,
+            asset_type='Equity' if is_equity else 'Debt',
         )
         if pan:
             r['pan'] = pan
@@ -4804,36 +4806,47 @@ class SBIMFParser:
         return rows
 
     def _build_rows(self, scheme, isin, redemptions, lots, total_purchase, lt_gain_no_idx):
-        """Build rows for one scheme using proportional purchase allocation."""
+        """Build rows for one scheme using proportional purchase allocation with FIFO lot dating."""
         rows = []
         if not redemptions: return rows
 
         total_sell = sum(amt for _, amt in redemptions)
-        earliest_date = lots[0][0] if lots else redemptions[0][0]
+        is_eq = not any(k in scheme.lower() for k in
+                        ['debt','liquid','bond fund','money market',
+                         'overnight','gilt','arbitrage'])
 
-        # If we have the total purchase from PDF, distribute proportionally
-        for sell_date, sell_amt in redemptions:
+        # Sort lots FIFO (earliest first); estimate total units for FIFO positioning
+        fifo_lots = sorted(lots, key=lambda x: x[0]) if lots else []
+        total_lot_units = sum(u for _, u, _ in fifo_lots) if fifo_lots else 1.0
+        units_consumed = 0.0
+
+        for sell_date, sell_amt in sorted(redemptions, key=lambda x: x[0]):
+            proportion = sell_amt / total_sell if total_sell > 0 else 1.0
             if total_purchase and total_purchase > 0:
-                proportion = sell_amt / total_sell if total_sell > 0 else 1
                 buy_amt = round(total_purchase * proportion, 2)
             elif lt_gain_no_idx and lt_gain_no_idx > 0:
-                # Fallback: derive from gain
-                proportion = sell_amt / total_sell if total_sell > 0 else 1
-                total_buy = total_sell - lt_gain_no_idx
-                buy_amt = round(total_buy * proportion, 2)
+                buy_amt = round((total_sell - lt_gain_no_idx) * proportion, 2)
             else:
-                buy_amt = round(sell_amt * 0.7, 2)  # last resort
+                buy_amt = round(sell_amt * 0.7, 2)
 
-            # Assume equity unless scheme has explicit debt keywords
-            is_eq = not any(k in scheme.lower() for k in
-                            ['debt','liquid','bond fund','money market',
-                             'overnight','gilt','arbitrage'])
-            gain_type = determine_gain_type(earliest_date, sell_date, is_equity=is_eq)
+            # FIFO lot dating: find which lot covers the current redemption position
+            redemp_units = total_lot_units * proportion
+            buy_date = fifo_lots[0][0] if fifo_lots else sell_date
+            if fifo_lots:
+                cursor = 0.0
+                for lot_date, lot_units, _ in fifo_lots:
+                    cursor += lot_units
+                    if cursor > units_consumed:
+                        buy_date = lot_date
+                        break
+            units_consumed += redemp_units
+
+            gain_type = determine_gain_type(buy_date, sell_date, is_equity=is_eq)
 
             r = make_row(
                 self.source_name, scheme, isin or '',
                 sell_date, None, None, sell_amt,
-                earliest_date, buy_amt, gain_type, self.client_name,
+                buy_date, buy_amt, gain_type, self.client_name,
             )
             if getattr(self, 'pan', None):
                 r['pan'] = self.pan
@@ -5706,8 +5719,8 @@ def detect_parser(file_path):
             if ("motilaloswal" in _full2.lower()
                     and "PROFIT AND LOSS TRANSACTION STATEMENT" in _full2_up):
                 return MotilalOswalPnLParser()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WARN] detect_parser: specific-format detection failed: {e}", file=sys.stderr)
 
         # ── STANDARD CHECKS (keyword-based on page 1 only) ──
         # ICICIDirect equity P&L PDF: "Equity Capital Gain" with Sale/Purchase Expenses columns
