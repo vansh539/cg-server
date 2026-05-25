@@ -286,10 +286,21 @@ def make_row(source, name, isin, sale_date, qty, sale_price, sale_amt,
              market_price_31jan2018=None, total_market_value_31jan2018=None,
              transfer_expenses=None):
     """Standardize row creation."""
+    _isin = (isin or "").strip()
+    _at   = (asset_type or "").lower()
+    # AMFI mutual fund ISINs always start with INF; equity/debt securities start with INE
+    _is_mf = _isin.upper().startswith("INF")
+    if _is_mf and ("debt" in _at or "non-equity" in _at):
+        _mf_col, _section = "Debt Mutual Fund", ""
+    elif _is_mf:
+        _mf_col, _section = "Equity Mutual Fund", "112A"
+    else:
+        _mf_col, _section = "No", ""
+
     return {
         "source": source, "share_name": name,
         "share_type": _determine_share_type(name, asset_type),
-        "isin": isin or "",
+        "isin": _isin,
         "sale_date": sale_date, "quantity": qty,
         "sale_price": sale_price, "sale_amount": sale_amt,
         "market_price_31jan2018": market_price_31jan2018,
@@ -298,8 +309,8 @@ def make_row(source, name, isin, sale_date, qty, sale_price, sale_amt,
         "purchase_date": purchase_date,
         "purchase_amount": purchase_amt, "fmv_unquoted": None,
         "gain_type": gain_type,
-        "mutual_fund_col": "Equity Mutual Fund",
-        "section": "112A", "scheme_type": "Equity",
+        "mutual_fund_col": _mf_col,
+        "section": _section, "scheme_type": "Equity" if _is_mf else "",
         "client_name": client_name,
         "asset_type": asset_type or "",
     }
@@ -4778,11 +4789,27 @@ class SBIMFParser:
                               if to_float(n) is not None and to_float(n) > 0]
                 if len(after_nums) < 2: continue
                 units_r, second = after_nums[0], after_nums[1]
-                # If second >> units, it's the explicit sell amount; else compute units × nav
+                # If second >> units, it's the explicit sell amount inline
                 if second > units_r * 1.5:
                     sell_amt = second
                 else:
-                    sell_amt = round(units_r * second, 2)
+                    # SBI two-column PDF: the Amount(Rs) cell for this redemption
+                    # often appears on the immediately preceding text line.
+                    # i was already incremented, so previous line = lines[i-2]
+                    sell_amt = None
+                    prev_idx = i - 2
+                    if prev_idx >= 0:
+                        prev_line = lines[prev_idx].strip()
+                        prev_cands = [to_float(n) for n in re.findall(r'[\d,]+\.?\d{2}', prev_line)
+                                     if to_float(n) is not None and to_float(n) > 1000]
+                        if prev_cands:
+                            expected = round(units_r * second, 2)
+                            for cand in sorted(prev_cands, reverse=True):
+                                if expected > 0 and abs(cand - expected) / expected < 0.05:
+                                    sell_amt = cand
+                                    break
+                    if sell_amt is None:
+                        sell_amt = round(units_r * second, 2)
                 if sell_amt > 100:
                     redemptions.append((sell_date, sell_amt))
                 continue
@@ -5861,8 +5888,8 @@ def _build_row_values(row, r_idx):
         "No",
         "No",
         "No",
-        row.get("mutual_fund_col","Equity Mutual Fund"),
-        row.get("section","112A"),
+        row.get("mutual_fund_col",""),
+        row.get("section",""),
         None,
         ".",
         cg_formula,
