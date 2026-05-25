@@ -13,7 +13,8 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
-CORS(app, origins="*", methods=["GET","POST","OPTIONS"], allow_headers=["Content-Type"])
+CORS(app, origins=["http://localhost:5000", "http://127.0.0.1:5000"],
+     methods=["POST", "OPTIONS"], allow_headers=["Content-Type"])
 
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'capital_gains_extractor.py')
 
@@ -41,6 +42,9 @@ def process():
     saved = []
     for f in files:
         safe_name = re.sub(r'[^\w.\- ]', '_', f.filename).strip() or 'upload.pdf'
+        safe_name = Path(safe_name).name  # strip any directory components (.. traversal)
+        if not safe_name or safe_name.startswith('.'):
+            safe_name = 'upload.pdf'
         tmp_path = os.path.join(tmp_dir, safe_name)
         f.save(tmp_path)
         saved.append(tmp_path)
@@ -97,4 +101,4 @@ def process():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='127.0.0.1', port=port, debug=False)

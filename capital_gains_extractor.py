@@ -166,10 +166,24 @@ def open_pdf(pdf_path, password=None):
                         try: opened.close()
                         except: pass
 
+        fname = Path(pdf_path).name.upper()
+        if "CAMS" in fname:
+            pwd_hint = "CAMS PDFs use your PAN number as password (e.g. ABCDE1234F)."
+        elif "KFIN" in fname or "KARVY" in fname or "KFINTECH" in fname:
+            pwd_hint = "KFintech/Karvy PDFs use your PAN number as password."
+        elif "SBI" in fname:
+            pwd_hint = "SBI MF PDFs use your PAN number as password."
+        elif "ICICI" in fname or "IDIRECT" in fname:
+            pwd_hint = "ICICIDirect PDFs often use your date of birth (DDMMYYYY) as password."
+        elif "HDFC" in fname:
+            pwd_hint = "HDFC PDFs often use your PAN number or date of birth as password."
+        else:
+            pwd_hint = "Most Indian broker PDFs use your PAN number as password."
         raise Exception(
-            f"Cannot read this PDF. "
-            f"If it is password-protected, rename it as: filename.PASSWORD.pdf "
-            f"(e.g. CAMS.abc123.pdf where abc123 is the password). "
+            f"Cannot read '{Path(pdf_path).name}'. "
+            f"{pwd_hint} "
+            f"To provide the password, rename the file as: FILENAME.PASSWORD.pdf "
+            f"(e.g. CAMS.ABCDE1234F.pdf). "
             f"Last error: {last_err}"
         )
     finally:
