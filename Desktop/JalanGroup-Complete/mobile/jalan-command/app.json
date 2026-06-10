@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Jalan Command",
+    "slug": "jalan-command",
+    "version": "1.0.0",
+    "scheme": "jalan-command",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "backgroundColor": "#06100A"
+    },
+    "ios": {
+      "bundleIdentifier": "com.jalangroup.command",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.jalangroup.command",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#06100A"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-sharing",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
