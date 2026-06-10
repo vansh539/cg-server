@@ -1,0 +1,30 @@
+{
+  "cli": { "version": ">= 10.0.0" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": { "simulator": false },
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "ios": { "autoIncrement": true },
+      "android": { "autoIncrement": true }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "vansh.ps57084@gmail.com",
+        "ascAppId": "FILL_IN_AFTER_APP_STORE_CONNECT_SETUP"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}
