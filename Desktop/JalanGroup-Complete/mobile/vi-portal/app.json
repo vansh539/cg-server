@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Vansh Iron",
+    "slug": "vi-portal",
+    "version": "1.0.0",
+    "scheme": "vi-portal",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "backgroundColor": "#06100A"
+    },
+    "ios": {
+      "bundleIdentifier": "com.jalangroup.portal",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.jalangroup.portal",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#06100A"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-sharing"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
