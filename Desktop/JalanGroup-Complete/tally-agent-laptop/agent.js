@@ -128,12 +128,13 @@ async function fetchLedgers() {
   }).map(l => ({
     name: v(l.NAME) || v(l?.$?.NAME) || '',
     party_type: isDr(v(l.PARENT)) ? 'customer' : 'supplier',
-    mobile: mob(v(l.MOBILENO) || v(l.LEDGERPHONE) || v(l.PHONE) || ''),
-    email: v(l.EMAIL) || null,
-    gstin: (v(l.GSTREGISTRATIONNUMBER) || v(l.GSTIN) || '').toUpperCase() || null,
-    address: v(l.ADDRESS) || null, state: v(l.STATENAME) || null,
+    mobile: mob(v(l.MOBILENO)||v(l.LEDGERMOBILE)||v(l.LEDGERPHONE)||v(l.PHONENUMBER)||v(l.PHONE)||v(l['MOBILE.LIST']?.MOBILE)||''),
+    email: v(l.EMAIL) || v(l.EMAILID) || null,
+    gstin: (v(l.GSTREGISTRATIONNUMBER)||v(l.GSTIN)||v(l.PARTYGSTIN)||'').toUpperCase()||null,
+    address: v(l.ADDRESS)||v(l['ADDRESS.LIST']?.ADDRESS)||v(l.MAILINGNAME)||null,
+    state: v(l.STATENAME)||v(l.LEDGERSTATENAME)||v(l.STATE)||null,
     credit_limit: num(v(l.CREDITLIMIT)), closing_bal: num(v(l.CLOSINGBALANCE)),
-    bal_type: v(l.CLOSINGBALANCETYPE) || 'Dr',
+    bal_type: v(l.CLOSINGBALANCETYPE)||'Dr',
   }));
 }
 
