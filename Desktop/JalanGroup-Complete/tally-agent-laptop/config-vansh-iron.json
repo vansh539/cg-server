@@ -1,0 +1,9 @@
+{
+  "server_url": "https://api.vanshiron.com",
+  "api_key": "d1ecc80cd94100cd60996fcdc1334310a6f07a09d6345c487de646053586ca55",
+  "company_code": "VI",
+  "tally_companies": ["VANSH IRON (26-27)", "VANSH IRON (25-27)"],
+  "tally_port": 9000,
+  "sync_interval_min": 15,
+  "voucher_days": 3650
+}
