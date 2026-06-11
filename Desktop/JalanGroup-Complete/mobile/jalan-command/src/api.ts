@@ -50,3 +50,6 @@ export const getMessages = () =>
 
 export const sendReminders = () =>
   api.post('/api/whatsapp/send-reminders').then(r => r.data);
+
+export const updatePartyContact = (id: string, contact: { mobile?: string; whatsapp_number?: string; email?: string }) =>
+  api.put(`/api/parties/${id}/contact`, contact).then(r => r.data);
