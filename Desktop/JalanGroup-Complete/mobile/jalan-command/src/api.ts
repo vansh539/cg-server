@@ -53,3 +53,6 @@ export const sendReminders = () =>
 
 export const updatePartyContact = (id: string, contact: { mobile?: string; whatsapp_number?: string; email?: string }) =>
   api.put(`/api/parties/${id}/contact`, contact).then(r => r.data);
+
+export const getCompanies = () =>
+  api.get('/api/companies').then(r => r.data);
