@@ -1,0 +1,4 @@
+name,phone_number,membership_id,description,amount_due,due_date
+Asha Rao,9848358160,CK-1001,July 2026 membership,5000,2026-07-05
+Ravi Kumar,+91 91111 11111,CK-1002,July 2026 membership,4500,2026-07-05
+Bad Row,,CK-1003,July 2026 membership,3000,2026-07-05
