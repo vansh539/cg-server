@@ -6,6 +6,11 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { logger } = require('../utils/logger');
 const { query } = require('../db/db');
+const customers = require('../ledger/customers');
+const claims = require('../ledger/claims');
+const balances = require('../ledger/balances');
+const duesImport = require('../imports/duesImport');
+const flows = require('./flows');
 
 const SESSION_DIR = process.env.WA_SESSION_PATH || './wa-sessions';
 const PROOFS_DIR = process.env.PROOFS_PATH || './proofs';
@@ -171,6 +176,150 @@ process.on('unhandledRejection', (reason) => {
   logger.error('[WhatsApp] Unhandled rejection — exiting for PM2 restart:', { error: reason?.message || String(reason) });
   process.exit(1);
 });
+
+client.on('message', async (msg) => {
+  try {
+    if (msg.from.includes('@g.us') || msg.isStatus) return;
+
+    const waNumber = await resolveWaNumber(msg);
+    const text = (msg.body || '').trim();
+    const pending = pendingConfirmations.get(waNumber);
+    const admin = await isAdmin(waNumber);
+
+    if (pending && pending.expiry > Date.now()) {
+      await handlePendingReply(msg, waNumber, pending, text);
+      return;
+    }
+
+    if (admin) {
+      const parsed = flows.parseAdminCommand(text);
+      await handleAdminCommand(msg, waNumber, parsed);
+      return;
+    }
+
+    const customer = await customers.findByPhone(waNumber);
+    if (!customer) {
+      setPending(waNumber, 'registration_name', {});
+      await safeSend(msg, "Welcome! I don't have you registered yet. What's your name?");
+      return;
+    }
+
+    if (/^paid$/i.test(text)) {
+      setPending(waNumber, 'awaiting_amount', { customerId: customer.id });
+      await safeSend(msg, 'Got it — how much did you pay?');
+      return;
+    }
+
+    await safeSend(msg, `Hi ${customer.name}! Reply *PAID* any time you make a payment to CoKarma.`);
+  } catch (e) {
+    logger.error('[WhatsApp] message handler error', { error: e.message });
+  }
+});
+
+async function handlePendingReply(msg, waNumber, pending, text) {
+  if (pending.type === 'registration_name') {
+    const result = flows.handleRegistrationName(text);
+    if (!result.ok) { await safeSend(msg, result.error); return; }
+    const customer = await customers.createCustomer({ name: result.name, phoneNumber: waNumber });
+    clearPending(waNumber);
+    await safeSend(msg, `Thanks, ${customer.name}! You're registered. Reply *PAID* any time you make a payment to CoKarma.`);
+    return;
+  }
+
+  if (pending.type === 'awaiting_amount') {
+    const result = flows.handleAmountReply(text);
+    if (!result.ok) { await safeSend(msg, result.error); return; }
+    setPending(waNumber, 'awaiting_proof', { customerId: pending.data.customerId, amount: result.amount });
+    await safeSend(msg, 'Now send a screenshot of the payment, type the UPI reference/UTR number, or reply CASH if you paid cash.');
+    return;
+  }
+
+  if (pending.type === 'awaiting_proof') {
+    const result = flows.handleProofReply(text, msg.hasMedia);
+    if (!result.ok) { await safeSend(msg, result.error); return; }
+
+    let proofReference = result.proofReference;
+    if (result.proofType === 'screenshot') {
+      const media = await msg.downloadMedia();
+      const ext = (media.mimetype || 'image/jpeg').split('/')[1] || 'jpg';
+      const fileName = `${Date.now()}-${waNumber}.${ext}`;
+      fs.writeFileSync(path.join(PROOFS_DIR, fileName), media.data, 'base64');
+      proofReference = fileName;
+    }
+
+    const { claim, duplicateOf } = await claims.createClaim({
+      customerId: pending.data.customerId,
+      amountClaimed: pending.data.amount,
+      proofType: result.proofType,
+      proofReference,
+    });
+    clearPending(waNumber);
+
+    const shortId = claim.id.slice(0, 8);
+    await safeSend(msg, `Thanks! Your payment of ₹${pending.data.amount} has been recorded (claim #${shortId}) and is pending verification.`);
+
+    const customer = await customers.findByPhone(waNumber);
+    const dupNote = duplicateOf ? `\n⚠️ Same reference already claimed on claim #${duplicateOf.id.slice(0, 8)} (status: ${duplicateOf.status}).` : '';
+    await notifyAdmins(
+      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`
+    );
+    return;
+  }
+}
+
+async function handleAdminCommand(msg, waNumber, parsed) {
+  if (parsed.command === 'CONFIRM' || parsed.command === 'REJECT') {
+    const matches = await claims.findClaimByIdPrefix(parsed.claimId);
+    if (matches.length === 0) { await safeSend(msg, `No claim found matching "${parsed.claimId}".`); return; }
+    if (matches.length > 1) { await safeSend(msg, `Multiple claims match "${parsed.claimId}" — use more characters.`); return; }
+
+    const fullId = matches[0].id;
+    if (parsed.command === 'CONFIRM') {
+      const updated = await claims.confirmClaim(fullId, waNumber);
+      await safeSend(msg, updated ? `Claim #${parsed.claimId} confirmed.` : `Claim #${parsed.claimId} was already reviewed.`);
+    } else {
+      const updated = await claims.rejectClaim(fullId, waNumber, parsed.reason);
+      await safeSend(msg, updated ? `Claim #${parsed.claimId} rejected.` : `Claim #${parsed.claimId} was already reviewed.`);
+    }
+    return;
+  }
+
+  if (parsed.command === 'PENDING') {
+    const rows = await claims.listPendingClaims();
+    if (rows.length === 0) { await safeSend(msg, 'No pending claims.'); return; }
+    const lines = rows.map((r) => `#${r.id.slice(0, 8)} ${r.name} (${r.phone_number}) ₹${r.amount_claimed} [${r.proof_type}]`);
+    await safeSend(msg, `Pending claims:\n${lines.join('\n')}`);
+    return;
+  }
+
+  if (parsed.command === 'PENDING_LINKS') {
+    const rows = await balances.listUnlinkedCustomers();
+    if (rows.length === 0) { await safeSend(msg, 'No unlinked customers.'); return; }
+    const lines = rows.map((r) => `${r.name} (${r.phone_number})`);
+    await safeSend(msg, `Unlinked customers:\n${lines.join('\n')}`);
+    return;
+  }
+
+  if (parsed.command === 'BALANCE') {
+    const results = await balances.searchBalances(parsed.query);
+    if (results.length === 0) { await safeSend(msg, `No customer found matching "${parsed.query}".`); return; }
+    const lines = results.map((r) => `${r.name}: due ₹${r.total_due}, confirmed ₹${r.total_confirmed}, balance ₹${r.balance}`);
+    await safeSend(msg, lines.join('\n'));
+    return;
+  }
+
+  if (parsed.command === 'IMPORT') {
+    if (!msg.hasMedia) { await safeSend(msg, 'Send the CSV file as an attachment with caption IMPORT.'); return; }
+    const media = await msg.downloadMedia();
+    const fileName = path.join(PROOFS_DIR, `import-${Date.now()}.csv`);
+    fs.writeFileSync(fileName, Buffer.from(media.data, 'base64'));
+    const result = await duesImport.importDuesFromFile(fileName, waNumber);
+    await safeSend(msg, `Import complete: ${result.totalRows} rows, ${result.unmatchedCount} unmatched.`);
+    return;
+  }
+
+  await safeSend(msg, 'Unknown command. Try PAID, PENDING, PENDING LINKS, BALANCE <name>, CONFIRM <id>, REJECT <id> <reason>, or IMPORT (with a CSV attachment).');
+}
 
 if (require.main === module) {
   client.initialize();
