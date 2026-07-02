@@ -4,6 +4,7 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const cron = require('node-cron');
 const { logger } = require('../utils/logger');
 const { query } = require('../db/db');
 const customers = require('../ledger/customers');
@@ -319,6 +320,16 @@ async function handleAdminCommand(msg, waNumber, parsed) {
   }
 
   await safeSend(msg, 'Unknown command. Try PAID, PENDING, PENDING LINKS, BALANCE <name>, CONFIRM <id>, REJECT <id> <reason>, or IMPORT (with a CSV attachment).');
+}
+
+// Daily 9 AM IST digest of claims that have sat pending for 24h+
+if (require.main === module) {
+  cron.schedule('0 9 * * *', async () => {
+    const stale = await claims.listStaleClaims(24);
+    if (stale.length === 0) return;
+    const lines = stale.map((r) => `#${r.id.slice(0, 8)} ${r.name} (${r.phone_number}) ₹${r.amount_claimed} — reported ${r.reported_at}`);
+    await notifyAdmins(`⏰ ${stale.length} claim(s) pending review for 24h+:\n${lines.join('\n')}`);
+  }, { timezone: 'Asia/Kolkata' });
 }
 
 if (require.main === module) {
