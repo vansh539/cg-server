@@ -46,7 +46,7 @@
     "start": "node src/whatsapp/bot.js",
     "migrate": "node scripts/migrate.js",
     "seed-admin": "node scripts/seed-admin.js",
-    "test": "node --test tests/"
+    "test": "node --test"
   },
   "dependencies": {
     "csv-parse": "^5.5.6",
