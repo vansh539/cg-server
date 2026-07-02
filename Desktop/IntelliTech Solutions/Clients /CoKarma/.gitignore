@@ -5,3 +5,5 @@ wa-sessions/
 proofs/
 logs/
 *.log
+.DS_Store
+ruvector.db
