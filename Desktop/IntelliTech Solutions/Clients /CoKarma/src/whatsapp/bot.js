@@ -142,7 +142,14 @@ async function isAdmin(waNumber) {
 
 async function notifyAdmins(text, mediaPath) {
   const { rows } = await query('SELECT phone_number FROM admins WHERE active = true');
-  const media = mediaPath ? MessageMedia.fromFilePath(mediaPath) : null;
+  let media = null;
+  if (mediaPath) {
+    try {
+      media = MessageMedia.fromFilePath(mediaPath);
+    } catch (e) {
+      logger.error('[WhatsApp] Failed to load media for admin notification, falling back to text-only', { mediaPath, error: e.message });
+    }
+  }
   for (const { phone_number } of rows) {
     const chatId = flows.toWhatsAppChatId(phone_number);
     try {
