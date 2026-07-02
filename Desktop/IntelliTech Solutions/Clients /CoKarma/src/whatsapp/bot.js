@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
@@ -140,12 +140,17 @@ async function isAdmin(waNumber) {
   return rows.length > 0;
 }
 
-async function notifyAdmins(text) {
+async function notifyAdmins(text, mediaPath) {
   const { rows } = await query('SELECT phone_number FROM admins WHERE active = true');
+  const media = mediaPath ? MessageMedia.fromFilePath(mediaPath) : null;
   for (const { phone_number } of rows) {
-    const chatId = phone_number.replace(/\D/g, '') + '@c.us';
+    const chatId = flows.toWhatsAppChatId(phone_number);
     try {
-      await client.sendMessage(chatId, text);
+      if (media) {
+        await client.sendMessage(chatId, media, { caption: text });
+      } else {
+        await client.sendMessage(chatId, text);
+      }
     } catch (e) {
       logger.error('[WhatsApp] Failed to notify admin', { admin: phone_number, error: e.message });
     }
@@ -192,10 +197,12 @@ client.on('message', async (msg) => {
       return;
     }
 
-    if (admin) {
+    if (admin && !/^paid$/i.test(text)) {
       const parsed = flows.parseAdminCommand(text);
-      await handleAdminCommand(msg, waNumber, parsed);
-      return;
+      if (parsed.command !== 'UNKNOWN') {
+        await handleAdminCommand(msg, waNumber, parsed);
+        return;
+      }
     }
 
     const customer = await customers.findByPhone(waNumber);
@@ -240,11 +247,14 @@ async function handlePendingReply(msg, waNumber, pending, text) {
     if (!result.ok) { await safeSend(msg, result.error); return; }
 
     let proofReference = result.proofReference;
+    let screenshotPath = null;
     if (result.proofType === 'screenshot') {
       const media = await msg.downloadMedia();
-      const ext = (media.mimetype || 'image/jpeg').split('/')[1] || 'jpg';
+      const mimeToExt = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const ext = mimeToExt[media.mimetype] || 'jpg';
       const fileName = `${Date.now()}-${waNumber}.${ext}`;
-      fs.writeFileSync(path.join(PROOFS_DIR, fileName), media.data, 'base64');
+      screenshotPath = path.join(PROOFS_DIR, fileName);
+      fs.writeFileSync(screenshotPath, media.data, 'base64');
       proofReference = fileName;
     }
 
@@ -262,7 +272,8 @@ async function handlePendingReply(msg, waNumber, pending, text) {
     const customer = await customers.findByPhone(waNumber);
     const dupNote = duplicateOf ? `\n⚠️ Same reference already claimed on claim #${duplicateOf.id.slice(0, 8)} (status: ${duplicateOf.status}).` : '';
     await notifyAdmins(
-      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`
+      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`,
+      screenshotPath
     );
     return;
   }

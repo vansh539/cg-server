@@ -33,6 +33,16 @@ test('createClaim flags a duplicate UTR against an existing claim', async () => 
   assert.equal(duplicateOf.proof_reference, 'UTR12345');
 });
 
+test('createClaim does not flag a duplicate against a rejected prior claim with the same UTR', async () => {
+  const customer = await makeCustomer();
+  const { claim } = await claims.createClaim({ customerId: customer.id, amountClaimed: 1500, proofType: 'utr_text', proofReference: 'UTR12345' });
+  await claims.rejectClaim(claim.id, '9999900000', 'wrong amount');
+
+  const { duplicateOf } = await claims.createClaim({ customerId: customer.id, amountClaimed: 1500, proofType: 'utr_text', proofReference: 'UTR12345' });
+
+  assert.equal(duplicateOf, null);
+});
+
 test('confirmClaim moves a pending claim to confirmed and records the reviewer', async () => {
   const customer = await makeCustomer();
   const { claim } = await claims.createClaim({ customerId: customer.id, amountClaimed: 1500, proofType: 'cash', proofReference: null });
@@ -74,6 +84,8 @@ test('listPendingClaims only returns pending claims, oldest first', async () => 
   const first = await claims.createClaim({ customerId: customer.id, amountClaimed: 100, proofType: 'cash', proofReference: null });
   const second = await claims.createClaim({ customerId: customer.id, amountClaimed: 200, proofType: 'cash', proofReference: null });
   await claims.confirmClaim(second.claim.id, '9999900000');
+  await query(`UPDATE payment_claims SET reported_at = now() - interval '5 minutes' WHERE id = $1`, [first.claim.id]);
+  await query(`UPDATE payment_claims SET reported_at = now() - interval '5 minutes' WHERE id = $1`, [second.claim.id]);
 
   const pending = await claims.listPendingClaims();
   assert.equal(pending.length, 1);

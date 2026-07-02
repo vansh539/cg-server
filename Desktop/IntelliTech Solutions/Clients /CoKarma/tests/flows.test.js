@@ -82,3 +82,17 @@ test('parseAdminCommand parses IMPORT and unknown text', () => {
   assert.deepEqual(flows.parseAdminCommand('import'), { command: 'IMPORT' });
   assert.deepEqual(flows.parseAdminCommand('hello there'), { command: 'UNKNOWN' });
 });
+
+test('toWhatsAppChatId prepends 91 to a bare 10-digit number', () => {
+  assert.equal(flows.toWhatsAppChatId('9848358160'), '919848358160@c.us');
+});
+
+test('toWhatsAppChatId normalizes a number with country code and formatting', () => {
+  assert.equal(flows.toWhatsAppChatId('+91 98483 58160'), '919848358160@c.us');
+});
+
+test('toWhatsAppChatId does not crash on null/undefined/empty input', () => {
+  assert.equal(flows.toWhatsAppChatId(''), '@c.us');
+  assert.equal(flows.toWhatsAppChatId(null), '@c.us');
+  assert.equal(flows.toWhatsAppChatId(undefined), '@c.us');
+});

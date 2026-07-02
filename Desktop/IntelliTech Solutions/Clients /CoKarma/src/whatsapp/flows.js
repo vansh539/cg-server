@@ -44,4 +44,10 @@ function parseAdminCommand(text) {
   return { command: 'UNKNOWN' };
 }
 
-module.exports = { handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand };
+function toWhatsAppChatId(phoneNumber) {
+  let digits = String(phoneNumber || '').replace(/\D/g, '');
+  if (digits.length === 10) digits = '91' + digits;
+  return `${digits}@c.us`;
+}
+
+module.exports = { handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand, toWhatsAppChatId };
