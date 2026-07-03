@@ -105,3 +105,17 @@ test('listStaleClaims only returns pending claims older than the given hours', a
   const notStale = await claims.listStaleClaims(72);
   assert.equal(notStale.length, 0);
 });
+
+test('createClaim stores ocrExtractedAmount when provided', async () => {
+  const customer = await makeCustomer();
+  const { claim } = await claims.createClaim({
+    customerId: customer.id, amountClaimed: 5000, proofType: 'screenshot', proofReference: 'shot.jpg', ocrExtractedAmount: 4000,
+  });
+  assert.equal(Number(claim.ocr_extracted_amount), 4000);
+});
+
+test('createClaim leaves ocr_extracted_amount null when omitted', async () => {
+  const customer = await makeCustomer();
+  const { claim } = await claims.createClaim({ customerId: customer.id, amountClaimed: 5000, proofType: 'cash', proofReference: null });
+  assert.equal(claim.ocr_extracted_amount, null);
+});

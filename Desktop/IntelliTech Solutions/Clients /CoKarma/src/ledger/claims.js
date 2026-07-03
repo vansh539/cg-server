@@ -9,13 +9,13 @@ async function findDuplicateUtr(proofReference) {
   return rows[0] || null;
 }
 
-async function createClaim({ customerId, amountClaimed, proofType, proofReference }) {
+async function createClaim({ customerId, amountClaimed, proofType, proofReference, ocrExtractedAmount }) {
   const duplicate = proofType === 'utr_text' ? await findDuplicateUtr(proofReference) : null;
 
   const { rows } = await query(
-    `INSERT INTO payment_claims (customer_id, amount_claimed, proof_type, proof_reference)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [customerId, amountClaimed, proofType, proofReference || null]
+    `INSERT INTO payment_claims (customer_id, amount_claimed, proof_type, proof_reference, ocr_extracted_amount)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [customerId, amountClaimed, proofType, proofReference || null, ocrExtractedAmount ?? null]
   );
 
   return { claim: rows[0], duplicateOf: duplicate };
