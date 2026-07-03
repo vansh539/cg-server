@@ -67,6 +67,24 @@ function extractAmountMatch(ocrText, claimedAmount) {
     found.push({ index: m.index, value: toNumber(m[1]) });
   }
 
+  // A number sitting completely alone on its own line is also treated as a
+  // candidate. UPI apps typically show the payment amount by itself on its
+  // own line; transaction IDs and dates almost always appear next to a
+  // label ("UPI txn ID:", "Paid via") on the same line, so this stays
+  // fairly safe. It also compensates for OCR frequently misreading the ₹
+  // symbol (often as a stray digit fused to the number, e.g. "₹4,000" read
+  // as "24,000"), which means no currency-marker match ever fires even
+  // though the amount is right there in the text.
+  const standaloneLineRe = new RegExp(`^\\s*(${numPattern})\\s*$`);
+  let offset = 0;
+  for (const line of text.split('\n')) {
+    const lm = line.match(standaloneLineRe);
+    if (lm && lm[1].replace(/[.,]/g, '').length >= 3) {
+      found.push({ index: offset + line.indexOf(lm[1]), value: toNumber(lm[1]) });
+    }
+    offset += line.length + 1;
+  }
+
   found.sort((a, b) => a.index - b.index);
   const candidates = found.map((f) => f.value);
 

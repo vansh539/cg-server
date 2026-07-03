@@ -150,3 +150,21 @@ test('extractAmountMatch uses the earliest candidate in text order when no candi
   assert.equal(result.matched, false);
   assert.equal(result.extractedAmount, 5000);
 });
+
+test('extractAmountMatch treats a number alone on its own line as a candidate', () => {
+  const result = flows.extractAmountMatch('Payment successful\n4,000\nPaid via UPI\nUPI txn ID : 002926693520', 4000);
+  assert.equal(result.matched, true);
+  assert.equal(result.extractedAmount, 4000);
+});
+
+test('extractAmountMatch does not treat a number with surrounding text on the same line as standalone', () => {
+  const result = flows.extractAmountMatch('UPI txn ID : 002926693520', 4000);
+  assert.equal(result.matched, null);
+  assert.equal(result.extractedAmount, null);
+});
+
+test('extractAmountMatch catches a misread currency symbol fused to the amount on its own line', () => {
+  const result = flows.extractAmountMatch('Payment successful\n24,000\nPaid via Navi UPI', 24000);
+  assert.equal(result.matched, true);
+  assert.equal(result.extractedAmount, 24000);
+});
