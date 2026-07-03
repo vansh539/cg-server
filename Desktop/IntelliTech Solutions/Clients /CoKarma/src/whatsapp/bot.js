@@ -346,10 +346,37 @@ async function handleAdminCommand(msg, waNumber, parsed) {
     const fullId = matches[0].id;
     if (parsed.command === 'CONFIRM') {
       const updated = await claims.confirmClaim(fullId, waNumber);
-      await safeSend(msg, updated ? `Claim #${parsed.claimId} confirmed.` : `Claim #${parsed.claimId} was already reviewed.`);
+      if (updated) {
+        await safeSend(msg, `Claim #${parsed.claimId} confirmed.`);
+        const customer = await customers.findById(updated.customer_id);
+        if (customer) {
+          const chatId = flows.toWhatsAppChatId(customer.phone_number);
+          try {
+            await client.sendMessage(chatId, `✅ Your payment of ₹${updated.amount_claimed} has been confirmed. Thank you!`);
+          } catch (e) {
+            logger.error('[WhatsApp] Failed to notify customer of confirmation', { customer: customer.phone_number, error: e.message });
+          }
+        }
+      } else {
+        await safeSend(msg, `Claim #${parsed.claimId} was already reviewed.`);
+      }
     } else {
       const updated = await claims.rejectClaim(fullId, waNumber, parsed.reason);
-      await safeSend(msg, updated ? `Claim #${parsed.claimId} rejected.` : `Claim #${parsed.claimId} was already reviewed.`);
+      if (updated) {
+        await safeSend(msg, `Claim #${parsed.claimId} rejected.`);
+        const customer = await customers.findById(updated.customer_id);
+        if (customer) {
+          const chatId = flows.toWhatsAppChatId(customer.phone_number);
+          const reasonNote = updated.review_note ? ` Reason: ${updated.review_note}` : '';
+          try {
+            await client.sendMessage(chatId, `❌ Your payment claim (₹${updated.amount_claimed}) was rejected.${reasonNote}`);
+          } catch (e) {
+            logger.error('[WhatsApp] Failed to notify customer of rejection', { customer: customer.phone_number, error: e.message });
+          }
+        }
+      } else {
+        await safeSend(msg, `Claim #${parsed.claimId} was already reviewed.`);
+      }
     }
     return;
   }
