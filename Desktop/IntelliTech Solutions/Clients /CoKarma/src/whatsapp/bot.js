@@ -21,7 +21,20 @@ if (!fs.existsSync(PROOFS_DIR)) fs.mkdirSync(PROOFS_DIR, { recursive: true });
 // on (re)connect — without this, linking a session with pre-existing chats
 // fires the handler for real messages that predate the bot entirely, causing
 // it to "welcome" people who never messaged it. msg.timestamp is Unix seconds.
+// Fail CLOSED: a message with no timestamp at all is treated as historical,
+// not live — confirmed in testing that some replayed messages carry no
+// timestamp, which let them slip past a fail-open version of this check.
 const BOT_START_TIME = Math.floor(Date.now() / 1000);
+
+// Extra safety net for testing: when set, ONLY these numbers (plus seeded
+// admins) can trigger any reply at all — everyone else is silently ignored.
+// Set TEST_MODE_ALLOWED_NUMBERS in .env (comma-separated, any format) while
+// testing on a personal/real number. Leave unset in production so real
+// customers aren't blocked.
+const TEST_MODE_ALLOWED_NUMBERS = (process.env.TEST_MODE_ALLOWED_NUMBERS || '')
+  .split(',')
+  .map((n) => n.replace(/\D/g, '').slice(-10))
+  .filter(Boolean);
 
 // ── Chrome Cleanup ─────────────────────────────────────────────
 // Kills orphaned Chrome and wipes stale Singleton/lock files that make the
@@ -207,12 +220,20 @@ process.on('unhandledRejection', (reason) => {
 client.on('message', async (msg) => {
   try {
     if (msg.from.includes('@g.us') || msg.isStatus) return;
-    if (msg.timestamp && msg.timestamp < BOT_START_TIME) return;
+    if (!msg.timestamp || msg.timestamp < BOT_START_TIME) return;
 
     const waNumber = await resolveWaNumber(msg);
     const text = (msg.body || '').trim();
     const pending = pendingConfirmations.get(waNumber);
     const admin = await isAdmin(waNumber);
+
+    if (TEST_MODE_ALLOWED_NUMBERS.length > 0 && !admin) {
+      const last10 = waNumber.replace(/\D/g, '').slice(-10);
+      if (!TEST_MODE_ALLOWED_NUMBERS.includes(last10)) {
+        logger.info('[WhatsApp] Ignoring message — not on TEST_MODE_ALLOWED_NUMBERS allowlist', { waNumber });
+        return;
+      }
+    }
 
     if (pending && pending.expiry > Date.now()) {
       await handlePendingReply(msg, waNumber, pending, text);
