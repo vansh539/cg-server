@@ -290,6 +290,32 @@ client.on('message', async (msg) => {
   }
 });
 
+// When the admin's WhatsApp account IS the bot's own linked number (the
+// common case while developing/testing on a personal number), a command an
+// admin sends to themselves is a "self-sent" message. whatsapp-web.js's
+// 'message' event deliberately excludes self-sent messages (it only fires
+// for messages from someone else) — a self-sent CONFIRM/REJECT would
+// otherwise never reach the handler above at all, with no error, since the
+// library drops it before 'message' ever fires. 'message_create' fires for
+// every message including self-sent ones, so admin commands sent to
+// yourself are handled here instead.
+client.on('message_create', async (msg) => {
+  try {
+    if (!msg.fromMe) return; // messages from others are handled by 'message' above
+    if (msg.from.includes('@g.us') || msg.isStatus) return;
+    if (!msg.timestamp || msg.timestamp < BOT_START_TIME) return;
+
+    const text = (msg.body || '').trim();
+    const parsed = flows.parseAdminCommand(text);
+    if (parsed.command === 'UNKNOWN') return;
+
+    const waNumber = client.info.wid.user;
+    await handleAdminCommand(msg, waNumber, parsed);
+  } catch (e) {
+    logger.error('[WhatsApp] message_create handler error', { error: e.message });
+  }
+});
+
 async function handlePendingReply(msg, waNumber, pending, text) {
   if (pending.type === 'registration_name') {
     const result = flows.handleRegistrationName(text);
