@@ -76,11 +76,29 @@ function extractAmountMatch(ocrText, claimedAmount) {
   // as "24,000"), which means no currency-marker match ever fires even
   // though the amount is right there in the text.
   const standaloneLineRe = new RegExp(`^\\s*(${numPattern})\\s*$`);
+  const strippedNumRe = new RegExp(`^(${numPattern})$`);
   let offset = 0;
   for (const line of text.split('\n')) {
     const lm = line.match(standaloneLineRe);
     if (lm && lm[1].replace(/[.,]/g, '').length >= 3) {
-      found.push({ index: offset + line.indexOf(lm[1]), value: toNumber(lm[1]) });
+      const matchIndex = offset + line.indexOf(lm[1]);
+      found.push({ index: matchIndex, value: toNumber(lm[1]) });
+
+      // Also try the same number with its first character stripped. The ₹
+      // symbol consistently fuses onto the number as one extra leading
+      // digit rather than being dropped or read as a separate token (e.g.
+      // "₹4,000" read as "24,000") — confirmed against a real screenshot,
+      // and unaffected by tessedit_char_whitelist tuning, so this is a
+      // training-data-level OCR limitation, not something a config change
+      // fixes. Without this, a correctly-reported payment would get
+      // wrongly flagged as a mismatch purely because of the OCR glitch.
+      // Only added when the remainder still looks like a real number
+      // (starts with a digit), so a clean, uncorrupted reading like
+      // "4,000" doesn't spawn a bogus extra candidate from ",000".
+      const strippedRemainder = lm[1].slice(1);
+      if (strippedNumRe.test(strippedRemainder)) {
+        found.push({ index: matchIndex, value: toNumber(strippedRemainder) });
+      }
     }
     offset += line.length + 1;
   }

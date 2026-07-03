@@ -168,3 +168,15 @@ test('extractAmountMatch catches a misread currency symbol fused to the amount o
   assert.equal(result.matched, true);
   assert.equal(result.extractedAmount, 24000);
 });
+
+test('extractAmountMatch recognizes a correct payment despite a misread currency symbol prefix', () => {
+  const result = flows.extractAmountMatch('Payment successful\n24,000\nPaid via Navi UPI', 4000);
+  assert.equal(result.matched, true);
+  assert.equal(result.extractedAmount, 4000);
+});
+
+test('extractAmountMatch does not invent a stripped candidate from a cleanly-read number', () => {
+  const result = flows.extractAmountMatch('Payment successful\n4,000\nPaid via Navi UPI', 999);
+  assert.equal(result.matched, false);
+  assert.equal(result.extractedAmount, 4000);
+});
