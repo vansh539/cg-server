@@ -96,3 +96,45 @@ test('toWhatsAppChatId does not crash on null/undefined/empty input', () => {
   assert.equal(flows.toWhatsAppChatId(null), '@c.us');
   assert.equal(flows.toWhatsAppChatId(undefined), '@c.us');
 });
+
+test('extractAmountMatch finds a currency-prefixed amount that matches', () => {
+  const result = flows.extractAmountMatch('Payment Successful\n₹5,000\nTo: CoKarma', 5000);
+  assert.equal(result.matched, true);
+  assert.equal(result.extractedAmount, 5000);
+});
+
+test('extractAmountMatch finds a currency-prefixed amount that does not match', () => {
+  const result = flows.extractAmountMatch('Paid Rs 4000 successfully', 5000);
+  assert.equal(result.matched, false);
+  assert.equal(result.extractedAmount, 4000);
+});
+
+test('extractAmountMatch handles a currency-suffixed amount', () => {
+  const result = flows.extractAmountMatch('5000 INR received', 5000);
+  assert.equal(result.matched, true);
+  assert.equal(result.extractedAmount, 5000);
+});
+
+test('extractAmountMatch handles decimal amounts', () => {
+  const result = flows.extractAmountMatch('INR 1,234.50 paid', 1234.5);
+  assert.equal(result.matched, true);
+  assert.equal(result.extractedAmount, 1234.5);
+});
+
+test('extractAmountMatch ignores bare numbers with no currency marker', () => {
+  const result = flows.extractAmountMatch('Transaction ID 240915001234 on 15/09/2026', 5000);
+  assert.equal(result.matched, null);
+  assert.equal(result.extractedAmount, null);
+});
+
+test('extractAmountMatch returns the skip case for empty OCR text', () => {
+  const result = flows.extractAmountMatch('', 5000);
+  assert.equal(result.matched, null);
+  assert.equal(result.extractedAmount, null);
+});
+
+test('extractAmountMatch finds the matching candidate among multiple currency-adjacent numbers', () => {
+  const result = flows.extractAmountMatch('Balance ₹9999 Amount Paid ₹5000', 5000);
+  assert.equal(result.matched, true);
+  assert.equal(result.extractedAmount, 5000);
+});

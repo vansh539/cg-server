@@ -50,4 +50,33 @@ function toWhatsAppChatId(phoneNumber) {
   return `${digits}@c.us`;
 }
 
-module.exports = { handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand, toWhatsAppChatId };
+function extractAmountMatch(ocrText, claimedAmount) {
+  const text = String(ocrText || '');
+  const numPattern = '\\d[\\d,]*(?:\\.\\d{1,2})?';
+  const toNumber = (s) => parseFloat(s.replace(/,/g, ''));
+
+  const candidates = [];
+  const prefixRe = new RegExp(`(?:₹|rs\\.?|inr)\\s*(${numPattern})`, 'gi');
+  let m;
+  while ((m = prefixRe.exec(text))) {
+    candidates.push(toNumber(m[1]));
+  }
+  const suffixRe = new RegExp(`(${numPattern})\\s*(?:₹|rs\\.?|inr)`, 'gi');
+  while ((m = suffixRe.exec(text))) {
+    candidates.push(toNumber(m[1]));
+  }
+
+  if (candidates.length === 0) {
+    return { extractedAmount: null, matched: null };
+  }
+
+  const claimedRounded = Math.round(claimedAmount * 100) / 100;
+  const match = candidates.find((c) => Math.round(c * 100) / 100 === claimedRounded);
+  if (match !== undefined) {
+    return { extractedAmount: match, matched: true };
+  }
+
+  return { extractedAmount: candidates[0], matched: false };
+}
+
+module.exports = { handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand, toWhatsAppChatId, extractAmountMatch };
