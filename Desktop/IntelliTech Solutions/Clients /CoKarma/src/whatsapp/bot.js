@@ -12,6 +12,7 @@ const claims = require('../ledger/claims');
 const balances = require('../ledger/balances');
 const duesImport = require('../imports/duesImport');
 const flows = require('./flows');
+const Tesseract = require('tesseract.js');
 
 const SESSION_DIR = process.env.WA_SESSION_PATH || './wa-sessions';
 const PROOFS_DIR = process.env.PROOFS_PATH || './proofs';
@@ -291,6 +292,8 @@ async function handlePendingReply(msg, waNumber, pending, text) {
 
     let proofReference = result.proofReference;
     let screenshotPath = null;
+    let ocrExtractedAmount = null;
+    let ocrWarning = '';
     if (result.proofType === 'screenshot') {
       const media = await msg.downloadMedia();
       const mimeToExt = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
@@ -299,6 +302,17 @@ async function handlePendingReply(msg, waNumber, pending, text) {
       screenshotPath = path.join(PROOFS_DIR, fileName);
       fs.writeFileSync(screenshotPath, media.data, 'base64');
       proofReference = fileName;
+
+      try {
+        const { data: { text: ocrText } } = await Tesseract.recognize(screenshotPath, 'eng');
+        const ocrResult = flows.extractAmountMatch(ocrText, pending.data.amount);
+        ocrExtractedAmount = ocrResult.extractedAmount;
+        if (ocrResult.matched === false) {
+          ocrWarning = `\n⚠️ Typed ₹${pending.data.amount} but screenshot appears to show ₹${ocrResult.extractedAmount} — verify carefully.`;
+        }
+      } catch (e) {
+        logger.warn('[WhatsApp] OCR failed, skipping amount check', { error: e.message });
+      }
     }
 
     const { claim, duplicateOf } = await claims.createClaim({
@@ -306,6 +320,7 @@ async function handlePendingReply(msg, waNumber, pending, text) {
       amountClaimed: pending.data.amount,
       proofType: result.proofType,
       proofReference,
+      ocrExtractedAmount,
     });
     clearPending(waNumber);
 
@@ -315,7 +330,7 @@ async function handlePendingReply(msg, waNumber, pending, text) {
     const customer = await customers.findByPhone(waNumber);
     const dupNote = duplicateOf ? `\n⚠️ Same reference already claimed on claim #${duplicateOf.id.slice(0, 8)} (status: ${duplicateOf.status}).` : '';
     await notifyAdmins(
-      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`,
+      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}${ocrWarning}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`,
       screenshotPath
     );
     return;
