@@ -17,6 +17,12 @@ const SESSION_DIR = process.env.WA_SESSION_PATH || './wa-sessions';
 const PROOFS_DIR = process.env.PROOFS_PATH || './proofs';
 if (!fs.existsSync(PROOFS_DIR)) fs.mkdirSync(PROOFS_DIR, { recursive: true });
 
+// Guard against whatsapp-web.js replaying old chat history as 'message' events
+// on (re)connect — without this, linking a session with pre-existing chats
+// fires the handler for real messages that predate the bot entirely, causing
+// it to "welcome" people who never messaged it. msg.timestamp is Unix seconds.
+const BOT_START_TIME = Math.floor(Date.now() / 1000);
+
 // ── Chrome Cleanup ─────────────────────────────────────────────
 // Kills orphaned Chrome and wipes stale Singleton/lock files that make the
 // next launch hang forever. Same fix as the Jalan Group bot — must run at
@@ -193,6 +199,7 @@ process.on('unhandledRejection', (reason) => {
 client.on('message', async (msg) => {
   try {
     if (msg.from.includes('@g.us') || msg.isStatus) return;
+    if (msg.timestamp && msg.timestamp < BOT_START_TIME) return;
 
     const waNumber = await resolveWaNumber(msg);
     const text = (msg.body || '').trim();
