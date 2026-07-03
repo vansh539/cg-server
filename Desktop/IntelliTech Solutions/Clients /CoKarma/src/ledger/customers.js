@@ -14,6 +14,11 @@ async function findByPhone(phone) {
   return rows[0] || null;
 }
 
+async function findById(customerId) {
+  const { rows } = await query(`SELECT * FROM customers WHERE id = $1`, [customerId]);
+  return rows[0] || null;
+}
+
 async function createCustomer({ name, phoneNumber }) {
   const { rows } = await query(
     `INSERT INTO customers (name, phone_number) VALUES ($1, $2) RETURNING *`,
@@ -42,4 +47,4 @@ async function linkMembershipId(customerId, membershipId) {
   return rows[0] || null;
 }
 
-module.exports = { normalizePhone, findByPhone, createCustomer, findByNameOrPhone, linkMembershipId };
+module.exports = { normalizePhone, findByPhone, findById, createCustomer, findByNameOrPhone, linkMembershipId };

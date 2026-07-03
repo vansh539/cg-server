@@ -30,3 +30,14 @@ test('linkMembershipId sets cokarma_membership_id', async () => {
   const updated = await customers.linkMembershipId(created.id, 'CK-1001');
   assert.equal(updated.cokarma_membership_id, 'CK-1001');
 });
+
+test('findById returns the customer by id', async () => {
+  const created = await customers.createCustomer({ name: 'Asha Rao', phoneNumber: '9848358160' });
+  const found = await customers.findById(created.id);
+  assert.equal(found.name, 'Asha Rao');
+});
+
+test('findById returns null for an unknown id', async () => {
+  const found = await customers.findById('00000000-0000-0000-0000-000000000000');
+  assert.equal(found, null);
+});
