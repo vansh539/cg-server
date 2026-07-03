@@ -75,7 +75,14 @@ const setPending = (waNumber, type, data) => {
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
-  restartOnAuthFail: true,
+  // false, not true: whatsapp-web.js's own in-process restart-on-auth-fail
+  // reuses the existing Puppeteer page without fully tearing it down, which
+  // throws "Failed to add page binding ... already exists" on reinit and
+  // crashes anyway. We exit cleanly on disconnect instead (see
+  // client.on('disconnected', ...) below) and let an external supervisor
+  // (PM2, or a manual restart) launch a fresh browser — same philosophy as
+  // the unhandledRejection handler further down.
+  restartOnAuthFail: false,
   puppeteer: {
     executablePath: process.env.CHROME_PATH || (
       process.platform === 'win32'
@@ -184,7 +191,8 @@ client.on('ready', () => {
 });
 
 client.on('disconnected', (reason) => {
-  logger.warn(`[WhatsApp] Disconnected: ${reason} — will auto-reconnect via restartOnAuthFail`);
+  logger.warn(`[WhatsApp] Disconnected: ${reason} — exiting for a clean restart with a fresh browser`);
+  process.exit(1);
 });
 
 client.on('auth_failure', (msg) => {
