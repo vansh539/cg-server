@@ -87,6 +87,32 @@ const setPending = (waNumber, type, data) => {
   pendingConfirmations.set(waNumber, { type, data, expiry: Date.now() + 10 * 60 * 1000 });
 };
 
+const CHROME_EXECUTABLE = process.env.CHROME_PATH || (
+  process.platform === 'win32'
+    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+    : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+);
+
+// Detect the real installed Chrome version so the spoofed user-agent below
+// never goes silently stale. A hardcoded version number (e.g. Chrome/124)
+// drifts further behind with every Chrome auto-update; a UA claiming a
+// browser that old can cause WhatsApp Web to serve an incompatible internal
+// bundle even though the real engine is far newer — confirmed as the cause
+// of a "connects fine but window.Store never gets injected, no messages
+// ever received" failure where the real Chrome was 149 but the UA claimed
+// 124. Falls back to a hardcoded recent version if detection fails.
+function detectChromeVersion() {
+  try {
+    const output = execSync(`"${CHROME_EXECUTABLE}" --version`).toString();
+    const match = output.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)/);
+    return match ? match[0] : '124.0.0.0';
+  } catch (e) {
+    logger.warn('[WhatsApp] Could not detect Chrome version, using fallback UA version', { error: e.message });
+    return '124.0.0.0';
+  }
+}
+const CHROME_VERSION = detectChromeVersion();
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
   // false, not true: whatsapp-web.js's own in-process restart-on-auth-fail
@@ -98,11 +124,7 @@ const client = new Client({
   // the unhandledRejection handler further down.
   restartOnAuthFail: false,
   puppeteer: {
-    executablePath: process.env.CHROME_PATH || (
-      process.platform === 'win32'
-        ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-        : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-    ),
+    executablePath: CHROME_EXECUTABLE,
     headless: true,
     timeout: 60000,
     args: [
@@ -114,7 +136,7 @@ const client = new Client({
       '--disable-renderer-backgrounding',
       '--disable-ipc-flooding-protection',
       '--disable-hang-monitor',
-      `--user-agent=Mozilla/5.0 (${process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : 'Macintosh; Intel Mac OS X 10_15_7'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+      `--user-agent=Mozilla/5.0 (${process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : 'Macintosh; Intel Mac OS X 10_15_7'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VERSION} Safari/537.36`,
     ],
   },
   webVersionCache: { type: 'local', strict: false },
