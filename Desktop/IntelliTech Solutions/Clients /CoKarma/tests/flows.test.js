@@ -138,3 +138,15 @@ test('extractAmountMatch finds the matching candidate among multiple currency-ad
   assert.equal(result.matched, true);
   assert.equal(result.extractedAmount, 5000);
 });
+
+test('extractAmountMatch does not treat "rs" inside an unrelated word as a currency marker', () => {
+  const result = flows.extractAmountMatch('Paid Rs 4000 successfully\nMembers 5000 today', 5000);
+  assert.equal(result.matched, false);
+  assert.equal(result.extractedAmount, 4000);
+});
+
+test('extractAmountMatch uses the earliest candidate in text order when no candidate matches', () => {
+  const result = flows.extractAmountMatch('5000 INR received, Rs 3000 also seen', 9999);
+  assert.equal(result.matched, false);
+  assert.equal(result.extractedAmount, 5000);
+});

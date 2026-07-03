@@ -54,17 +54,21 @@ function extractAmountMatch(ocrText, claimedAmount) {
   const text = String(ocrText || '');
   const numPattern = '\\d[\\d,]*(?:\\.\\d{1,2})?';
   const toNumber = (s) => parseFloat(s.replace(/,/g, ''));
+  const currencyMarker = '(?:₹|(?<![a-zA-Z])rs\\.?(?![a-zA-Z])|(?<![a-zA-Z])inr(?![a-zA-Z]))';
 
-  const candidates = [];
-  const prefixRe = new RegExp(`(?:₹|rs\\.?|inr)\\s*(${numPattern})`, 'gi');
+  const found = [];
+  const prefixRe = new RegExp(`${currencyMarker}\\s*(${numPattern})`, 'gi');
   let m;
   while ((m = prefixRe.exec(text))) {
-    candidates.push(toNumber(m[1]));
+    found.push({ index: m.index, value: toNumber(m[1]) });
   }
-  const suffixRe = new RegExp(`(${numPattern})\\s*(?:₹|rs\\.?|inr)`, 'gi');
+  const suffixRe = new RegExp(`(${numPattern})\\s*${currencyMarker}`, 'gi');
   while ((m = suffixRe.exec(text))) {
-    candidates.push(toNumber(m[1]));
+    found.push({ index: m.index, value: toNumber(m[1]) });
   }
+
+  found.sort((a, b) => a.index - b.index);
+  const candidates = found.map((f) => f.value);
 
   if (candidates.length === 0) {
     return { extractedAmount: null, matched: null };
