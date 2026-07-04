@@ -1,4 +1,5 @@
 import os
+import threading
 from flask import Flask, request, jsonify
 from paddleocr import PaddleOCR
 
@@ -11,6 +12,12 @@ app = Flask(__name__)
 # side just needs to detect "the server responded at all" as proof of
 # readiness, with no separate loading/ready state to track.
 ocr = PaddleOCR(use_textline_orientation=False, lang='en')
+
+# PaddleOCR's thread-safety across concurrent calls on a single shared
+# model instance is unconfirmed, so we serialize all predict() calls with
+# this lock — even though the HTTP layer below (threaded=True) now accepts
+# and starts handling multiple connections concurrently.
+ocr_lock = threading.Lock()
 
 
 @app.route('/health', methods=['GET'])
@@ -27,7 +34,8 @@ def ocr_endpoint():
     if not os.path.isfile(image_path):
         return jsonify({'error': f'file not found: {image_path}'}), 500
     try:
-        result = ocr.predict(image_path)
+        with ocr_lock:
+            result = ocr.predict(image_path)
         lines = []
         for res in result:
             lines.extend(res.get('rec_texts', []))
@@ -38,4 +46,4 @@ def ocr_endpoint():
 
 if __name__ == '__main__':
     port = int(os.environ.get('OCR_SERVICE_PORT', 5001))
-    app.run(host='127.0.0.1', port=port)
+    app.run(host='127.0.0.1', port=port, threaded=True)
