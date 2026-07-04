@@ -3,7 +3,7 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const cron = require('node-cron');
 const { logger } = require('../utils/logger');
 const { query } = require('../db/db');
@@ -36,6 +36,67 @@ const TEST_MODE_ALLOWED_NUMBERS = (process.env.TEST_MODE_ALLOWED_NUMBERS || '')
   .split(',')
   .map((n) => n.replace(/\D/g, '').slice(-10))
   .filter(Boolean);
+
+// ── OCR Service (Python/PaddleOCR) ────────────────────────────
+// A small local Python worker (ocr-service/) runs PaddleOCR, which reads
+// the ₹ symbol correctly — Tesseract cannot (confirmed live: it always
+// misreads ₹ as a phantom leading digit fused onto the amount, e.g.
+// ₹3,500 → "23,500", regardless of character whitelisting, image
+// upscaling, or Tesseract's own official "best" quality model). Node
+// spawns this worker once at startup and talks to it over localhost
+// HTTP; screenshots skip OCR entirely if it never comes up, same
+// graceful-degradation philosophy as any other OCR failure.
+const OCR_SERVICE_PORT = process.env.OCR_SERVICE_PORT || 5001;
+const OCR_SERVICE_URL = `http://127.0.0.1:${OCR_SERVICE_PORT}`;
+const OCR_SERVICE_DIR = path.join(__dirname, '..', '..', 'ocr-service');
+const OCR_VENV_PYTHON = process.platform === 'win32'
+  ? path.join(OCR_SERVICE_DIR, 'venv', 'Scripts', 'python.exe')
+  : path.join(OCR_SERVICE_DIR, 'venv', 'bin', 'python');
+const OCR_SERVER_SCRIPT = path.join(OCR_SERVICE_DIR, 'server.py');
+
+let ocrServiceProcess = null;
+
+function startOcrService() {
+  if (!fs.existsSync(OCR_VENV_PYTHON)) {
+    logger.warn('[OCR] venv not found, skipping OCR service startup — see ocr-service/README.md', { expected: OCR_VENV_PYTHON });
+    return;
+  }
+  ocrServiceProcess = spawn(OCR_VENV_PYTHON, [OCR_SERVER_SCRIPT], {
+    env: { ...process.env, OCR_SERVICE_PORT: String(OCR_SERVICE_PORT) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  ocrServiceProcess.stdout.on('data', (d) => logger.info(`[OCR] ${d.toString().trim()}`));
+  ocrServiceProcess.stderr.on('data', (d) => logger.warn(`[OCR] ${d.toString().trim()}`));
+  ocrServiceProcess.on('exit', (code) => {
+    logger.warn('[OCR] Python OCR service exited', { code });
+    ocrServiceProcess = null;
+  });
+}
+
+async function waitForOcrService(timeoutMs = 30000, intervalMs = 500) {
+  if (!ocrServiceProcess) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${OCR_SERVICE_URL}/health`);
+      if (res.ok) {
+        logger.info('[OCR] Python OCR service ready');
+        return;
+      }
+    } catch (e) {
+      // Not up yet — keep polling until the timeout.
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  logger.warn('[OCR] Python OCR service did not become ready in time — screenshots will skip OCR this session');
+}
+
+function stopOcrService() {
+  if (ocrServiceProcess) {
+    ocrServiceProcess.kill();
+    ocrServiceProcess = null;
+  }
+}
 
 // ── Chrome Cleanup ─────────────────────────────────────────────
 // Kills orphaned Chrome and wipes stale Singleton/lock files that make the
@@ -70,7 +131,8 @@ function chromeCleanup() {
 
 if (require.main === module) {
   chromeCleanup();
-  process.on('exit', chromeCleanup);
+  startOcrService();
+  process.on('exit', () => { chromeCleanup(); stopOcrService(); });
   process.on('SIGTERM', () => { logger.info('[WhatsApp] SIGTERM — clean exit'); process.exit(0); });
   process.on('SIGINT', () => { logger.info('[WhatsApp] SIGINT — clean exit'); process.exit(0); });
 }
@@ -497,7 +559,7 @@ if (require.main === module) {
 }
 
 if (require.main === module) {
-  client.initialize();
+  waitForOcrService().then(() => client.initialize());
 }
 
 module.exports = {
