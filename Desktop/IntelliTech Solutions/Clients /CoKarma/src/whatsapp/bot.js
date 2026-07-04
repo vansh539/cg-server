@@ -341,7 +341,10 @@ async function handlePendingReply(msg, waNumber, pending, text) {
     let proofReference = result.proofReference;
     let screenshotPath = null;
     let ocrExtractedAmount = null;
+    let ocrExtractedTxnId = null;
+    let ocrExtractedDate = null;
     let ocrWarning = '';
+    let ocrInfoLine = '';
     if (result.proofType === 'screenshot') {
       const media = await msg.downloadMedia();
       const mimeToExt = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
@@ -356,19 +359,35 @@ async function handlePendingReply(msg, waNumber, pending, text) {
         const ocrResult = flows.extractAmountMatch(ocrText, pending.data.amount);
         ocrExtractedAmount = ocrResult.extractedAmount;
         if (ocrResult.matched === false) {
-          ocrWarning = `\n⚠️ Typed ₹${pending.data.amount} but screenshot appears to show ₹${ocrResult.extractedAmount} — verify carefully.`;
+          ocrWarning += `\n⚠️ Typed ₹${pending.data.amount} but screenshot appears to show ₹${ocrResult.extractedAmount} — verify carefully.`;
+        }
+
+        ocrExtractedTxnId = flows.extractTxnId(ocrText);
+        ocrExtractedDate = flows.extractPaymentDate(ocrText);
+
+        const refParts = [];
+        if (ocrExtractedTxnId) refParts.push(`UPI Ref: ${ocrExtractedTxnId}`);
+        if (ocrExtractedDate) refParts.push(`Date: ${ocrExtractedDate}`);
+        if (refParts.length > 0) {
+          ocrInfoLine = `\n${refParts.join(', ')}`;
+        }
+
+        if (flows.isScreenshotDateStale(ocrExtractedDate, new Date().toISOString())) {
+          ocrWarning += `\n⚠️ Screenshot date (${ocrExtractedDate}) is more than 3 days old — verify carefully.`;
         }
       } catch (e) {
         logger.warn('[WhatsApp] OCR failed, skipping amount check', { error: e.message });
       }
     }
 
-    const { claim, duplicateOf } = await claims.createClaim({
+    const { claim, duplicateOf, duplicateTxnIdOf } = await claims.createClaim({
       customerId: pending.data.customerId,
       amountClaimed: pending.data.amount,
       proofType: result.proofType,
       proofReference,
       ocrExtractedAmount,
+      ocrExtractedTxnId,
+      ocrExtractedDate,
     });
     clearPending(waNumber);
 
@@ -377,8 +396,9 @@ async function handlePendingReply(msg, waNumber, pending, text) {
 
     const customer = await customers.findByPhone(waNumber);
     const dupNote = duplicateOf ? `\n⚠️ Same reference already claimed on claim #${duplicateOf.id.slice(0, 8)} (status: ${duplicateOf.status}).` : '';
+    const dupTxnNote = duplicateTxnIdOf ? `\n⚠️ Same UPI transaction ID already claimed on claim #${duplicateTxnIdOf.id.slice(0, 8)} (status: ${duplicateTxnIdOf.status}).` : '';
     await notifyAdmins(
-      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}${ocrWarning}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`,
+      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}${dupTxnNote}${ocrInfoLine}${ocrWarning}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`,
       screenshotPath
     );
     return;
