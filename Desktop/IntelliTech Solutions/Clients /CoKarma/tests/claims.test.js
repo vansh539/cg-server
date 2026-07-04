@@ -119,3 +119,76 @@ test('createClaim leaves ocr_extracted_amount null when omitted', async () => {
   const { claim } = await claims.createClaim({ customerId: customer.id, amountClaimed: 5000, proofType: 'cash', proofReference: null });
   assert.equal(claim.ocr_extracted_amount, null);
 });
+
+test('findDuplicateTxnId returns null when no other claim has that transaction ID', async () => {
+  const result = await claims.findDuplicateTxnId('002926693520');
+  assert.equal(result, null);
+});
+
+test('findDuplicateTxnId finds a non-rejected claim with the same transaction ID', async () => {
+  const customer = await makeCustomer();
+  const { claim } = await claims.createClaim({
+    customerId: customer.id, amountClaimed: 4000, proofType: 'screenshot', proofReference: 'shot.jpg',
+    ocrExtractedTxnId: '002926693520',
+  });
+
+  const duplicate = await claims.findDuplicateTxnId('002926693520');
+  assert.equal(duplicate.id, claim.id);
+});
+
+test('findDuplicateTxnId excludes rejected claims', async () => {
+  const customer = await makeCustomer();
+  const { claim } = await claims.createClaim({
+    customerId: customer.id, amountClaimed: 4000, proofType: 'screenshot', proofReference: 'shot.jpg',
+    ocrExtractedTxnId: '002926693520',
+  });
+  await claims.rejectClaim(claim.id, '9999900000', 'wrong amount');
+
+  const duplicate = await claims.findDuplicateTxnId('002926693520');
+  assert.equal(duplicate, null);
+});
+
+test('createClaim stores ocrExtractedTxnId and ocrExtractedDate when provided', async () => {
+  const customer = await makeCustomer();
+  const { claim } = await claims.createClaim({
+    customerId: customer.id, amountClaimed: 4000, proofType: 'screenshot', proofReference: 'shot.jpg',
+    ocrExtractedTxnId: '002926693520', ocrExtractedDate: '2026-06-19',
+  });
+  assert.equal(claim.ocr_extracted_txn_id, '002926693520');
+  // pg returns DATE columns as a JS Date at local midnight (not UTC midnight),
+  // so .toISOString() is timezone-unsafe here (shifts a day in UTC+ zones).
+  // Compare local date components instead.
+  const d = claim.ocr_extracted_date;
+  const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  assert.equal(localDate, '2026-06-19');
+});
+
+test('createClaim leaves ocr_extracted_txn_id and ocr_extracted_date null when omitted', async () => {
+  const customer = await makeCustomer();
+  const { claim } = await claims.createClaim({ customerId: customer.id, amountClaimed: 4000, proofType: 'cash', proofReference: null });
+  assert.equal(claim.ocr_extracted_txn_id, null);
+  assert.equal(claim.ocr_extracted_date, null);
+});
+
+test('createClaim returns duplicateTxnIdOf when the transaction ID was already claimed', async () => {
+  const customer = await makeCustomer();
+  await claims.createClaim({
+    customerId: customer.id, amountClaimed: 4000, proofType: 'screenshot', proofReference: 'shot1.jpg',
+    ocrExtractedTxnId: '002926693520',
+  });
+
+  const other = await makeCustomer('9111111111');
+  const { duplicateTxnIdOf } = await claims.createClaim({
+    customerId: other.id, amountClaimed: 4000, proofType: 'screenshot', proofReference: 'shot2.jpg',
+    ocrExtractedTxnId: '002926693520',
+  });
+
+  assert.ok(duplicateTxnIdOf);
+  assert.equal(duplicateTxnIdOf.ocr_extracted_txn_id, '002926693520');
+});
+
+test('createClaim returns duplicateTxnIdOf as null when no transaction ID was extracted', async () => {
+  const customer = await makeCustomer();
+  const { duplicateTxnIdOf } = await claims.createClaim({ customerId: customer.id, amountClaimed: 4000, proofType: 'cash', proofReference: null });
+  assert.equal(duplicateTxnIdOf, null);
+});

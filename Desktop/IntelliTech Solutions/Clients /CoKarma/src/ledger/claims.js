@@ -9,16 +9,26 @@ async function findDuplicateUtr(proofReference) {
   return rows[0] || null;
 }
 
-async function createClaim({ customerId, amountClaimed, proofType, proofReference, ocrExtractedAmount }) {
+async function findDuplicateTxnId(txnId) {
+  if (!txnId) return null;
+  const { rows } = await query(
+    `SELECT * FROM payment_claims WHERE ocr_extracted_txn_id = $1 AND status != 'rejected'`,
+    [txnId]
+  );
+  return rows[0] || null;
+}
+
+async function createClaim({ customerId, amountClaimed, proofType, proofReference, ocrExtractedAmount, ocrExtractedTxnId, ocrExtractedDate }) {
   const duplicate = proofType === 'utr_text' ? await findDuplicateUtr(proofReference) : null;
+  const duplicateTxnId = ocrExtractedTxnId ? await findDuplicateTxnId(ocrExtractedTxnId) : null;
 
   const { rows } = await query(
-    `INSERT INTO payment_claims (customer_id, amount_claimed, proof_type, proof_reference, ocr_extracted_amount)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [customerId, amountClaimed, proofType, proofReference || null, ocrExtractedAmount ?? null]
+    `INSERT INTO payment_claims (customer_id, amount_claimed, proof_type, proof_reference, ocr_extracted_amount, ocr_extracted_txn_id, ocr_extracted_date)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [customerId, amountClaimed, proofType, proofReference || null, ocrExtractedAmount ?? null, ocrExtractedTxnId ?? null, ocrExtractedDate ?? null]
   );
 
-  return { claim: rows[0], duplicateOf: duplicate };
+  return { claim: rows[0], duplicateOf: duplicate, duplicateTxnIdOf: duplicateTxnId };
 }
 
 async function findClaimByIdPrefix(prefix) {
@@ -75,6 +85,6 @@ async function listStaleClaims(hours) {
 }
 
 module.exports = {
-  createClaim, findDuplicateUtr, findClaimByIdPrefix,
+  createClaim, findDuplicateUtr, findDuplicateTxnId, findClaimByIdPrefix,
   confirmClaim, rejectClaim, listPendingClaims, listStaleClaims,
 };
