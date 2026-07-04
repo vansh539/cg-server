@@ -202,6 +202,10 @@ test('extractTxnId finds the ID in a full real screenshot OCR dump', () => {
   assert.equal(flows.extractTxnId(ocrText), '002926693520');
 });
 
+test('extractTxnId does not treat "id" inside an unrelated word as a label', () => {
+  assert.equal(flows.extractTxnId('You paid 123456789012 successfully'), null);
+});
+
 test('extractPaymentDate finds a DD Mon YYYY date with a time suffix', () => {
   assert.equal(flows.extractPaymentDate('19 Jun 2026, 11:07 PM'), '2026-06-19');
 });
@@ -221,4 +225,8 @@ test('extractPaymentDate returns null for an unrecognizable month name', () => {
 test('extractPaymentDate finds the date in a full real screenshot OCR dump', () => {
   const ocrText = 'Paid securely on\nn\' navi =r\nGet up to @1,000 on every payment | @100 = 1\nPayment successful\nto PREETI AGARWAL\n& preetiagrwal1982@okhdfcbank\n4,000\nPaid via Navi UPI\n19 Jun 2026, 11:07 PM\nfrom Mr YAPRALA SHIVA SHANKAR\n% CITY UNION BANK LTD - 3743\nUPI txn ID : 002926693520';
   assert.equal(flows.extractPaymentDate(ocrText), '2026-06-19');
+});
+
+test('extractPaymentDate rejects a calendar-impossible day-month combination', () => {
+  assert.equal(flows.extractPaymentDate('31 Apr 2026'), null);
 });

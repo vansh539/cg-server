@@ -122,8 +122,8 @@ function extractAmountMatch(ocrText, claimedAmount) {
 function extractTxnId(ocrText) {
   const text = String(ocrText || '');
   const patterns = [
-    /(?:upi\s*)?(?:txn|transaction)\s*id\s*[:.]?\s*(\d{6,20})/i,
-    /(?:upi\s*)?ref(?:erence)?\.?\s*(?:no\.?|number)?\s*[:.]?\s*(\d{6,20})/i,
+    /(?:upi\s*)?(?:txn|transaction)\s*id\b\s*[:.]?\s*(\d{6,20})/i,
+    /(?:upi\s*)?ref(?:erence)?\b\.?\s*(?:no\.?|number)?\s*[:.]?\s*(\d{6,20})/i,
   ];
   for (const re of patterns) {
     const m = text.match(re);
@@ -146,6 +146,11 @@ function extractPaymentDate(ocrText) {
   const month = MONTH_INDEX[m[2].slice(0, 3).toLowerCase()];
   const year = parseInt(m[3], 10);
   if (!month || day < 1 || day > 31) return null;
+
+  const candidate = new Date(year, month - 1, day);
+  if (candidate.getFullYear() !== year || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) {
+    return null;
+  }
 
   const mm = String(month).padStart(2, '0');
   const dd = String(day).padStart(2, '0');
