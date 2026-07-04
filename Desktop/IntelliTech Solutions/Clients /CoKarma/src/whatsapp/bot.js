@@ -93,7 +93,12 @@ async function waitForOcrService(timeoutMs = 30000, intervalMs = 500) {
 
 function stopOcrService() {
   if (ocrServiceProcess) {
-    ocrServiceProcess.kill();
+    const proc = ocrServiceProcess;
+    proc.kill('SIGTERM');
+    const forceKillTimer = setTimeout(() => {
+      try { proc.kill('SIGKILL'); } catch (e) { /* already dead */ }
+    }, 3000);
+    proc.once('exit', () => clearTimeout(forceKillTimer));
     ocrServiceProcess = null;
   }
 }
@@ -559,7 +564,9 @@ if (require.main === module) {
 }
 
 if (require.main === module) {
-  waitForOcrService().then(() => client.initialize());
+  waitForOcrService()
+    .catch((e) => logger.error('[OCR] Unexpected error waiting for OCR service', { error: e.message }))
+    .then(() => client.initialize());
 }
 
 module.exports = {
