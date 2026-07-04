@@ -92,14 +92,23 @@ async function waitForOcrService(timeoutMs = 30000, intervalMs = 500) {
 }
 
 function stopOcrService() {
-  if (ocrServiceProcess) {
+  return new Promise((resolve) => {
+    if (!ocrServiceProcess) { resolve(); return; }
     const proc = ocrServiceProcess;
-    proc.kill('SIGTERM');
     const forceKillTimer = setTimeout(() => {
       try { proc.kill('SIGKILL'); } catch (e) { /* already dead */ }
     }, 3000);
-    proc.once('exit', () => clearTimeout(forceKillTimer));
-    ocrServiceProcess = null;
+    proc.once('exit', () => {
+      clearTimeout(forceKillTimer);
+      resolve();
+    });
+    proc.kill('SIGTERM');
+  });
+}
+
+function stopOcrServiceSync() {
+  if (ocrServiceProcess) {
+    try { ocrServiceProcess.kill('SIGTERM'); } catch (e) { /* already dead */ }
   }
 }
 
@@ -137,9 +146,9 @@ function chromeCleanup() {
 if (require.main === module) {
   chromeCleanup();
   startOcrService();
-  process.on('exit', () => { chromeCleanup(); stopOcrService(); });
-  process.on('SIGTERM', () => { logger.info('[WhatsApp] SIGTERM — clean exit'); process.exit(0); });
-  process.on('SIGINT', () => { logger.info('[WhatsApp] SIGINT — clean exit'); process.exit(0); });
+  process.on('exit', () => { chromeCleanup(); stopOcrServiceSync(); });
+  process.on('SIGTERM', () => { logger.info('[WhatsApp] SIGTERM — clean exit'); stopOcrService().then(() => process.exit(0)); });
+  process.on('SIGINT', () => { logger.info('[WhatsApp] SIGINT — clean exit'); stopOcrService().then(() => process.exit(0)); });
 }
 
 const startupWatchdog = setTimeout(() => {
@@ -194,6 +203,16 @@ const client = new Client({
     executablePath: CHROME_EXECUTABLE,
     headless: true,
     timeout: 60000,
+    // Puppeteer installs its own SIGINT/SIGTERM/SIGHUP handlers by default
+    // that call process.exit() directly and synchronously — confirmed live
+    // that this races ahead of (and preempts) our own SIGINT/SIGTERM
+    // handlers' async OCR-worker shutdown below, aborting the SIGKILL
+    // escalation before it can fire and leaving the OCR child orphaned.
+    // Disabling Puppeteer's handlers here means our own handlers are the
+    // only thing driving process exit.
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
     args: [
       '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
       '--no-first-run', '--no-default-browser-check', '--disable-gpu',
