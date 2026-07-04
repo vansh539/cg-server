@@ -157,7 +157,17 @@ function extractPaymentDate(ocrText) {
   return `${year}-${mm}-${dd}`;
 }
 
+function isScreenshotDateStale(extractedDateIso, referenceIso, thresholdDays = 3) {
+  if (!extractedDateIso) return false;
+  const extracted = new Date(`${extractedDateIso}T00:00:00Z`);
+  const reference = new Date(referenceIso);
+  if (Number.isNaN(extracted.getTime()) || Number.isNaN(reference.getTime())) return false;
+
+  const diffDays = (reference.getTime() - extracted.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays > thresholdDays;
+}
+
 module.exports = {
   handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand,
-  toWhatsAppChatId, extractAmountMatch, extractTxnId, extractPaymentDate,
+  toWhatsAppChatId, extractAmountMatch, extractTxnId, extractPaymentDate, isScreenshotDateStale,
 };

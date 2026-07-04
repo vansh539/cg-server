@@ -230,3 +230,23 @@ test('extractPaymentDate finds the date in a full real screenshot OCR dump', () 
 test('extractPaymentDate rejects a calendar-impossible day-month combination', () => {
   assert.equal(flows.extractPaymentDate('31 Apr 2026'), null);
 });
+
+test('isScreenshotDateStale returns false within the threshold', () => {
+  assert.equal(flows.isScreenshotDateStale('2026-07-01', '2026-07-02T10:00:00Z'), false);
+});
+
+test('isScreenshotDateStale returns true past the threshold', () => {
+  assert.equal(flows.isScreenshotDateStale('2026-06-01', '2026-07-04T10:00:00Z'), true);
+});
+
+test('isScreenshotDateStale returns false exactly at the threshold boundary', () => {
+  assert.equal(flows.isScreenshotDateStale('2026-07-01', '2026-07-04T00:00:00Z'), false);
+});
+
+test('isScreenshotDateStale returns false when no date was extracted', () => {
+  assert.equal(flows.isScreenshotDateStale(null, '2026-07-04T10:00:00Z'), false);
+});
+
+test('isScreenshotDateStale respects a custom threshold', () => {
+  assert.equal(flows.isScreenshotDateStale('2026-07-01', '2026-07-03T10:00:00Z', 1), true);
+});
