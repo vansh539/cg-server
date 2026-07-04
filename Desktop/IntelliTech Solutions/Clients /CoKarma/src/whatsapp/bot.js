@@ -150,6 +150,7 @@ if (require.main === module) {
   process.on('SIGTERM', () => { logger.info('[WhatsApp] SIGTERM — clean exit'); stopOcrService().then(() => process.exit(0)); });
   process.on('SIGINT', () => { logger.info('[WhatsApp] SIGINT — clean exit'); stopOcrService().then(() => process.exit(0)); });
   process.on('SIGHUP', () => { logger.info('[WhatsApp] SIGHUP — clean exit'); stopOcrService().then(() => process.exit(0)); });
+  process.on('SIGQUIT', () => { logger.info('[WhatsApp] SIGQUIT — clean exit'); stopOcrService().then(() => process.exit(0)); });
 }
 
 const startupWatchdog = setTimeout(() => {

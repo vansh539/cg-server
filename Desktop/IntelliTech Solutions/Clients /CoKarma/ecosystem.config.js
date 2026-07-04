@@ -15,6 +15,7 @@ module.exports = {
       restart_delay: 30000,
       max_restarts: 5,
       min_uptime: '30s',
+      kill_timeout: 5000,
     },
   ],
 };
