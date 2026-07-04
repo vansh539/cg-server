@@ -454,7 +454,8 @@ async function handlePendingReply(msg, waNumber, pending, text) {
           signal: AbortSignal.timeout(10000),
         });
         if (!ocrResponse.ok) {
-          throw new Error(`OCR service returned ${ocrResponse.status}`);
+          const errorBody = await ocrResponse.json().catch(() => ({}));
+          throw new Error(`OCR service returned ${ocrResponse.status}: ${errorBody.error || 'unknown error'}`);
         }
         const { text: ocrText } = await ocrResponse.json();
         const ocrResult = flows.extractAmountMatch(ocrText, pending.data.amount);
