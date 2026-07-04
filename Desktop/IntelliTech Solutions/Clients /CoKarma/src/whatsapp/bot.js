@@ -153,7 +153,7 @@ if (require.main === module) {
 
 const startupWatchdog = setTimeout(() => {
   logger.error('[WhatsApp] Startup watchdog: not ready after 3 min — exiting for PM2 restart');
-  process.exit(1);
+  stopOcrService().then(() => process.exit(1));
 }, 3 * 60 * 1000);
 
 // ── Bot State ──────────────────────────────────────────────────
@@ -253,7 +253,7 @@ async function safeSend(msg, text) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       logger.error('[WhatsApp] safeSend timeout — exiting for PM2 restart');
-      process.exit(1);
+      stopOcrService().then(() => process.exit(1));
     }, 60000);
     client.sendMessage(msg.from, text)
       .then((r) => { clearTimeout(timer); resolve(r); })
@@ -314,7 +314,7 @@ client.on('ready', () => {
 
 client.on('disconnected', (reason) => {
   logger.warn(`[WhatsApp] Disconnected: ${reason} — exiting for a clean restart with a fresh browser`);
-  process.exit(1);
+  stopOcrService().then(() => process.exit(1));
 });
 
 client.on('auth_failure', (msg) => {
@@ -323,7 +323,7 @@ client.on('auth_failure', (msg) => {
 
 process.on('unhandledRejection', (reason) => {
   logger.error('[WhatsApp] Unhandled rejection — exiting for PM2 restart:', { error: reason?.message || String(reason) });
-  process.exit(1);
+  stopOcrService().then(() => process.exit(1));
 });
 
 client.on('message', async (msg) => {
