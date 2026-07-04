@@ -12,7 +12,6 @@ const claims = require('../ledger/claims');
 const balances = require('../ledger/balances');
 const duesImport = require('../imports/duesImport');
 const flows = require('./flows');
-const Tesseract = require('tesseract.js');
 
 const SESSION_DIR = process.env.WA_SESSION_PATH || './wa-sessions';
 const PROOFS_DIR = process.env.PROOFS_PATH || './proofs';
@@ -448,7 +447,16 @@ async function handlePendingReply(msg, waNumber, pending, text) {
       proofReference = fileName;
 
       try {
-        const { data: { text: ocrText } } = await Tesseract.recognize(screenshotPath, 'eng');
+        const ocrResponse = await fetch(`${OCR_SERVICE_URL}/ocr`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imagePath: path.resolve(screenshotPath) }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!ocrResponse.ok) {
+          throw new Error(`OCR service returned ${ocrResponse.status}`);
+        }
+        const { text: ocrText } = await ocrResponse.json();
         const ocrResult = flows.extractAmountMatch(ocrText, pending.data.amount);
         ocrExtractedAmount = ocrResult.extractedAmount;
         if (ocrResult.matched === false) {
@@ -469,7 +477,7 @@ async function handlePendingReply(msg, waNumber, pending, text) {
           ocrWarning += `\n⚠️ Screenshot date (${ocrExtractedDate}) is more than 3 days old — verify carefully.`;
         }
       } catch (e) {
-        logger.warn('[WhatsApp] OCR failed, skipping amount check', { error: e.message });
+        logger.warn('[WhatsApp] OCR failed, skipping OCR checks', { error: e.message });
       }
     }
 
