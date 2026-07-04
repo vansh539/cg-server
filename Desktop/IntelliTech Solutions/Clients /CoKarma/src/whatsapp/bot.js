@@ -149,6 +149,7 @@ if (require.main === module) {
   process.on('exit', () => { chromeCleanup(); stopOcrServiceSync(); });
   process.on('SIGTERM', () => { logger.info('[WhatsApp] SIGTERM — clean exit'); stopOcrService().then(() => process.exit(0)); });
   process.on('SIGINT', () => { logger.info('[WhatsApp] SIGINT — clean exit'); stopOcrService().then(() => process.exit(0)); });
+  process.on('SIGHUP', () => { logger.info('[WhatsApp] SIGHUP — clean exit'); stopOcrService().then(() => process.exit(0)); });
 }
 
 const startupWatchdog = setTimeout(() => {
@@ -323,6 +324,11 @@ client.on('auth_failure', (msg) => {
 
 process.on('unhandledRejection', (reason) => {
   logger.error('[WhatsApp] Unhandled rejection — exiting for PM2 restart:', { error: reason?.message || String(reason) });
+  stopOcrService().then(() => process.exit(1));
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('[WhatsApp] Uncaught exception — exiting for PM2 restart:', { error: err?.message || String(err) });
   stopOcrService().then(() => process.exit(1));
 });
 
