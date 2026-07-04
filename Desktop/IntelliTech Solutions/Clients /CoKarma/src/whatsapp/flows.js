@@ -119,4 +119,40 @@ function extractAmountMatch(ocrText, claimedAmount) {
   return { extractedAmount: candidates[0], matched: false };
 }
 
-module.exports = { handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand, toWhatsAppChatId, extractAmountMatch };
+function extractTxnId(ocrText) {
+  const text = String(ocrText || '');
+  const patterns = [
+    /(?:upi\s*)?(?:txn|transaction)\s*id\s*[:.]?\s*(\d{6,20})/i,
+    /(?:upi\s*)?ref(?:erence)?\.?\s*(?:no\.?|number)?\s*[:.]?\s*(\d{6,20})/i,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+const MONTH_INDEX = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+function extractPaymentDate(ocrText) {
+  const text = String(ocrText || '');
+  const m = text.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})\b/);
+  if (!m) return null;
+
+  const day = parseInt(m[1], 10);
+  const month = MONTH_INDEX[m[2].slice(0, 3).toLowerCase()];
+  const year = parseInt(m[3], 10);
+  if (!month || day < 1 || day > 31) return null;
+
+  const mm = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${year}-${mm}-${dd}`;
+}
+
+module.exports = {
+  handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand,
+  toWhatsAppChatId, extractAmountMatch, extractTxnId, extractPaymentDate,
+};

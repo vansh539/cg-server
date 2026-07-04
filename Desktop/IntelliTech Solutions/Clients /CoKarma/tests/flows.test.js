@@ -180,3 +180,45 @@ test('extractAmountMatch does not invent a stripped candidate from a cleanly-rea
   assert.equal(result.matched, false);
   assert.equal(result.extractedAmount, 4000);
 });
+
+test('extractTxnId finds a UPI txn ID label', () => {
+  assert.equal(flows.extractTxnId('UPI txn ID : 002926693520'), '002926693520');
+});
+
+test('extractTxnId finds a UPI Ref No label', () => {
+  assert.equal(flows.extractTxnId('UPI Ref No: 123456789012'), '123456789012');
+});
+
+test('extractTxnId finds a bare Transaction ID label', () => {
+  assert.equal(flows.extractTxnId('Transaction ID: 987654321098'), '987654321098');
+});
+
+test('extractTxnId returns null when no recognizable label is present', () => {
+  assert.equal(flows.extractTxnId('Payment successful\nto PREETI AGARWAL'), null);
+});
+
+test('extractTxnId finds the ID in a full real screenshot OCR dump', () => {
+  const ocrText = 'Paid securely on\nn\' navi =r\nGet up to @1,000 on every payment | @100 = 1\nPayment successful\nto PREETI AGARWAL\n& preetiagrwal1982@okhdfcbank\n4,000\nPaid via Navi UPI\n19 Jun 2026, 11:07 PM\nfrom Mr YAPRALA SHIVA SHANKAR\n% CITY UNION BANK LTD - 3743\nUPI txn ID : 002926693520';
+  assert.equal(flows.extractTxnId(ocrText), '002926693520');
+});
+
+test('extractPaymentDate finds a DD Mon YYYY date with a time suffix', () => {
+  assert.equal(flows.extractPaymentDate('19 Jun 2026, 11:07 PM'), '2026-06-19');
+});
+
+test('extractPaymentDate finds a full month name', () => {
+  assert.equal(flows.extractPaymentDate('Payment successful\n15 December 2026'), '2026-12-15');
+});
+
+test('extractPaymentDate returns null when no date is present', () => {
+  assert.equal(flows.extractPaymentDate('No date here at all'), null);
+});
+
+test('extractPaymentDate returns null for an unrecognizable month name', () => {
+  assert.equal(flows.extractPaymentDate('19 Zzz 2026'), null);
+});
+
+test('extractPaymentDate finds the date in a full real screenshot OCR dump', () => {
+  const ocrText = 'Paid securely on\nn\' navi =r\nGet up to @1,000 on every payment | @100 = 1\nPayment successful\nto PREETI AGARWAL\n& preetiagrwal1982@okhdfcbank\n4,000\nPaid via Navi UPI\n19 Jun 2026, 11:07 PM\nfrom Mr YAPRALA SHIVA SHANKAR\n% CITY UNION BANK LTD - 3743\nUPI txn ID : 002926693520';
+  assert.equal(flows.extractPaymentDate(ocrText), '2026-06-19');
+});
