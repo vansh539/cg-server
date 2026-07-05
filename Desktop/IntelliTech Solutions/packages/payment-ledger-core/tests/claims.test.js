@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resetDb, pool } = require('./helpers/db');
-const customers = require('../src/ledger/customers');
-const claims = require('../src/ledger/claims');
-const { query } = require('../src/db/db');
+const customers = require('../ledger/customers');
+const claims = require('../ledger/claims');
+const { query } = require('../db');
 
 test.beforeEach(resetDb);
 test.after(async () => { await pool.end(); });

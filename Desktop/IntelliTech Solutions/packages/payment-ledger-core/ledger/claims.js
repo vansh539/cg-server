@@ -1,4 +1,4 @@
-const { query } = require('../db/db');
+const { query } = require('../db');
 
 async function findDuplicateUtr(proofReference) {
   if (!proofReference) return null;

@@ -1,5 +1,5 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env.test') });
-const { pool } = require('../../src/db/db');
+const { pool } = require('../../db');
 
 async function resetDb() {
   await pool.query(
