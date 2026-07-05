@@ -1,10 +1,9 @@
 const { Pool } = require('pg');
-const { logger } = require('../utils/logger');
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT) || 5432,
-  database: process.env.DB_NAME || 'cokarma_bridge',
+  database: process.env.DB_NAME,
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD,
   max: 20,
@@ -14,20 +13,19 @@ const pool = new Pool({
 });
 
 pool.on('error', (err) => {
-  logger.error('Unexpected DB pool error', { error: err.message });
+  console.error('[payment-ledger-core] Unexpected DB pool error:', err.message);
 });
 
 const query = async (text, params) => {
   const start = Date.now();
   try {
     const result = await pool.query(text, params);
-    const duration = Date.now() - start;
     if (process.env.NODE_ENV !== 'production') {
-      logger.debug('Query executed', { duration, rows: result.rowCount });
+      console.debug(`[payment-ledger-core] Query executed in ${Date.now() - start}ms, ${result.rowCount} rows`);
     }
     return result;
   } catch (err) {
-    logger.error('DB query error', { error: err.message, query: text });
+    console.error('[payment-ledger-core] DB query error:', err.message, '| query:', text);
     throw err;
   }
 };
@@ -35,10 +33,10 @@ const query = async (text, params) => {
 const testConnection = async () => {
   try {
     const result = await pool.query('SELECT NOW(), current_database()');
-    logger.info(`Database connected: ${result.rows[0].current_database}`);
+    console.log(`[payment-ledger-core] Database connected: ${result.rows[0].current_database}`);
     return true;
   } catch (err) {
-    logger.error('Database connection failed', { error: err.message });
+    console.error('[payment-ledger-core] Database connection failed:', err.message);
     return false;
   }
 };
