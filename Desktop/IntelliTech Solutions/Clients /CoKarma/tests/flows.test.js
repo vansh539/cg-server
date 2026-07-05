@@ -79,8 +79,26 @@ test('parseAdminCommand parses BALANCE with a free-text query', () => {
 });
 
 test('parseAdminCommand parses IMPORT and unknown text', () => {
-  assert.deepEqual(flows.parseAdminCommand('import'), { command: 'IMPORT' });
+  assert.deepEqual(flows.parseAdminCommand('import'), { command: 'IMPORT', force: false });
   assert.deepEqual(flows.parseAdminCommand('hello there'), { command: 'UNKNOWN' });
+});
+
+test('parseAdminCommand parses plain IMPORT with force false', () => {
+  const result = flows.parseAdminCommand('IMPORT');
+  assert.equal(result.command, 'IMPORT');
+  assert.equal(result.force, false);
+});
+
+test('parseAdminCommand parses IMPORT FORCE with force true', () => {
+  const result = flows.parseAdminCommand('IMPORT FORCE');
+  assert.equal(result.command, 'IMPORT');
+  assert.equal(result.force, true);
+});
+
+test('parseAdminCommand parses IMPORT FORCE case-insensitively', () => {
+  const result = flows.parseAdminCommand('import force');
+  assert.equal(result.command, 'IMPORT');
+  assert.equal(result.force, true);
 });
 
 test('toWhatsAppChatId prepends 91 to a bare 10-digit number', () => {

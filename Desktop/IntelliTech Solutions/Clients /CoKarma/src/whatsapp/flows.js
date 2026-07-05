@@ -39,7 +39,8 @@ function parseAdminCommand(text) {
   if (/^pending links$/i.test(trimmed)) return { command: 'PENDING_LINKS' };
   if (/^pending$/i.test(trimmed)) return { command: 'PENDING' };
   if ((m = trimmed.match(/^balance\s+(.+)$/i))) return { command: 'BALANCE', query: m[1].trim() };
-  if (/^import$/i.test(trimmed)) return { command: 'IMPORT' };
+  if (/^import\s+force$/i.test(trimmed)) return { command: 'IMPORT', force: true };
+  if (/^import$/i.test(trimmed)) return { command: 'IMPORT', force: false };
 
   return { command: 'UNKNOWN' };
 }
