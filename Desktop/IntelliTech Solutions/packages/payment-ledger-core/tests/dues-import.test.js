@@ -123,3 +123,45 @@ test('importDuesFromFile rejects a file over the row cap', async () => {
   );
   fs.unlinkSync(tmpPath);
 });
+
+test('importDuesFromFile flags a repeat import of unchanged file content instead of re-importing', async () => {
+  const filePath = path.join(__dirname, 'fixtures', 'dues-sample.csv');
+  const first = await duesImport.importDuesFromFile(filePath, '9999900000');
+  assert.equal(first.alreadyImported, undefined);
+
+  const second = await duesImport.importDuesFromFile(filePath, '9999900000');
+  assert.equal(second.alreadyImported, true);
+  assert.equal(second.previousImport.row_count, first.totalRows);
+
+  const asha = await customers.findByPhone('9848358160');
+  const balance = await require('../ledger/balances').getBalanceByCustomerId(asha.id);
+  assert.equal(Number(balance.total_due), 5000); // not double-counted to 10000
+});
+
+test('importDuesFromFile with force:true re-imports unchanged content anyway', async () => {
+  const filePath = path.join(__dirname, 'fixtures', 'dues-sample.csv');
+  await duesImport.importDuesFromFile(filePath, '9999900000');
+  const forced = await duesImport.importDuesFromFile(filePath, '9999900000', { force: true });
+  assert.equal(forced.alreadyImported, undefined);
+
+  const asha = await customers.findByPhone('9848358160');
+  const balance = await require('../ledger/balances').getBalanceByCustomerId(asha.id);
+  assert.equal(Number(balance.total_due), 10000); // now double-counted intentionally
+});
+
+test('importDuesFromFile does not flag a different file as a repeat', async () => {
+  const csvA = 'name,phone_number,membership_id,description,amount_due,due_date\nAsha Rao,9848358160,CK-1001,July dues,5000,2026-07-05\n';
+  const csvB = 'name,phone_number,membership_id,description,amount_due,due_date\nAsha Rao,9848358160,CK-1001,August dues,5000,2026-08-05\n';
+  const pathA = path.join(__dirname, 'fixtures', 'tmp-a.csv');
+  const pathB = path.join(__dirname, 'fixtures', 'tmp-b.csv');
+  fs.writeFileSync(pathA, csvA);
+  fs.writeFileSync(pathB, csvB);
+
+  const first = await duesImport.importDuesFromFile(pathA, '9999900000');
+  const second = await duesImport.importDuesFromFile(pathB, '9999900000');
+  assert.equal(first.alreadyImported, undefined);
+  assert.equal(second.alreadyImported, undefined);
+
+  fs.unlinkSync(pathA);
+  fs.unlinkSync(pathB);
+});

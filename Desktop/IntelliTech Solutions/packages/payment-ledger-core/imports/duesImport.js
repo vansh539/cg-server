@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const { parse } = require('csv-parse/sync');
 const ExcelJS = require('exceljs');
 const { query } = require('../db');
@@ -70,8 +71,20 @@ async function parseDuesXlsx(buffer) {
   return records.map(normalizeDuesRow);
 }
 
-async function importDuesFromFile(filePath, adminPhone) {
+async function importDuesFromFile(filePath, adminPhone, { force = false } = {}) {
   const buffer = fs.readFileSync(filePath);
+  const contentHash = crypto.createHash('sha256').update(buffer).digest('hex');
+
+  if (!force) {
+    const { rows: existing } = await query(
+      `SELECT filename, imported_at, row_count FROM dues_imports WHERE content_hash = $1 ORDER BY imported_at DESC LIMIT 1`,
+      [contentHash]
+    );
+    if (existing.length > 0) {
+      return { alreadyImported: true, previousImport: existing[0] };
+    }
+  }
+
   const isXlsx = filePath.toLowerCase().endsWith('.xlsx');
   const rows = isXlsx ? await parseDuesXlsx(buffer) : parseDuesCsv(buffer.toString('utf8'));
 
@@ -80,8 +93,8 @@ async function importDuesFromFile(filePath, adminPhone) {
   }
 
   const { rows: importRows } = await query(
-    `INSERT INTO dues_imports (filename, imported_by, row_count) VALUES ($1, $2, $3) RETURNING id`,
-    [filePath, adminPhone, rows.length]
+    `INSERT INTO dues_imports (filename, imported_by, row_count, content_hash) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [filePath, adminPhone, rows.length, contentHash]
   );
   const importBatchId = importRows[0].id;
 
