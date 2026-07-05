@@ -522,8 +522,15 @@ async function handleAdminCommand(msg, waNumber, parsed) {
         const customer = await customers.findById(updated.customer_id);
         if (customer) {
           const chatId = flows.toWhatsAppChatId(customer.phone_number);
+          let balanceLine = '';
           try {
-            await client.sendMessage(chatId, `✅ Your payment of ₹${updated.amount_claimed} has been confirmed. Thank you!`);
+            const balance = await balances.getBalanceByCustomerId(customer.id);
+            if (balance) balanceLine = `\n${flows.formatBalanceLine(balance.balance)}`;
+          } catch (e) {
+            logger.error('[WhatsApp] Failed to fetch balance for confirmation message', { customer: customer.phone_number, error: e.message });
+          }
+          try {
+            await client.sendMessage(chatId, `✅ Your payment of ₹${updated.amount_claimed} has been confirmed. Thank you!${balanceLine}`);
           } catch (e) {
             logger.error('[WhatsApp] Failed to notify customer of confirmation', { customer: customer.phone_number, error: e.message });
           }
