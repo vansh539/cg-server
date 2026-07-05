@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { pool } = require('../src/db/db');
+const { pool } = require('payment-ledger-core/db');
 
 async function main() {
   const [phoneNumber, ...nameParts] = process.argv.slice(2);

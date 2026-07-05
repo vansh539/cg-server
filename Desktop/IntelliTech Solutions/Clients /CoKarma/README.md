@@ -24,7 +24,7 @@ integration into CoKarma's own systems.
 
 - `CONFIRM <claim-id>` / `REJECT <claim-id> [reason]`
 - `PENDING` — list open claims
-- `PENDING LINKS` — list customers not yet linked to a CoKarma membership id
+- `PENDING LINKS` — list customers not yet linked to an external reference id
 - `BALANCE <name or phone>` — look up a customer's dues/paid/balance
 - `IMPORT` — attach a CSV (columns: `name, phone_number, membership_id, description, amount_due, due_date`) to load dues
 

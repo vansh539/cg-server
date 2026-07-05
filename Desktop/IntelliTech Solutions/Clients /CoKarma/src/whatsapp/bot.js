@@ -6,11 +6,11 @@ const path = require('path');
 const { execSync, spawn } = require('child_process');
 const cron = require('node-cron');
 const { logger } = require('../utils/logger');
-const { query } = require('../db/db');
-const customers = require('../ledger/customers');
-const claims = require('../ledger/claims');
-const balances = require('../ledger/balances');
-const duesImport = require('../imports/duesImport');
+const { query } = require('payment-ledger-core/db');
+const customers = require('payment-ledger-core/ledger/customers');
+const claims = require('payment-ledger-core/ledger/claims');
+const balances = require('payment-ledger-core/ledger/balances');
+const duesImport = require('payment-ledger-core/imports/duesImport');
 const flows = require('./flows');
 
 const SESSION_DIR = process.env.WA_SESSION_PATH || './wa-sessions';
