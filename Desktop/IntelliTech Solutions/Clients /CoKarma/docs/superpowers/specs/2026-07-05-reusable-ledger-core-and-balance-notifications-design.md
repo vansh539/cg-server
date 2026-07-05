@@ -72,7 +72,7 @@ The hardcoded `'CoKarma dues'` default description is removed from the package; 
 **New dependency (package):** `xlsx` (for `.xlsx` parsing).
 
 **Data model:**
-- Migration: `ALTER TABLE customers RENAME COLUMN cokarma_membership_id TO external_ref_id;` (applied in CoKarma's DB; the package's shipped `001_init.sql` reflects the renamed column going forward for new clients).
+- Migration: `ALTER TABLE customers RENAME COLUMN cokarma_membership_id TO external_ref_id;`, shipped as a new, additive `004_...sql` file — `001_init.sql` is never edited (per this doc's own "never edit an already-applied migration" rule), so it still creates the column under its original name. A brand-new client running migrations 001→004 fresh gets `cokarma_membership_id` created and immediately renamed to `external_ref_id` within the same migration run — a cosmetic wart in the historical migration sequence, not a functional issue, and the correct tradeoff versus rewriting an already-applied file.
 - No new tables. Opening balances are just `dues` rows tagged to their own `dues_imports` batch (existing `import_batch_id` mechanism already supports this — a client can distinguish "opening balance import" from a later "monthly dues import" by filename/imported_at, no schema change required).
 
 **Modified/moved code:**
