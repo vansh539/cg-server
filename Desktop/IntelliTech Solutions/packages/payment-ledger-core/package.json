@@ -2,6 +2,7 @@
   "name": "payment-ledger-core",
   "version": "1.0.0",
   "description": "Reusable customer ledger core (customers, dues, payment claims, balances, CSV/Excel dues import) for WhatsApp payment-reconciliation bots",
+  "private": true,
   "main": "db.js",
   "scripts": {
     "test": "node --test --test-concurrency=1"
