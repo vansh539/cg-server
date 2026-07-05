@@ -1,23 +1,52 @@
 const fs = require('fs');
 const { parse } = require('csv-parse/sync');
+const XLSX = require('xlsx');
 const { query } = require('../db');
 const { findByPhone } = require('../ledger/customers');
 
-function parseDuesCsv(csvContent) {
-  const records = parse(csvContent, { columns: true, skip_empty_lines: true, trim: true });
-  return records.map((r) => ({
-    phoneNumber: r.phone_number || r.phone || '',
-    name: r.name || '',
-    externalRefId: r.membership_id || r.external_ref_id || null,
-    description: r.description || '',
+const MAX_IMPORT_ROWS = 10000;
+
+// Neutralizes CSV/Excel formula injection: a cell value starting with =, +,
+// -, or @ is a formula in Excel/Sheets and could run arbitrary lookups or
+// shell-outs (via legacy DDE) if an admin later opens exported/reported
+// data in a spreadsheet app. Prefixing with a single quote forces it to be
+// read back as inert text instead of a formula.
+function sanitizeFormulaValue(value) {
+  if (typeof value !== 'string') return value;
+  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
+function normalizeDuesRow(r) {
+  return {
+    phoneNumber: String(r.phone_number || r.phone || '').trim(),
+    name: sanitizeFormulaValue(String(r.name || '').trim()),
+    externalRefId: sanitizeFormulaValue(String(r.membership_id || r.external_ref_id || '').trim()) || null,
+    description: sanitizeFormulaValue(String(r.description || '').trim()),
     amountDue: parseFloat(r.amount_due || r.amount || '0'),
     dueDate: r.due_date || null,
-  }));
+  };
+}
+
+function parseDuesCsv(csvContent) {
+  const records = parse(csvContent, { columns: true, skip_empty_lines: true, trim: true });
+  return records.map(normalizeDuesRow);
+}
+
+function parseDuesXlsx(buffer) {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const records = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  return records.map(normalizeDuesRow);
 }
 
 async function importDuesFromFile(filePath, adminPhone) {
-  const content = fs.readFileSync(filePath, 'utf8');
-  const rows = parseDuesCsv(content);
+  const buffer = fs.readFileSync(filePath);
+  const isXlsx = filePath.toLowerCase().endsWith('.xlsx');
+  const rows = isXlsx ? parseDuesXlsx(buffer) : parseDuesCsv(buffer.toString('utf8'));
+
+  if (rows.length > MAX_IMPORT_ROWS) {
+    throw new Error(`Import rejected: ${rows.length} rows exceeds the ${MAX_IMPORT_ROWS}-row cap.`);
+  }
 
   const { rows: importRows } = await query(
     `INSERT INTO dues_imports (filename, imported_by, row_count) VALUES ($1, $2, $3) RETURNING id`,
@@ -58,4 +87,4 @@ async function importDuesFromFile(filePath, adminPhone) {
   return { importBatchId, totalRows: rows.length, unmatchedCount, unmatched };
 }
 
-module.exports = { parseDuesCsv, importDuesFromFile };
+module.exports = { parseDuesCsv, parseDuesXlsx, importDuesFromFile, sanitizeFormulaValue };
