@@ -45,3 +45,20 @@ test('importDuesFromFile does not overwrite an existing external ref id', async 
   const after = await customers.findByPhone('9848358160');
   assert.equal(after.external_ref_id, 'ALREADY-SET');
 });
+
+test('importDuesFromFile treats a missing description as unmatched, with no default substituted', async () => {
+  const fs = require('node:fs');
+  const csv = 'name,phone_number,membership_id,description,amount_due,due_date\nAsha Rao,9848358160,CK-1001,,5000,2026-07-05\n';
+  const tmpPath = path.join(__dirname, 'fixtures', 'tmp-no-description.csv');
+  fs.writeFileSync(tmpPath, csv);
+
+  const result = await duesImport.importDuesFromFile(tmpPath, '9999900000');
+  fs.unlinkSync(tmpPath);
+
+  assert.equal(result.totalRows, 1);
+  assert.equal(result.unmatchedCount, 1);
+  assert.equal(result.unmatched[0].description, '');
+
+  const asha = await customers.findByPhone('9848358160');
+  assert.equal(asha, null);
+});
