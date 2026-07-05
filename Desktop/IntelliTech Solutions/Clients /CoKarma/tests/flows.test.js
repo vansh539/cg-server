@@ -250,3 +250,19 @@ test('isScreenshotDateStale returns false when no date was extracted', () => {
 test('isScreenshotDateStale respects a custom threshold', () => {
   assert.equal(flows.isScreenshotDateStale('2026-07-01', '2026-07-03T10:00:00Z', 1), true);
 });
+
+test('formatBalanceLine returns settled-up message when balance is zero', () => {
+  assert.equal(flows.formatBalanceLine('0.00'), "You're all settled up!");
+});
+
+test('formatBalanceLine returns settled-up message when balance is negative', () => {
+  assert.equal(flows.formatBalanceLine('-500.00'), "You're all settled up!");
+});
+
+test('formatBalanceLine returns the remaining balance when balance is positive', () => {
+  assert.equal(flows.formatBalanceLine('1500.00'), 'Remaining balance: ₹1500.00');
+});
+
+test('formatBalanceLine accepts a plain number', () => {
+  assert.equal(flows.formatBalanceLine(2000), 'Remaining balance: ₹2000');
+});

@@ -170,8 +170,13 @@ function screenshotAgeDays(extractedDateIso, referenceIso) {
   return (reference.getTime() - extracted.getTime()) / (1000 * 60 * 60 * 24);
 }
 
+function formatBalanceLine(balance) {
+  if (Number(balance) <= 0) return "You're all settled up!";
+  return `Remaining balance: ₹${balance}`;
+}
+
 module.exports = {
   handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand,
   toWhatsAppChatId, extractAmountMatch, extractTxnId, extractPaymentDate,
-  isScreenshotDateStale, screenshotAgeDays,
+  isScreenshotDateStale, screenshotAgeDays, formatBalanceLine,
 };
