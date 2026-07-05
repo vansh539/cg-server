@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { parse } = require('csv-parse/sync');
-const { query } = require('../db/db');
+const { query } = require('../db');
 const { findByPhone } = require('../ledger/customers');
 
 function parseDuesCsv(csvContent) {
@@ -8,8 +8,8 @@ function parseDuesCsv(csvContent) {
   return records.map((r) => ({
     phoneNumber: r.phone_number || r.phone || '',
     name: r.name || '',
-    membershipId: r.membership_id || r.cokarma_membership_id || null,
-    description: r.description || 'CoKarma dues',
+    externalRefId: r.membership_id || r.external_ref_id || null,
+    description: r.description || '',
     amountDue: parseFloat(r.amount_due || r.amount || '0'),
     dueDate: r.due_date || null,
   }));
@@ -29,7 +29,7 @@ async function importDuesFromFile(filePath, adminPhone) {
   const unmatched = [];
 
   for (const row of rows) {
-    if (!row.phoneNumber || Number.isNaN(row.amountDue) || row.amountDue <= 0) {
+    if (!row.phoneNumber || !row.description || Number.isNaN(row.amountDue) || row.amountDue <= 0) {
       unmatchedCount++;
       unmatched.push(row);
       continue;
@@ -38,12 +38,12 @@ async function importDuesFromFile(filePath, adminPhone) {
     let customer = await findByPhone(row.phoneNumber);
     if (!customer) {
       const { rows: created } = await query(
-        `INSERT INTO customers (name, phone_number, cokarma_membership_id) VALUES ($1, $2, $3) RETURNING *`,
-        [row.name || 'Unknown', row.phoneNumber, row.membershipId]
+        `INSERT INTO customers (name, phone_number, external_ref_id) VALUES ($1, $2, $3) RETURNING *`,
+        [row.name || 'Unknown', row.phoneNumber, row.externalRefId]
       );
       customer = created[0];
-    } else if (row.membershipId && !customer.cokarma_membership_id) {
-      await query(`UPDATE customers SET cokarma_membership_id = $2 WHERE id = $1`, [customer.id, row.membershipId]);
+    } else if (row.externalRefId && !customer.external_ref_id) {
+      await query(`UPDATE customers SET external_ref_id = $2 WHERE id = $1`, [customer.id, row.externalRefId]);
     }
 
     await query(
