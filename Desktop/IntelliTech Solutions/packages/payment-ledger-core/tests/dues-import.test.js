@@ -64,10 +64,10 @@ test('importDuesFromFile treats a missing description as unmatched, with no defa
   assert.equal(asha, null);
 });
 
-test('parseDuesXlsx reads itemized multi-row-per-customer rows into the same normalized shape as CSV', () => {
+test('parseDuesXlsx reads itemized multi-row-per-customer rows into the same normalized shape as CSV', async () => {
   const fs = require('node:fs');
   const buffer = fs.readFileSync(path.join(__dirname, 'fixtures', 'dues-sample.xlsx'));
-  const rows = duesImport.parseDuesXlsx(buffer);
+  const rows = await duesImport.parseDuesXlsx(buffer);
 
   assert.equal(rows.length, 3);
   assert.equal(rows[0].name, 'Asha Rao');

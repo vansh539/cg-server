@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { parse } = require('csv-parse/sync');
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 const { query } = require('../db');
 const { findByPhone } = require('../ledger/customers');
 
@@ -32,17 +32,48 @@ function parseDuesCsv(csvContent) {
   return records.map(normalizeDuesRow);
 }
 
-function parseDuesXlsx(buffer) {
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const records = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+function cellToPlainValue(cellValue) {
+  if (cellValue === undefined || cellValue === null) return '';
+  if (cellValue instanceof Date) return cellValue.toISOString().slice(0, 10);
+  if (typeof cellValue === 'object') {
+    if (Array.isArray(cellValue.richText)) {
+      return cellValue.richText.map((fragment) => fragment.text).join('');
+    }
+    if ('result' in cellValue) return cellValue.result;
+    if ('text' in cellValue) return cellValue.text;
+  }
+  return cellValue;
+}
+
+async function parseDuesXlsx(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.worksheets[0];
+
+  let headers = [];
+  const records = [];
+
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) {
+      headers = row.values.map((v) => (v === undefined || v === null ? '' : String(v).trim()));
+      return;
+    }
+
+    const record = {};
+    headers.forEach((header, i) => {
+      if (!header) return;
+      record[header] = cellToPlainValue(row.values[i]);
+    });
+    records.push(record);
+  });
+
   return records.map(normalizeDuesRow);
 }
 
 async function importDuesFromFile(filePath, adminPhone) {
   const buffer = fs.readFileSync(filePath);
   const isXlsx = filePath.toLowerCase().endsWith('.xlsx');
-  const rows = isXlsx ? parseDuesXlsx(buffer) : parseDuesCsv(buffer.toString('utf8'));
+  const rows = isXlsx ? await parseDuesXlsx(buffer) : parseDuesCsv(buffer.toString('utf8'));
 
   if (rows.length > MAX_IMPORT_ROWS) {
     throw new Error(`Import rejected: ${rows.length} rows exceeds the ${MAX_IMPORT_ROWS}-row cap.`);
