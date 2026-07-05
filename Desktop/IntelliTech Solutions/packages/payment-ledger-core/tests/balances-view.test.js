@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resetDb, pool } = require('./helpers/db');
-const { query } = require('../src/db/db');
+const { query } = require('../db');
 
 test.beforeEach(resetDb);
 test.after(async () => { await pool.end(); });

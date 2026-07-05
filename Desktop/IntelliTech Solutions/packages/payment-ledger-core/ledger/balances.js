@@ -1,4 +1,4 @@
-const { query } = require('../db/db');
+const { query } = require('../db');
 const { findByPhone, findByNameOrPhone } = require('./customers');
 
 async function getBalanceByCustomerId(customerId) {
@@ -23,7 +23,7 @@ async function searchBalances(term) {
 
 async function listUnlinkedCustomers() {
   const { rows } = await query(
-    `SELECT id, name, phone_number FROM customers WHERE cokarma_membership_id IS NULL ORDER BY created_at ASC`
+    `SELECT id, name, phone_number FROM customers WHERE external_ref_id IS NULL ORDER BY created_at ASC`
   );
   return rows;
 }

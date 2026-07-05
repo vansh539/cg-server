@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resetDb, pool } = require('./helpers/db');
-const customers = require('../src/ledger/customers');
+const customers = require('../ledger/customers');
 
 test.beforeEach(resetDb);
 test.after(async () => { await pool.end(); });
@@ -25,10 +25,10 @@ test('findByNameOrPhone matches by partial name, case-insensitive', async () => 
   assert.equal(results[0].name, 'Asha Rao');
 });
 
-test('linkMembershipId sets cokarma_membership_id', async () => {
+test('linkExternalRefId sets external_ref_id', async () => {
   const created = await customers.createCustomer({ name: 'Asha Rao', phoneNumber: '9848358160' });
-  const updated = await customers.linkMembershipId(created.id, 'CK-1001');
-  assert.equal(updated.cokarma_membership_id, 'CK-1001');
+  const updated = await customers.linkExternalRefId(created.id, 'CK-1001');
+  assert.equal(updated.external_ref_id, 'CK-1001');
 });
 
 test('findById returns the customer by id', async () => {

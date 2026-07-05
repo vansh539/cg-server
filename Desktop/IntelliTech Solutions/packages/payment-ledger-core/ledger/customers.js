@@ -1,4 +1,4 @@
-const { query } = require('../db/db');
+const { query } = require('../db');
 
 function normalizePhone(phone) {
   const digits = String(phone || '').replace(/\D/g, '');
@@ -39,12 +39,12 @@ async function findByNameOrPhone(term) {
   return rows;
 }
 
-async function linkMembershipId(customerId, membershipId) {
+async function linkExternalRefId(customerId, externalRefId) {
   const { rows } = await query(
-    `UPDATE customers SET cokarma_membership_id = $2 WHERE id = $1 RETURNING *`,
-    [customerId, membershipId]
+    `UPDATE customers SET external_ref_id = $2 WHERE id = $1 RETURNING *`,
+    [customerId, externalRefId]
   );
   return rows[0] || null;
 }
 
-module.exports = { normalizePhone, findByPhone, findById, createCustomer, findByNameOrPhone, linkMembershipId };
+module.exports = { normalizePhone, findByPhone, findById, createCustomer, findByNameOrPhone, linkExternalRefId };

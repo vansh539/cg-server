@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resetDb, pool } = require('./helpers/db');
-const customers = require('../src/ledger/customers');
-const balances = require('../src/ledger/balances');
-const { query } = require('../src/db/db');
+const customers = require('../ledger/customers');
+const balances = require('../ledger/balances');
+const { query } = require('../db');
 
 test.beforeEach(resetDb);
 test.after(async () => { await pool.end(); });
@@ -23,9 +23,9 @@ test('getBalanceByPhone returns null for an unregistered number', async () => {
   assert.equal(balance, null);
 });
 
-test('listUnlinkedCustomers only returns customers with no membership id', async () => {
+test('listUnlinkedCustomers only returns customers with no external ref id', async () => {
   const linked = await customers.createCustomer({ name: 'Linked', phoneNumber: '9111111111' });
-  await customers.linkMembershipId(linked.id, 'CK-1');
+  await customers.linkExternalRefId(linked.id, 'CK-1');
   await customers.createCustomer({ name: 'Unlinked', phoneNumber: '9222222222' });
 
   const unlinked = await balances.listUnlinkedCustomers();
