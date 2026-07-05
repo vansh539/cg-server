@@ -475,7 +475,8 @@ async function handlePendingReply(msg, waNumber, pending, text) {
         }
 
         if (flows.isScreenshotDateStale(ocrExtractedDate, new Date().toISOString())) {
-          ocrWarning += `\n⚠️ Screenshot date (${ocrExtractedDate}) is more than 3 days old — verify carefully.`;
+          const ageDays = Math.floor(flows.screenshotAgeDays(ocrExtractedDate, new Date().toISOString()));
+          ocrWarning += `\n⚠️ Screenshot is ${ageDays} day${ageDays === 1 ? '' : 's'} old (${ocrExtractedDate}) — more than the 3-day freshness window, verify carefully.`;
         }
       } catch (e) {
         logger.warn('[WhatsApp] OCR failed, skipping OCR checks', { error: e.message });
