@@ -584,16 +584,29 @@ async function handleAdminCommand(msg, waNumber, parsed) {
   }
 
   if (parsed.command === 'IMPORT') {
-    if (!msg.hasMedia) { await safeSend(msg, 'Send the CSV file as an attachment with caption IMPORT.'); return; }
+    if (!msg.hasMedia) { await safeSend(msg, 'Send the CSV or Excel file as an attachment with caption IMPORT.'); return; }
     const media = await msg.downloadMedia();
-    const fileName = path.join(PROOFS_DIR, `import-${Date.now()}.csv`);
-    fs.writeFileSync(fileName, Buffer.from(media.data, 'base64'));
-    const result = await duesImport.importDuesFromFile(fileName, waNumber);
-    await safeSend(msg, `Import complete: ${result.totalRows} rows, ${result.unmatchedCount} unmatched.`);
+    const buffer = Buffer.from(media.data, 'base64');
+    const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+    if (buffer.length > MAX_IMPORT_FILE_BYTES) {
+      await safeSend(msg, `Import rejected: file is ${(buffer.length / 1024 / 1024).toFixed(1)}MB, over the 5MB limit.`);
+      return;
+    }
+    const mimeToExt = { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx', 'text/csv': 'csv' };
+    const ext = mimeToExt[media.mimetype] || 'csv';
+    const fileName = path.join(PROOFS_DIR, `import-${Date.now()}.${ext}`);
+    fs.writeFileSync(fileName, buffer);
+    try {
+      const result = await duesImport.importDuesFromFile(fileName, waNumber);
+      await safeSend(msg, `Import complete: ${result.totalRows} rows, ${result.unmatchedCount} unmatched.`);
+    } catch (e) {
+      logger.error('[WhatsApp] Import failed', { error: e.message });
+      await safeSend(msg, `Import failed: ${e.message}`);
+    }
     return;
   }
 
-  await safeSend(msg, 'Unknown command. Try PAID, PENDING, PENDING LINKS, BALANCE <name>, CONFIRM <id>, REJECT <id> <reason>, or IMPORT (with a CSV attachment).');
+  await safeSend(msg, 'Unknown command. Try PAID, PENDING, PENDING LINKS, BALANCE <name>, CONFIRM <id>, REJECT <id> <reason>, or IMPORT (with a CSV or Excel attachment).');
 }
 
 // Daily 9 AM IST digest of claims that have sat pending for 24h+
