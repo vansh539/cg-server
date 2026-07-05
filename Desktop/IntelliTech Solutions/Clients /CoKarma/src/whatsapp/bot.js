@@ -597,7 +597,11 @@ async function handleAdminCommand(msg, waNumber, parsed) {
     const fileName = path.join(PROOFS_DIR, `import-${Date.now()}.${ext}`);
     fs.writeFileSync(fileName, buffer);
     try {
-      const result = await duesImport.importDuesFromFile(fileName, waNumber);
+      const result = await duesImport.importDuesFromFile(fileName, waNumber, { force: parsed.force });
+      if (result.alreadyImported) {
+        await safeSend(msg, `This file was already imported on ${result.previousImport.imported_at} (${result.previousImport.row_count} rows). Reply IMPORT FORCE with the same attachment to import it again anyway.`);
+        return;
+      }
       await safeSend(msg, `Import complete: ${result.totalRows} rows, ${result.unmatchedCount} unmatched.`);
     } catch (e) {
       logger.error('[WhatsApp] Import failed', { error: e.message });

@@ -27,6 +27,7 @@ integration into CoKarma's own systems.
 - `PENDING LINKS` — list customers not yet linked to an external reference id
 - `BALANCE <name or phone>` — look up a customer's dues/paid/balance
 - `IMPORT` — attach a CSV or Excel (`.xlsx`) file (columns: `name, phone_number, membership_id, description, amount_due, due_date`) to load dues or opening balances. Files over 5MB are rejected.
+- `IMPORT FORCE` — same as `IMPORT`, but re-imports even if this exact file was already imported before (normally blocked to prevent double-counting dues).
 
 ## Testing
 
