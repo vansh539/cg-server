@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.test
+wa-sessions/
+proofs/
+logs/
+*.log
+.DS_Store
+ruvector.db
+.wwebjs_cache/
+ocr-service/venv/
+ocr-service/__pycache__/
