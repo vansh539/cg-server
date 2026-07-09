@@ -48,6 +48,48 @@ const TEST_MODE_ALLOWED_NUMBERS = (process.env.TEST_MODE_ALLOWED_NUMBERS || '')
 const OCR_SERVICE_PORT = process.env.OCR_SERVICE_PORT || 5001;
 const OCR_SERVICE_URL = `http://127.0.0.1:${OCR_SERVICE_PORT}`;
 const OCR_SERVICE_DIR = path.join(__dirname, '..', '..', 'ocr-service');
+
+// ── Notify service (internal, for the dashboard) ────────────────
+// A minimal localhost-only HTTP server so the Aaral dashboard (a separate
+// process) can ask this bot to send a WhatsApp message, without ever
+// touching the WhatsApp session itself. Only this process may own that
+// session — see the shutdown-handling history in CoKarma's design docs
+// for why introducing a second owner of client is not something to risk.
+const http = require('http');
+const NOTIFY_SERVICE_PORT = process.env.NOTIFY_SERVICE_PORT || 5002;
+
+function startNotifyServer() {
+  const server = http.createServer((req, res) => {
+    if (req.method !== 'POST' || req.url !== '/notify') {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', async () => {
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const { phone, message } = JSON.parse(body);
+        if (!phone || !message) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ sent: false, reason: 'phone and message are required' }));
+          return;
+        }
+        await client.sendMessage(flows.toWhatsAppChatId(phone), message);
+        res.writeHead(200);
+        res.end(JSON.stringify({ sent: true }));
+      } catch (e) {
+        logger.error('[Notify] Failed to send message', { error: e.message });
+        res.writeHead(200);
+        res.end(JSON.stringify({ sent: false, reason: e.message }));
+      }
+    });
+  });
+  server.listen(NOTIFY_SERVICE_PORT, '127.0.0.1', () => {
+    logger.info(`[Notify] Listening on 127.0.0.1:${NOTIFY_SERVICE_PORT}`);
+  });
+}
 const OCR_VENV_PYTHON = process.platform === 'win32'
   ? path.join(OCR_SERVICE_DIR, 'venv', 'Scripts', 'python.exe')
   : path.join(OCR_SERVICE_DIR, 'venv', 'bin', 'python');
@@ -308,6 +350,7 @@ client.on('qr', (qr) => {
 client.on('ready', () => {
   clearTimeout(startupWatchdog);
   logger.info('[WhatsApp] Bot connected and ready!');
+  startNotifyServer();
   setInterval(async () => {
     try { await client.getState(); } catch (_) {}
   }, 15000);
@@ -533,6 +576,20 @@ async function handleAdminCommand(msg, waNumber, parsed) {
             await client.sendMessage(chatId, `✅ Your payment of ₹${updated.amount_claimed} has been confirmed. Thank you!${balanceLine}`);
           } catch (e) {
             logger.error('[WhatsApp] Failed to notify customer of confirmation', { customer: customer.phone_number, error: e.message });
+          }
+          try {
+            const { rows: activeAdmins } = await query('SELECT phone_number FROM admins WHERE active = true');
+            const adminBalance = await balances.getBalanceByCustomerId(customer.id);
+            const adminBalanceLine = adminBalance ? flows.formatBalanceLine(adminBalance.balance) : '';
+            for (const admin of activeAdmins) {
+              if (admin.phone_number.replace(/\D/g, '').slice(-10) === waNumber) continue;
+              await client.sendMessage(
+                flows.toWhatsAppChatId(admin.phone_number),
+                `Payment of ₹${updated.amount_claimed} received from ${customer.name}. ${adminBalanceLine}`
+              );
+            }
+          } catch (e) {
+            logger.error('[WhatsApp] Failed to notify admins of confirmation', { error: e.message });
           }
         }
       } else {
