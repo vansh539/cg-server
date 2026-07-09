@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Customer Ledger — Aaral Marketing</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; color: #1a1a1a; }
+  a.back { font-size: 0.85rem; }
+  h1 { font-size: 1.3rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { border-bottom: 1px solid #e2e2e2; padding: 0.5rem; text-align: left; font-size: 0.9rem; }
+  th { color: #666; font-size: 0.75rem; text-transform: uppercase; }
+  td.amount, td.running { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.invoice td.amount { color: #b1402f; }
+  tr.payment td.amount { color: #3f7a52; }
+</style>
+</head>
+<body>
+
+<a class="back" href="/">&larr; All customers</a>
+<h1 id="customerName">Loading…</h1>
+
+<table>
+  <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const customerId = params.get('id');
+
+async function load() {
+  const res = await fetch(`/api/customers/${customerId}/ledger`);
+  const { customer, entries } = await res.json();
+  const rowsEl = document.getElementById('rows');
+  rowsEl.innerHTML = '';
+  entries.forEach((e) => {
+    const tr = document.createElement('tr');
+    tr.className = e.type;
+    const date = new Date(e.occurred_at).toLocaleDateString();
+    const sign = e.type === 'invoice' ? '+' : '-';
+    tr.innerHTML = `<td>${date}</td><td>${e.type}</td><td>${e.label}</td><td class="amount">${sign}₹${Number(e.amount).toFixed(2)}</td><td class="running">₹${e.runningBalance.toFixed(2)}</td>`;
+    rowsEl.appendChild(tr);
+  });
+  document.getElementById('customerName').textContent = `${customer.name} — ${customer.phone_number} (Balance: ₹${customer.balance})`;
+}
+
+load();
+</script>
+</body>
+</html>

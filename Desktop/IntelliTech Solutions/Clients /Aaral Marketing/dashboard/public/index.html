@@ -1,5 +1,57 @@
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Aaral Marketing — Dashboard</title></head>
-<body><p>Dashboard scaffold running. Customer list lands in Task 8.</p></body>
+<head>
+<meta charset="utf-8">
+<title>Aaral Marketing — Customers</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; color: #1a1a1a; }
+  h1 { font-size: 1.3rem; display: flex; justify-content: space-between; align-items: center; }
+  h1 a { font-size: 0.85rem; }
+  input { padding: 0.5rem; width: 100%; box-sizing: border-box; font-size: 0.95rem; margin-bottom: 1rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border-bottom: 1px solid #e2e2e2; padding: 0.5rem; text-align: left; font-size: 0.9rem; }
+  th { color: #666; font-size: 0.75rem; text-transform: uppercase; }
+  td.balance { text-align: right; font-variant-numeric: tabular-nums; }
+  .owes { color: #b1402f; }
+  .credit { color: #3f7a52; }
+  .settled { color: #888; }
+  tr { cursor: pointer; }
+  tr:hover { background: #f7f7f7; }
+</style>
+</head>
+<body>
+
+<h1>Customers <a href="/chitti.html">+ New Chitti</a></h1>
+<input type="text" id="search" placeholder="Search by name or phone…">
+<table>
+  <thead><tr><th>Name</th><th>Phone</th><th style="text-align:right;">Balance</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script>
+const rowsEl = document.getElementById('rows');
+
+function balanceClass(balance) {
+  if (Number(balance) > 0) return 'owes';
+  if (Number(balance) < 0) return 'credit';
+  return 'settled';
+}
+
+async function load(term) {
+  const url = term ? `/api/customers?q=${encodeURIComponent(term)}` : '/api/customers';
+  const res = await fetch(url);
+  const customers = await res.json();
+  rowsEl.innerHTML = '';
+  customers.forEach((c) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${c.name}</td><td>${c.phone_number}</td><td class="balance ${balanceClass(c.balance)}">₹${c.balance}</td>`;
+    tr.addEventListener('click', () => { window.location.href = `/customer.html?id=${c.customer_id}`; });
+    rowsEl.appendChild(tr);
+  });
+}
+
+document.getElementById('search').addEventListener('input', (e) => load(e.target.value.trim()));
+load();
+</script>
+</body>
 </html>
