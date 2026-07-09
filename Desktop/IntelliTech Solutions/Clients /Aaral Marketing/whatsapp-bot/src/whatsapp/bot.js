@@ -57,8 +57,14 @@ const OCR_SERVICE_DIR = path.join(__dirname, '..', '..', 'ocr-service');
 // for why introducing a second owner of client is not something to risk.
 const http = require('http');
 const NOTIFY_SERVICE_PORT = process.env.NOTIFY_SERVICE_PORT || 5002;
+let notifyServerStarted = false;
 
 function startNotifyServer() {
+  // client.on('ready') can refire after a brief reconnect without a full
+  // re-auth (observed live) — guard against trying to bind the port twice.
+  if (notifyServerStarted) return;
+  notifyServerStarted = true;
+
   const server = http.createServer((req, res) => {
     if (req.method !== 'POST' || req.url !== '/notify') {
       res.writeHead(404);
@@ -85,6 +91,12 @@ function startNotifyServer() {
         res.end(JSON.stringify({ sent: false, reason: e.message }));
       }
     });
+  });
+  server.on('error', (err) => {
+    // A failure here (e.g. port already in use) must never take down the
+    // WhatsApp bot itself — the dashboard's notify calls just get "failed
+    // to reach bot" and degrade gracefully, same as an OCR outage.
+    logger.error('[Notify] Server failed to start', { error: err.message });
   });
   server.listen(NOTIFY_SERVICE_PORT, '127.0.0.1', () => {
     logger.info(`[Notify] Listening on 127.0.0.1:${NOTIFY_SERVICE_PORT}`);
