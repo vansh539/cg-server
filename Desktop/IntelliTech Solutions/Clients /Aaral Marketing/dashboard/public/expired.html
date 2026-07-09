@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>License Issue — Narayani Steels Billing Tool</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+      max-width: 480px;
+      width: 100%;
+      padding: 40px 36px;
+      text-align: center;
+    }
+    .icon { font-size: 52px; margin-bottom: 16px; }
+    h1 { font-size: 1.4rem; color: #1a1a1a; margin-bottom: 10px; }
+    p  { font-size: 0.95rem; color: #555; line-height: 1.6; margin-bottom: 20px; }
+    .contact {
+      background: #f8f8f8;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 0.9rem;
+      color: #333;
+      line-height: 1.8;
+    }
+    .contact strong { color: #1a5c38; }
+    .reason {
+      display: inline-block;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🔒</div>
+    <h1>Software License Issue</h1>
+    <div class="reason" id="reason">License expired or invalid</div>
+    <p>
+      Your license for the <strong>Narayani Steels Billing Tool</strong>
+      needs to be renewed or validated. Please contact your software provider to continue.
+    </p>
+    <div class="contact">
+      <strong>IntelliTech Solutions</strong><br>
+      Vansh Jalan<br>
+      📞 Contact your representative<br>
+      🌐 intellitechsolutions.in
+    </div>
+  </div>
+  <script>
+    const p = new URLSearchParams(window.location.search);
+    const r = p.get('reason');
+    if (r) document.getElementById('reason').textContent = decodeURIComponent(r);
+  </script>
+</body>
+</html>
