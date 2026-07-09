@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>New Chitti — Aaral Marketing</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; color: #1a1a1a; }
+  h1 { font-size: 1.3rem; }
+  label { display: block; font-size: 0.85rem; color: #555; margin-top: 0.8rem; }
+  input, select { padding: 0.4rem; font-size: 0.95rem; width: 100%; box-sizing: border-box; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { border: 1px solid #ccc; padding: 0.4rem; font-size: 0.85rem; text-align: left; }
+  th { background: #f2f2f2; }
+  td input { border: none; width: 100%; }
+  .row-amount, .totals span { font-variant-numeric: tabular-nums; }
+  .totals { margin-top: 1rem; text-align: right; font-size: 1rem; }
+  .totals .grand { font-weight: 700; font-size: 1.2rem; }
+  button { margin-top: 1.2rem; padding: 0.6rem 1.2rem; font-size: 0.95rem; cursor: pointer; }
+  #customerResults { border: 1px solid #ccc; max-height: 140px; overflow-y: auto; display: none; }
+  #customerResults div { padding: 0.4rem; cursor: pointer; }
+  #customerResults div:hover { background: #f2f2f2; }
+  @media print {
+    button, #addRow, #customerSearch, #customerResults, .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Aaral Marketing — New Chitti</h1>
+
+<label>Customer (leave blank for a walk-in / cash sale)</label>
+<input type="text" id="customerSearch" placeholder="Search by name or phone…" autocomplete="off">
+<div id="customerResults"></div>
+<div id="selectedCustomer" style="margin-top:0.4rem;font-size:0.9rem;color:#555;"></div>
+
+<table id="itemsTable">
+  <thead>
+    <tr><th>S No.</th><th>Particulars</th><th>Grade</th><th>Vch</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<button id="addRow" class="no-print" type="button">+ Add line</button>
+
+<div class="totals">
+  <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
+  <div class="no-print">
+    <label style="display:inline;">Unloading charges: ₹</label>
+    <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
+  </div>
+  <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
+</div>
+
+<div class="no-print" style="margin-top:1rem;">
+  <label style="display:inline;"><input type="checkbox" id="paidNow" checked style="width:auto;"> Paid now</label>
+</div>
+
+<button id="saveAndPrint" type="button">Save &amp; Print</button>
+<div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
+
+<script>
+let selectedCustomerId = null;
+const tbody = document.querySelector('#itemsTable tbody');
+
+function addRow() {
+  const tr = document.createElement('tr');
+  const sNo = tbody.children.length + 1;
+  tr.innerHTML = `
+    <td>${sNo}</td>
+    <td><input class="particulars"></td>
+    <td><input class="grade"></td>
+    <td><input class="vch"></td>
+    <td><input class="qty" type="number" min="0" step="0.01"></td>
+    <td><input class="rate" type="number" min="0" step="0.01"></td>
+    <td class="row-amount">0.00</td>`;
+  tbody.appendChild(tr);
+  tr.querySelectorAll('.qty, .rate').forEach((el) => el.addEventListener('input', recalc));
+}
+
+function recalc() {
+  let subtotal = 0;
+  tbody.querySelectorAll('tr').forEach((tr) => {
+    const qty = Number(tr.querySelector('.qty').value) || 0;
+    const rate = Number(tr.querySelector('.rate').value) || 0;
+    const amount = qty * rate;
+    tr.querySelector('.row-amount').textContent = amount.toFixed(2);
+    subtotal += amount;
+  });
+  const unloading = Number(document.getElementById('unloading').value) || 0;
+  document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+  document.getElementById('grandTotal').textContent = (subtotal + unloading).toFixed(2);
+}
+
+document.getElementById('unloading').addEventListener('input', recalc);
+document.getElementById('addRow').addEventListener('click', addRow);
+addRow();
+
+const searchInput = document.getElementById('customerSearch');
+const resultsBox = document.getElementById('customerResults');
+let searchTimer = null;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  selectedCustomerId = null;
+  const term = searchInput.value.trim();
+  if (!term) { resultsBox.style.display = 'none'; return; }
+  searchTimer = setTimeout(async () => {
+    const res = await fetch(`/api/customers?q=${encodeURIComponent(term)}`);
+    const matches = await res.json();
+    resultsBox.innerHTML = '';
+    matches.forEach((c) => {
+      const div = document.createElement('div');
+      div.textContent = `${c.name} — ${c.phone_number} (Balance: ₹${c.balance})`;
+      div.addEventListener('click', () => {
+        selectedCustomerId = c.customer_id;
+        document.getElementById('selectedCustomer').textContent = `Selected: ${c.name} (₹${c.balance} balance)`;
+        resultsBox.style.display = 'none';
+        searchInput.value = c.name;
+      });
+      resultsBox.appendChild(div);
+    });
+    resultsBox.style.display = matches.length ? 'block' : 'none';
+  }, 250);
+});
+
+document.getElementById('saveAndPrint').addEventListener('click', async () => {
+  const items = [...tbody.querySelectorAll('tr')].map((tr) => ({
+    particulars: tr.querySelector('.particulars').value,
+    grade: tr.querySelector('.grade').value,
+    vch: tr.querySelector('.vch').value,
+    qty: tr.querySelector('.qty').value,
+    rate: tr.querySelector('.rate').value,
+  }));
+  const body = {
+    customerId: selectedCustomerId,
+    items,
+    unloadingCharge: document.getElementById('unloading').value || null,
+    paidNow: document.getElementById('paidNow').checked,
+    createdBy: 'dashboard',
+  };
+  const statusEl = document.getElementById('status');
+  const res = await fetch('/api/invoices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    statusEl.textContent = `Error: ${data.error}`;
+    statusEl.style.color = '#b1402f';
+    return;
+  }
+  statusEl.textContent = `Saved as Invoice #${data.invoiceNumber}.`;
+  statusEl.style.color = '#3f7a52';
+  window.print();
+});
+</script>
+</body>
+</html>
