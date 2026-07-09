@@ -70,6 +70,9 @@ app.use((req, res, next) => {
   return res.redirect(`/expired.html?reason=${encodeURIComponent(_licenseError)}`);
 });
 
+app.use('/api', require('./src/routes/invoices'));
+app.use('/api', require('./src/routes/ledger'));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(PORT, '127.0.0.1', () => {
