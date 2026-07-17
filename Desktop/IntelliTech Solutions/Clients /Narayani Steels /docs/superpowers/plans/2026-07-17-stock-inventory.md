@@ -953,15 +953,15 @@ function renderCatBar() {
 
 function renderItemCatSelect() {
   const sel = document.getElementById('new-item-cat');
-  const prev = sel.value;
   sel.innerHTML = categories.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
-  sel.value = categories.some((c) => c.id === prev) ? prev : selectedCatId || '';
+  sel.value = selectedCatId || '';
 }
 
 function selectCategory(id) {
   selectedCatId = id;
   openRow = null;
   renderCatBar();
+  renderItemCatSelect();
   renderItems();
 }
 
