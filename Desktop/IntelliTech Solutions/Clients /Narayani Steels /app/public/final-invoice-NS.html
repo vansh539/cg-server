@@ -83,6 +83,7 @@ input[type=number]{-moz-appearance:textfield}
 </head>
 <body>
 <div class="wrap">
+  <datalist id="stock-items-datalist"></datalist>
   <div class="app-title">🏭 Narayani Steels</div>
   <div class="app-sub" style="margin-bottom:.25rem">Nothing is saved · Instant print only</div>
   <div style="text-align:center;margin-bottom:1.25rem"><a href="stock.html" style="font-size:13px;color:#c45c00;text-decoration:none;font-weight:600">📦 Stock →</a></div>
@@ -142,7 +143,8 @@ input[type=number]{-moz-appearance:textfield}
   <div class="step" id="s4">
     <div class="print-note">✓ Ready · <strong>A5 (2 copies) · Margins: None · Scale: 100% · Backgrounds: ON</strong></div>
     <div class="doc-wrap" id="preview-wrap"></div>
-    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" onclick="reset()">New</button></div>
+    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" id="btn-deduct" onclick="deductStock()" style="display:none">📦 Deduct from Stock</button><button class="btn-s" onclick="reset()">New</button></div>
+    <div class="print-note" id="deduct-note" style="display:none"></div>
   </div>
   <div class="step" id="s9"><div class="card"><h2>Quotation format</h2>
     <div class="grid3">
@@ -213,10 +215,24 @@ function go(n){
   if(n===3&&rows.length===0)addRow();
   window.scrollTo(0,0);
 }
-function addRow(){rows.push({q:'',name:'',p:'',r:''});renderRows();}
+function addRow(){rows.push({q:'',name:'',p:'',r:'',stockItemId:null,_deducted:false});renderRows();}
 function renderRows(){
   const tb=document.getElementById('tbody');tb.innerHTML='';
-  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td><input type="text" value="${row.name}" placeholder="Item" oninput="upd(${i},'name',this.value)"></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});recalc();
+  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td><input type="text" list="stock-items-datalist" value="${row.name}" placeholder="Item" oninput="upd(${i},'name',this.value);matchStockItem(${i},this.value)"></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});recalc();
+}
+let stockCategories=[],stockItems=[];
+function stockDisplayName(item){const cat=stockCategories.find(c=>c.id===item.categoryId);return cat?`${item.name} (${cat.name})`:item.name;}
+async function loadStockDatalist(){
+  try{
+    const [catsRes,itemsRes]=await Promise.all([fetch('/api/stock/categories'),fetch('/api/stock/items')]);
+    stockCategories=await catsRes.json();stockItems=await itemsRes.json();
+    document.getElementById('stock-items-datalist').innerHTML=stockItems.map(it=>`<option value="${stockDisplayName(it)}">`).join('');
+  }catch(err){/* stock module optional; billing works without it */}
+}
+function matchStockItem(i,value){
+  const trimmed=value.trim().toLowerCase();
+  const match=stockItems.find(it=>stockDisplayName(it).toLowerCase()===trimmed);
+  rows[i].stockItemId=match?match.id:null;
 }
 function calcAmt(row){const q=parseFloat(row.q)||0,r=parseFloat(row.r)||0,a=q*r;return a>0?''+Math.round(a).toLocaleString('en-IN'):'—';}
 function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);recalc();}
@@ -243,6 +259,7 @@ function buildFirstSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,gst,others,old
 const CONT_TOTAL=19;
 function buildContSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot){let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,gst,others,oldbal,advance].filter(v=>v>0).length:0;tbody+=emptyRows(Math.max(0,CONT_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot);return`<div class="doc-cont"><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
 function generate(){
+  rows.forEach(r=>{r._deducted=false;});
   let sub=0,tq=0;rows.forEach(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0;sub+=q*rt;tq+=q;});
   const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
   const taxable=sub+lab+weigh+freight+unload+others;
@@ -255,7 +272,44 @@ function generate(){
   let ph='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);ph+=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot,meta);});
   document.getElementById('preview-wrap').innerHTML=ph;
   let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot,meta);prh+=`<div class="print-slip"><div class="a5-half"><div style="height:9mm"></div>${sh}</div><div class="a5-tear"></div><div class="a5-half"><div style="height:9mm"></div>${sh}</div></div>`;if(!il)prh+=`<div class="page-break"></div>`;});
-  document.getElementById('print-area').innerHTML=prh;go(4);
+  document.getElementById('print-area').innerHTML=prh;go(4);updateDeductButton();
+}
+function updateDeductButton(){
+  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
+  note.style.display='none';
+  const matched=rows.filter(r=>r.stockItemId);
+  if(dtype==='Invoice'&&matched.length){
+    btn.style.display='inline-block';btn.disabled=false;btn.textContent='📦 Deduct from Stock';btn.dataset.deducted='';
+  }else{
+    btn.style.display='none';
+  }
+}
+async function deductStock(){
+  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
+  if(btn.dataset.deducted==='true')return;
+  const pending=rows.filter(r=>r.stockItemId&&(parseFloat(r.q)||0)>0&&!r._deducted);
+  if(!pending.length)return;
+  btn.disabled=true;
+  const succeeded=[];let failure=null;
+  for(const r of pending){
+    const kg=parseFloat(r.q)||0;
+    try{
+      const res=await fetch(`/api/stock/items/${r.stockItemId}/deduct`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kg,note:'Chitti/Invoice'})});
+      const body=await res.json();
+      if(!res.ok)throw new Error(body.error||'Deduct failed');
+      r._deducted=true;succeeded.push(`${kg}kg ${r.name}`);
+    }catch(err){failure=err.message;break;}
+  }
+  note.style.display='block';
+  if(failure){
+    btn.disabled=false;
+    note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';
+    note.textContent=`Error: ${failure}.${succeeded.length?` Already deducted: ${succeeded.join('; ')}.`:''} Click again to retry the rest.`;
+  }else{
+    btn.dataset.deducted='true';btn.textContent='✓ Stock Deducted';
+    note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';
+    note.textContent=`Deducted: ${succeeded.join('; ')}.`;
+  }
 }
 
 function pickFormat(f,el){qFormat=f;document.querySelectorAll('#s9 .type-btn').forEach(function(b){b.classList.remove('on');});el.classList.add('on');document.getElementById('n9').disabled=false;}
@@ -384,4 +438,5 @@ function reset(){
   document.getElementById('n9').disabled=true;
   recalc();go(2);
 }
+loadStockDatalist();
 </script></body></html>
