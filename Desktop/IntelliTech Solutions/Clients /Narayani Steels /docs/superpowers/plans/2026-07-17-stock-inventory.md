@@ -1221,8 +1221,9 @@ In `final-invoice-NS.html`, replace:
 with:
 ```html
   <div class="app-title">🏭 Narayani Steels</div>
-  <div class="app-sub" style="margin-bottom:.25rem">Nothing is saved · Instant print only</div>
-  <div style="text-align:center;margin-bottom:1.25rem"><a href="stock.html" style="font-size:13px;color:#c45c00;text-decoration:none;font-weight:600">📦 Stock →</a></div>
+  <div class="app-sub">Nothing is saved · Instant print only</div>
+  <!-- Superseded same-day: Stock was moved from a standalone text link here into
+       the Document type card grid as a 4th option — see 2026-07-17 update below. -->
 ```
 
 - [ ] **Step 3: Sync to `app/public/`**
@@ -1475,6 +1476,19 @@ EOF
 ```
 
 ---
+
+## 2026-07-17 update — Stock moved into the Document type grid
+
+Right after this plan shipped, Vansh reviewed it live and asked for Stock to be
+a 4th option card in the "Document type" selector (`#s2`'s `.grid3`, alongside
+Quotation/Invoice/Delivery Challan) instead of a small standalone text link —
+framing it as part of a broader shift from "invoicing tool" to "end-to-end
+dashboard." Implemented as a 4th `.type-btn`-styled `<a href="stock.html">` in
+that grid (`grid-template-columns` overridden to `1fr 1fr 1fr 1fr` via inline
+style on that one instance only — the shared `.grid3` class is also reused by
+the Quotation-format picker (`#s9`) and was deliberately left untouched).
+Unlike the other three cards, clicking Stock navigates immediately (it's a
+plain link, not `pickType()` + Continue) since it isn't a document type.
 
 ## Deferred (not in this plan)
 
