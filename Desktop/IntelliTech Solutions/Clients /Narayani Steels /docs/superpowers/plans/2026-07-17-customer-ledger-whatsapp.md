@@ -1900,6 +1900,67 @@ git commit -m "feat(narayani-steels): add Send via WhatsApp button, wired end-to
 
 ---
 
+## 2026-07-17 update — Tasks 6, 8, 9 built differently than originally planned above
+
+Real live testing with the WhatsApp bot connected (Vansh, mid-implementation)
+changed the design for Tasks 6/8/9 from what's written above. The tasks
+above are kept for the historical record of the original plan; this is
+what was actually built and shipped:
+
+- **Task 6's "Record Invoice" button and Task 9's "Send via WhatsApp"
+  button are merged into one** — `btn-record-invoice`, labelled
+  "✅ Finalize & Send". `recordInvoice()` in `final-invoice-NS.html` now:
+  records the invoice (unless `recordedInvoiceId` is already set from a
+  prior successful record), then always attempts the WhatsApp send. On a
+  send-only failure the button becomes "🔄 Retry Send" and a second click
+  retries just the send — the record step is skipped since
+  `recordedInvoiceId` is already populated, so it can never double-record.
+  The `recordInvoice()` payload now also includes `oldbal` (read from
+  `f-oldbal`), which Task 6's original payload omitted.
+- **`ledgerStore.createInvoice` now accepts and stores `oldbal`** (Task 1's
+  store gets this addition retroactively) alongside the already-stored
+  `advance` — both are display-only fields on the invoice record and never
+  enter `total`, preserving the double-counting invariant. New test:
+  `createInvoice stores oldbal/advance for display but never lets them
+  affect total or the due amount`.
+- **Task 8's `renderInvoicePdf` is a faithful single-A6-copy replica of the
+  real Chitti slip**, not the simplified generic table originally
+  specified. It re-implements `colgroup`/`thead`/`tableRows`/`emptyRows`/
+  `totalsBlock`/`buildFirstSlip`/`buildContSlip` server-side (prefixed
+  `pdf*` to avoid confusion with the client-side originals), using the
+  exact same `.doc`/`.d-tbl`/etc. CSS, at A6 page size
+  (`@page{size:105mm 148.5mm}`) with no A5 dual-copy wrapping and no tear
+  line — one copy, since a WhatsApp PDF isn't torn in half like the
+  physical print. The pre-existing "always says QUOTATION" bug is
+  deliberately replicated for parity with what's already printed, not
+  fixed (out of scope, not asked for).
+- **`whatsapp-bot/bot.js`'s `/send-invoice` handler had a real bug**,
+  caught on the first live send attempt: building the chat id as
+  `${phone}@c.us` by hand failed with `Error: No LID for user` against
+  `whatsapp-web.js` v1.34.7's current multi-device/LID identity handling.
+  Fixed by resolving the number via `client.getNumberId(phone)` first and
+  sending to the returned `._serialized` id (also now returns a clean 400
+  if the number isn't a registered WhatsApp number, instead of the
+  library's raw error).
+- **`whatsapp-bot`'s puppeteer setup uses the system Chrome**
+  (`executablePath`, `CHROME_PATH` env var same as `server.js`'s PDF
+  renderer) rather than puppeteer's bundled Chromium download — a stale
+  puppeteer cache from another project broke that download during `npm
+  install` here. A `.npmrc` with `puppeteer_skip_download=true` in
+  `whatsapp-bot/` makes this permanent for future installs (including the
+  eventual shop-PC one).
+- **Operational note for future sessions**: killing the bot process with
+  `kill -9` on the parent Node PID does **not** kill the Chrome process
+  tree puppeteer spawned under it — those orphaned Chrome processes keep
+  holding a lock on `.wwebjs_auth/session`, so a plain restart fails with
+  `The browser is already running for <userDataDir>`. Use
+  `pkill -9 -f "whatsapp-bot/.wwebjs_auth/session"` to clean up the whole
+  tree before restarting, not just killing the node process.
+- Live end-to-end verification (real WhatsApp send, real recipient) was
+  done against Vansh's own test customer during this session rather than
+  the plan's originally-scripted manual steps — same outcome, confirmed
+  working.
+
 ## Deferred (not in this plan)
 
 - **Shop PC deployment of either phase** — a separate live TeamViewer session per this project's established delivery pattern, same as the Stock module. Phase 2 additionally needs: the WhatsApp session paired on the actual shop PC (a fresh QR scan there, the dev-machine pairing from Task 7 does not transfer), a Windows-appropriate headless Chrome path for Task 8's PDF rendering, and confirming `whatsapp-bot/node_modules` (including bundled Chromium) fits the same "ship node_modules, no internet" constraint that shaped every dependency decision in this project so far.

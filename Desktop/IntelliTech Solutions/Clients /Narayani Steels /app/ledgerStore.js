@@ -111,13 +111,17 @@ function createStore(filePath) {
     return inv;
   }
 
-  function createInvoice({ customerId, date, mobile, lorry, items, sub, lab, weigh, freight, unload, gst, others, advance }) {
+  function createInvoice({ customerId, date, mobile, lorry, items, sub, lab, weigh, freight, unload, gst, others, oldbal, advance }) {
     ensureLoaded();
     if (!customerId || !data.customers.some((c) => c.id === customerId)) throw new Error('Customer not found');
     if (!Array.isArray(items) || !items.length) throw new Error('Items are required');
     const n = (v) => Number(v) || 0;
     const total = n(sub) + n(lab) + n(weigh) + n(freight) + n(unload) + n(gst) + n(others);
     data.invoiceCounter = (data.invoiceCounter || 0) + 1;
+    // oldbal/advance are stored for display/PDF fidelity only (they mirror
+    // what was printed on the physical slip) — they never factor into
+    // `total`, which stays sub+lab+weigh+freight+unload+gst+others so the
+    // ledger due amount can never double-count a pre-existing balance.
     const invoice = {
       id: newId('inv'),
       invoiceNo: data.invoiceCounter,
@@ -127,6 +131,7 @@ function createStore(filePath) {
       lorry: lorry || '',
       items,
       sub: n(sub), lab: n(lab), weigh: n(weigh), freight: n(freight), unload: n(unload), gst: n(gst), others: n(others),
+      oldbal: n(oldbal), advance: n(advance),
       total,
       createdAt: new Date().toISOString(),
     };

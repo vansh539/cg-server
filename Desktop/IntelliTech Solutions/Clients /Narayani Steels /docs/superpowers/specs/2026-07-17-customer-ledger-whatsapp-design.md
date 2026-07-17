@@ -212,6 +212,34 @@ IDs use the same `crypto.randomUUID()`-based scheme as `stockStore.js`.
   mobile, lorry, items table, charges breakdown, total. Plain data table,
   not the print-slip layout (see Non-goals).
 
+## 2026-07-17 update — merged Record+Send, faithful single-A6 PDF, live-tested
+
+While implementing Phase 2, Vansh (testing live with the bot connected)
+changed two things from the original design below:
+
+1. **"Record Invoice" and "Send via WhatsApp" are one button, not two.**
+   Originally scoped as separate actions; in practice a recorded-but-unsent
+   invoice isn't a useful state, so the button (now labelled "✅ Finalize &
+   Send") does both — records to the ledger, then immediately sends the PDF.
+   If recording succeeds but the WhatsApp send fails, the button becomes
+   "🔄 Retry Send" and a second click retries only the send (the already-set
+   `recordedInvoiceId` means it never records twice).
+2. **The WhatsApp PDF must be a faithful single-copy A6 replica of the real
+   Chitti slip**, not the simplified generic table originally scoped ("Not
+   a pixel-perfect reprint" is no longer accurate — retracting that
+   Non-goal). This required storing `oldbal` on the invoice record too
+   (previously only `advance` was captured) purely for display fidelity —
+   still never entering the `total`/due-amount math, so the double-counting
+   invariant holds exactly as before.
+
+**Real bug hit and fixed during live testing:** `whatsapp-web.js` v1.34.7
+rejected `client.sendMessage()` calls built against a hand-constructed
+`${phone}@c.us` chat id with `Error: No LID for user` — a known issue
+against WhatsApp's current multi-device/LID identity system when the
+client hasn't independently resolved that contact yet. Fixed by resolving
+via `client.getNumberId(phone)` first and sending to the returned
+`._serialized` id instead of guessing the id format.
+
 ## WhatsApp sending (Phase 2)
 
 - **New sibling directory** `whatsapp-bot/` under the Narayani Steels

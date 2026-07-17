@@ -145,7 +145,7 @@ input[type=number]{-moz-appearance:textfield}
   <div class="step" id="s4">
     <div class="print-note">✓ Ready · <strong>A5 (2 copies) · Margins: None · Scale: 100% · Backgrounds: ON</strong></div>
     <div class="doc-wrap" id="preview-wrap"></div>
-    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" id="btn-deduct" onclick="deductStock()" style="display:none">📦 Deduct from Stock</button><button class="btn-s" id="btn-record-invoice" onclick="recordInvoice()" style="display:none">💾 Record Invoice</button><button class="btn-s" onclick="reset()">New</button></div>
+    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" id="btn-deduct" onclick="deductStock()" style="display:none">📦 Deduct from Stock</button><button class="btn-s" id="btn-record-invoice" onclick="recordInvoice()" style="display:none">✅ Finalize & Send</button><button class="btn-s" onclick="reset()">New</button></div>
     <div class="print-note" id="deduct-note" style="display:none"></div>
     <div class="print-note" id="ledger-note" style="display:none"></div>
   </div>
@@ -309,43 +309,66 @@ function updateRecordInvoiceButton(){
   const custId=document.getElementById('f-customer').value;
   document.getElementById('ledger-note').style.display='none';
   if(dtype==='Invoice'&&custId){
-    btn.style.display='inline-block';btn.disabled=false;btn.textContent='💾 Record Invoice';
+    btn.style.display='inline-block';btn.disabled=false;btn.textContent='✅ Finalize & Send';
   }else{
     btn.style.display='none';
   }
 }
+function setLedgerNote(kind,text){
+  const note=document.getElementById('ledger-note');
+  note.style.display='block';
+  note.textContent=text;
+  if(kind==='ok'){note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';}
+  else{note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';}
+}
 async function recordInvoice(){
-  const btn=document.getElementById('btn-record-invoice'),note=document.getElementById('ledger-note');
+  // Combined action: records the invoice to the customer's ledger, then
+  // sends the single-A6-copy PDF over WhatsApp — one click for both, since
+  // a recorded-but-unsent invoice isn't a useful in-between state for how
+  // this is actually used. If recording already succeeded on a prior click
+  // but the WhatsApp send failed, `recordedInvoiceId` is already set, so
+  // this skips straight to retrying just the send — it never records twice.
+  const btn=document.getElementById('btn-record-invoice');
   const custId=document.getElementById('f-customer').value;
-  if(!custId||recordedInvoiceId)return;
+  if(!custId)return;
   btn.disabled=true;
-  let sub=0;rows.forEach(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0;sub+=q*rt;});
-  const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
-  const taxable=sub+lab+weigh+freight+unload+others;
-  const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
-  const advance=gc('f-advance');
-  const payload={
-    customerId:custId,
-    date:document.getElementById('f-date').value,
-    mobile:document.getElementById('f-mobile').value,
-    lorry:document.getElementById('f-lorry').value,
-    items:rows.map(r=>({q:r.q,name:r.name,p:r.p,r:r.r})),
-    sub,lab,weigh,freight,unload,gst,others,advance,
-  };
+  let invoiceNo,customerName;
+  if(!recordedInvoiceId){
+    let sub=0;rows.forEach(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0;sub+=q*rt;});
+    const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
+    const taxable=sub+lab+weigh+freight+unload+others;
+    const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
+    const oldbal=gc('f-oldbal'),advance=gc('f-advance');
+    const payload={
+      customerId:custId,
+      date:document.getElementById('f-date').value,
+      mobile:document.getElementById('f-mobile').value,
+      lorry:document.getElementById('f-lorry').value,
+      items:rows.map(r=>({q:r.q,name:r.name,p:r.p,r:r.r})),
+      sub,lab,weigh,freight,unload,gst,others,oldbal,advance,
+    };
+    try{
+      const res=await fetch('/api/ledger/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const body=await res.json();
+      if(!res.ok)throw new Error(body.error||'Could not record invoice');
+      recordedInvoiceId=body.id;invoiceNo=body.invoiceNo;customerName=body.customerName;
+    }catch(err){
+      btn.disabled=false;
+      setLedgerNote('err',`Error recording invoice: ${err.message}`);
+      return;
+    }
+  }
+  btn.textContent='📱 Sending…';
   try{
-    const res=await fetch('/api/ledger/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const res=await fetch(`/api/ledger/invoices/${recordedInvoiceId}/send-whatsapp`,{method:'POST'});
     const body=await res.json();
-    if(!res.ok)throw new Error(body.error||'Could not record invoice');
-    recordedInvoiceId=body.id;
-    btn.textContent=`✓ Recorded (Invoice #${body.invoiceNo})`;
-    note.style.display='block';
-    note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';
-    note.textContent=`Recorded as Invoice #${body.invoiceNo} for ${body.customerName}.`;
+    if(!res.ok)throw new Error(body.error||'Send failed');
+    btn.textContent='✓ Recorded & Sent';
+    setLedgerNote('ok',`Recorded${invoiceNo?` as Invoice #${invoiceNo}`:''}${customerName?` for ${customerName}`:''} and sent via WhatsApp.`);
   }catch(err){
     btn.disabled=false;
-    note.style.display='block';
-    note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';
-    note.textContent=`Error: ${err.message}`;
+    btn.textContent='🔄 Retry Send';
+    setLedgerNote('err',`Recorded, but WhatsApp send failed: ${err.message}. Click to retry sending.`);
   }
 }
 function updateDeductButton(){

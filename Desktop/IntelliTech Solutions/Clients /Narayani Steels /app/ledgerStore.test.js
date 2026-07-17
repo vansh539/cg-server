@@ -77,6 +77,23 @@ test('createInvoice with advance also posts a separate payment entry', () => {
   assert.equal(store.getCustomer(cust.id).balance, (5500 + 40 + 998) - 2000);
 });
 
+test('createInvoice stores oldbal/advance for display but never lets them affect total or the due amount', () => {
+  const store = createStore(tempFile());
+  const cust = store.addCustomer({ name: 'Display Fields Co', phone: '8887776665' });
+  store.addOldBalance(cust.id, 40916); // pre-existing balance, same as what the Chitti's Old Balance field would show
+
+  const invoice = store.createInvoice({
+    customerId: cust.id, date: '17/07/2026', mobile: '9876543210', lorry: 'TS08AB1234',
+    items: [{ q: '500', name: 'MS Angle', p: '', r: '52' }],
+    sub: 26000, lab: 200, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, oldbal: 40916, advance: 1000,
+  });
+
+  assert.equal(invoice.oldbal, 40916);
+  assert.equal(invoice.advance, 1000);
+  assert.equal(invoice.total, 26000 + 200); // oldbal/advance never enter this sum
+  assert.equal(store.getCustomer(cust.id).balance, 40916 + (26000 + 200) - 1000); // old balance counted once, not twice
+});
+
 test('createInvoice rejects an unknown customer and requires items', () => {
   const store = createStore(tempFile());
   assert.throws(

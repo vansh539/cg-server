@@ -57,9 +57,14 @@ app.post('/send-invoice', async (req, res) => {
   if (!phone || !/^\d+$/.test(phone)) return res.status(400).json({ error: 'A digits-only phone number is required' });
   if (!pdfBase64) return res.status(400).json({ error: 'pdfBase64 is required' });
   try {
-    const chatId = `${phone.replace(/^0+/, '')}@c.us`; // whatsapp-web.js chat id format
+    // Resolving via getNumberId() rather than hand-building `${phone}@c.us`
+    // — sending straight to a guessed @c.us id throws "No LID for user"
+    // against WhatsApp's current multi-device/LID identity system unless
+    // the client has already resolved that contact through a real lookup.
+    const numberId = await client.getNumberId(phone.replace(/^0+/, ''));
+    if (!numberId) return res.status(400).json({ error: `${phone} is not a registered WhatsApp number` });
     const media = new MessageMedia('application/pdf', pdfBase64, filename || 'invoice.pdf');
-    await client.sendMessage(chatId, media, { caption: message || '' });
+    await client.sendMessage(numberId._serialized, media, { caption: message || '' });
     res.json({ sent: true });
   } catch (err) {
     console.error('[WhatsApp] Send failed:', err.message);
