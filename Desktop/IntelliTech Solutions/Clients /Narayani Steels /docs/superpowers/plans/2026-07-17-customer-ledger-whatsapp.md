@@ -1961,6 +1961,39 @@ what was actually built and shipped:
   the plan's originally-scripted manual steps — same outcome, confirmed
   working.
 
+## 2026-07-17 update #2 — auto-stock-deduct in Finalize & Send; balance notifications on every ledger change
+
+Two more real-time changes from live testing, after the update above:
+
+- **"Finalize & Send" now also deducts stock**, when a ledger customer is
+  linked and rows have matched stock items. `recordInvoice()` in
+  `final-invoice-NS.html` runs a `performStockDeduction()` step (extracted
+  from the standalone `deductStock()`, now shared by both) between the
+  record and send steps. Stock deduction failures don't block the ledger
+  record or the WhatsApp send — they're best-effort, folded into the same
+  outcome note (`" Stock deducted: ..."` / `" Stock deduction failed: ..."`).
+  The standalone "📦 Deduct from Stock" button (`updateDeductButton()`) now
+  only shows for **walk-in** invoices (no ledger customer linked) — showing
+  it alongside "Finalize & Send" would let both independently deduct the
+  same rows.
+- **Every balance-changing ledger action now sends a WhatsApp update.**
+  `POST /api/ledger/customers/:id/old-balance`, `/cash-paid`, and the
+  invoice `/send-whatsapp` route all include the customer's *current*
+  balance in the WhatsApp message (`formatBalanceLine()`: "Balance Due:
+  ₹X" / "Credit Balance: ₹X" / "Balance: Settled (₹0)"). Old-balance/
+  cash-paid entries didn't have any WhatsApp integration before this — they
+  now call a new best-effort `notifyBalanceUpdate()` helper (never throws;
+  returns `{notified, notifyError?}` merged into the route's JSON response
+  so a WhatsApp failure never fails the ledger write itself).
+- **New bot endpoint**: `POST /send-message` on `whatsapp-bot/bot.js` —
+  plain text, no PDF attachment, for these balance-only notifications
+  (`/send-invoice` still handles the PDF case). Both routes share a new
+  `resolveNumberId(phone)` helper (the same `getNumberId()` fix from the
+  previous update).
+- All three flows (old balance, cash paid, invoice) were live-tested
+  end-to-end against Vansh's real test customer/number during this
+  session, including the combined record+deduct+send single-click flow.
+
 ## Deferred (not in this plan)
 
 - **Shop PC deployment of either phase** — a separate live TeamViewer session per this project's established delivery pattern, same as the Stock module. Phase 2 additionally needs: the WhatsApp session paired on the actual shop PC (a fresh QR scan there, the dev-machine pairing from Task 7 does not transfer), a Windows-appropriate headless Chrome path for Task 8's PDF rendering, and confirming `whatsapp-bot/node_modules` (including bundled Chromium) fits the same "ship node_modules, no internet" constraint that shaped every dependency decision in this project so far.

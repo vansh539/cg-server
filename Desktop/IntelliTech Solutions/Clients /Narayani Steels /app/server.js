@@ -210,17 +210,57 @@ app.get('/api/ledger/customers/:id/entries', (req, res) => {
   }
 });
 
-app.post('/api/ledger/customers/:id/old-balance', (req, res) => {
+function formatBalanceLine(balance) {
+  if (balance > 0) return `Balance Due: ₹${pdfFmt(balance)}`;
+  if (balance < 0) return `Credit Balance: ₹${pdfFmt(Math.abs(balance))}`;
+  return `Balance: Settled (₹0)`;
+}
+
+// Best-effort — a WhatsApp send failure must never fail the ledger update
+// that triggered it. Callers get back {notified, notifyError?} to surface
+// in their own response rather than this function throwing.
+async function notifyBalanceUpdate(customer, message) {
   try {
-    res.status(201).json(ledgerStore.addOldBalance(req.params.id, req.body && req.body.amount, req.body && req.body.note));
+    const botPort = process.env.WHATSAPP_BOT_PORT || 5010;
+    const botRes = await fetch(`http://127.0.0.1:${botPort}/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ phone: customer.phone, message }),
+    });
+    const botBody = await botRes.json();
+    if (!botRes.ok) return { notified: false, notifyError: botBody.error || 'WhatsApp bot rejected the message' };
+    return { notified: true };
+  } catch (err) {
+    const isTimeoutOrUnreachable =
+      err.name === 'TimeoutError' || err.code === 'ECONNREFUSED' || (err.cause && err.cause.code === 'ECONNREFUSED');
+    return { notified: false, notifyError: isTimeoutOrUnreachable ? 'WhatsApp bot is not reachable' : err.message };
+  }
+}
+
+app.post('/api/ledger/customers/:id/old-balance', async (req, res) => {
+  try {
+    const entry = ledgerStore.addOldBalance(req.params.id, req.body && req.body.amount, req.body && req.body.note);
+    const customer = ledgerStore.getCustomer(req.params.id);
+    const notifyResult = await notifyBalanceUpdate(
+      customer,
+      `Narayani Steels — Old balance of ₹${pdfFmt(entry.amount)} added. ${formatBalanceLine(customer.balance)}`
+    );
+    res.status(201).json({ ...entry, ...notifyResult });
   } catch (err) {
     sendLedgerError(res, err);
   }
 });
 
-app.post('/api/ledger/customers/:id/cash-paid', (req, res) => {
+app.post('/api/ledger/customers/:id/cash-paid', async (req, res) => {
   try {
-    res.status(201).json(ledgerStore.addCashPaid(req.params.id, req.body && req.body.amount, req.body && req.body.note));
+    const entry = ledgerStore.addCashPaid(req.params.id, req.body && req.body.amount, req.body && req.body.note);
+    const customer = ledgerStore.getCustomer(req.params.id);
+    const notifyResult = await notifyBalanceUpdate(
+      customer,
+      `Narayani Steels — Payment of ₹${pdfFmt(entry.amount)} received. ${formatBalanceLine(customer.balance)}`
+    );
+    res.status(201).json({ ...entry, ...notifyResult });
   } catch (err) {
     sendLedgerError(res, err);
   }
@@ -401,7 +441,7 @@ app.post('/api/ledger/invoices/:id/send-whatsapp', async (req, res) => {
         phone: customer.phone,
         pdfBase64: pdfBuffer.toString('base64'),
         filename: `Invoice-${invoice.invoiceNo}.pdf`,
-        message: `Invoice #${invoice.invoiceNo} from Narayani Steels — Total ₹${pdfFmt(invoice.total)}`,
+        message: `Invoice #${invoice.invoiceNo} from Narayani Steels — Total ₹${pdfFmt(invoice.total)}. ${formatBalanceLine(customer.balance)}`,
       }),
     });
     const botBody = await botRes.json();

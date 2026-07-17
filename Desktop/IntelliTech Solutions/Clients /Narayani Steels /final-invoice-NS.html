@@ -322,12 +322,16 @@ function setLedgerNote(kind,text){
   else{note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';}
 }
 async function recordInvoice(){
-  // Combined action: records the invoice to the customer's ledger, then
-  // sends the single-A6-copy PDF over WhatsApp — one click for both, since
-  // a recorded-but-unsent invoice isn't a useful in-between state for how
-  // this is actually used. If recording already succeeded on a prior click
-  // but the WhatsApp send failed, `recordedInvoiceId` is already set, so
-  // this skips straight to retrying just the send — it never records twice.
+  // Combined action: records the invoice to the customer's ledger, deducts
+  // any matched stock items, then sends the single-A6-copy PDF over
+  // WhatsApp (with the customer's updated balance in the caption) — one
+  // click for all three, since a recorded-but-unsent invoice isn't a
+  // useful in-between state for how this is actually used. If recording
+  // already succeeded on a prior click but a later step failed,
+  // `recordedInvoiceId` is already set, so a retry click skips straight to
+  // whatever's left — it never records the invoice twice, and stock
+  // deduction is itself idempotent per row (`performStockDeduction()`
+  // skips rows already marked `_deducted`).
   const btn=document.getElementById('btn-record-invoice');
   const custId=document.getElementById('f-customer').value;
   if(!custId)return;
@@ -358,35 +362,42 @@ async function recordInvoice(){
       return;
     }
   }
+  btn.textContent='📦 Updating stock…';
+  const stockHasPending=rows.some(r=>r.stockItemId&&(parseFloat(r.q)||0)>0&&!r._deducted);
+  const stock=stockHasPending?await performStockDeduction():{succeeded:[],failure:null};
+  const stockNote=stock.failure
+    ? ` Stock deduction failed: ${stock.failure}.`
+    : (stock.succeeded.length?` Stock deducted: ${stock.succeeded.join('; ')}.`:'');
   btn.textContent='📱 Sending…';
   try{
     const res=await fetch(`/api/ledger/invoices/${recordedInvoiceId}/send-whatsapp`,{method:'POST'});
     const body=await res.json();
     if(!res.ok)throw new Error(body.error||'Send failed');
     btn.textContent='✓ Recorded & Sent';
-    setLedgerNote('ok',`Recorded${invoiceNo?` as Invoice #${invoiceNo}`:''}${customerName?` for ${customerName}`:''} and sent via WhatsApp.`);
+    setLedgerNote('ok',`Recorded${invoiceNo?` as Invoice #${invoiceNo}`:''}${customerName?` for ${customerName}`:''} and sent via WhatsApp.${stockNote}`);
   }catch(err){
     btn.disabled=false;
     btn.textContent='🔄 Retry Send';
-    setLedgerNote('err',`Recorded, but WhatsApp send failed: ${err.message}. Click to retry sending.`);
+    setLedgerNote('err',`Recorded, but WhatsApp send failed: ${err.message}. Click to retry sending.${stockNote}`);
   }
 }
 function updateDeductButton(){
   const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
   note.style.display='none';
   const matched=rows.filter(r=>r.stockItemId);
-  if(dtype==='Invoice'&&matched.length){
+  const custId=document.getElementById('f-customer').value;
+  // When a ledger customer is linked, "Finalize & Send" absorbs stock
+  // deduction into its own flow (see recordInvoice()) — showing this
+  // standalone button too would let both fire independently and risk
+  // double-deducting the same rows. Only shown for walk-in invoices now.
+  if(dtype==='Invoice'&&matched.length&&!custId){
     btn.style.display='inline-block';btn.disabled=false;btn.textContent='📦 Deduct from Stock';btn.dataset.deducted='';
   }else{
     btn.style.display='none';
   }
 }
-async function deductStock(){
-  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
-  if(btn.dataset.deducted==='true')return;
+async function performStockDeduction(){
   const pending=rows.filter(r=>r.stockItemId&&(parseFloat(r.q)||0)>0&&!r._deducted);
-  if(!pending.length)return;
-  btn.disabled=true;
   const succeeded=[];let failure=null;
   for(const r of pending){
     const kg=parseFloat(r.q)||0;
@@ -397,6 +408,15 @@ async function deductStock(){
       r._deducted=true;succeeded.push(`${kg}kg ${r.name}`);
     }catch(err){failure=err.message;break;}
   }
+  return{succeeded,failure};
+}
+async function deductStock(){
+  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
+  if(btn.dataset.deducted==='true')return;
+  const hasPending=rows.some(r=>r.stockItemId&&(parseFloat(r.q)||0)>0&&!r._deducted);
+  if(!hasPending)return;
+  btn.disabled=true;
+  const{succeeded,failure}=await performStockDeduction();
   note.style.display='block';
   if(failure){
     btn.disabled=false;
