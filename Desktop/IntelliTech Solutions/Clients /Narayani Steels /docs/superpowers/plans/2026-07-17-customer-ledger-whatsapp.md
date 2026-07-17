@@ -1544,9 +1544,20 @@ const SESSION_DIR = path.join(__dirname, '.wwebjs_auth');
 // no incoming-message code path to guard in the first place.
 const STARTED_AT = Date.now();
 
+// Uses the system's installed Chrome rather than puppeteer's bundled
+// Chromium download — avoids a second ~200MB browser download (and a flaky
+// one at that; a stale puppeteer cache from another project's whatsapp-web.js
+// setup broke the bundled download during implementation) and matches this
+// project's existing pattern of driving the already-installed Chrome for
+// headless rendering. Install with `PUPPETEER_SKIP_DOWNLOAD=true npm install`
+// the first time, or add a `.npmrc` with `puppeteer_skip_download=true` in
+// `whatsapp-bot/` so future installs (including the eventual shop PC one)
+// don't need the env var repeated manually.
+const CHROME_PATH = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
-  puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
+  puppeteer: { headless: true, executablePath: CHROME_PATH, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
 });
 
 let ready = false;

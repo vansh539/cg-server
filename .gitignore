@@ -21,3 +21,7 @@ Library/
 
 # Narayani Steels stock module — runtime business data, never committed
 Desktop/IntelliTech Solutions/Clients /Narayani Steels /app/data/
+
+# Narayani Steels WhatsApp bot — live auth session, never committed
+Desktop/IntelliTech Solutions/Clients /Narayani Steels /whatsapp-bot/.wwebjs_auth/
+Desktop/IntelliTech Solutions/Clients /Narayani Steels /whatsapp-bot/node_modules/
