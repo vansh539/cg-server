@@ -85,13 +85,13 @@ input[type=number]{-moz-appearance:textfield}
 <div class="wrap">
   <datalist id="stock-items-datalist"></datalist>
   <div class="app-title">🏭 Narayani Steels</div>
-  <div class="app-sub" style="margin-bottom:.25rem">Nothing is saved · Instant print only</div>
-  <div style="text-align:center;margin-bottom:1.25rem"><a href="stock.html" style="font-size:13px;color:#c45c00;text-decoration:none;font-weight:600">📦 Stock →</a></div>
+  <div class="app-sub">Nothing is saved · Instant print only</div>
   <div class="step active" id="s2"><div class="card"><h2>Document type</h2>
-    <div class="grid3">
+    <div class="grid3" style="grid-template-columns:1fr 1fr 1fr 1fr">
       <button class="type-btn" onclick="pickType('Quotation',this)"><div class="tl">📋 Quotation</div></button>
       <button class="type-btn" onclick="pickType('Invoice',this)"><div class="tl">🧾 Invoice / Chitti</div></button>
       <button class="type-btn" onclick="pickType('Challan',this)"><div class="tl">🚚 Delivery Challan</div></button>
+      <a class="type-btn" href="stock.html" style="text-decoration:none;display:block"><div class="tl">📦 Stock</div></a>
     </div>
     <div class="acts"><button class="btn-p" id="n2" onclick="go(3)" disabled>Continue →</button></div>
   </div></div>
