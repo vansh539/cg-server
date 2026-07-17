@@ -1492,5 +1492,47 @@ plain link, not `pickType()` + Continue) since it isn't a document type.
 
 ## Deferred (not in this plan)
 
-- **Excel bulk import script** (`app/scripts/import-stock.js`) — out of scope until Vansh sends the item-list Excel file, per the design doc. Scope it as a separate follow-up plan once the file's actual sheet/column layout is known.
+- ~~**Excel bulk import script**~~ — **done 2026-07-17**, see the dated update below. Was deferred pending the file; it arrived and got imported the same day the piece-count/kg-toggle work (above) shipped.
 - **Shop PC deployment** — this plan only covers local implementation and verification on the dev Mac. Redeploying to the shop PC (copying `app/` including the new `stockStore.js`/`server.js`/`public/stock.html`, and this time also `app/data/` if real stock data exists locally by then) is a separate live TeamViewer session, following this project's established delivery pattern — not part of this plan.
+
+## 2026-07-17 update — Excel catalog import (`app/scripts/import-stock.js`)
+
+`Stock Items .xlsx` (Desktop) arrived: 4 sheets, one per category — PIPES
+(ITEM size + WEIGHT/PC (KGS) + THICKNESS (MM), the same size repeats across
+multiple thicknesses with a different weight each time), and SECTION/RING/TMT
+(a single ITEM column each, no weight or quantity data at all — this file is
+a name catalog, not a stock-count snapshot).
+
+- `app/scripts/import-stock.js` (+ `app/scripts/stock-import-data.json`,
+  the Excel pre-converted to plain JSON via a one-off Python step — Node
+  has no xlsx parser without adding a dependency, and this conversion only
+  needed to happen once) imports via `stockStore`'s real API, not a raw
+  file write, so category/item dedup and movement logging go through the
+  same validated paths the running app uses.
+- Sheet → category mapping: PIPES→M.S. Pipes, SECTION→M.S. Section,
+  RING→Rings, TMT→TMT Bars — all 4 matched existing preset categories by
+  name, no new categories needed.
+- PIPES items are named `"<size> (<thickness>mm)"` (e.g. `"20X20
+  (1.2mm)"`) since plain size alone isn't unique in that sheet (78 unique
+  size+thickness combos, confirmed no true duplicates before importing).
+  SECTION/RING/TMT items import with `weightPerPieceKg: null` (Pieces
+  shows "—" until someone sets it) — 65 + 12 + 8 items.
+- **Every item imports at 0 kg** — this Excel only ever defined *what*
+  items exist, never *how much* is on hand. Real on-hand quantities still
+  need entering via Stock In once the shop does a physical count.
+- **Idempotent by design**: re-running the script only ever adds
+  categories/items that don't already exist by name — it never touches or
+  overwrites an existing item's `currentStockKg`, so it's safe to re-run
+  if the Excel gets updated later with more items.
+- Imported into the **real** `app/data/stock.json` (not a scratch/test
+  path) — 163 items total, confirmed via `npm test`-independent live
+  verification (started the dev server against the real data file,
+  confirmed PIPES rows show correct weight/thickness disambiguation and
+  SECTION rows correctly show "—" for weight/pieces). This is now the
+  actual local stock data going into the eventual shop-PC deployment, not
+  throwaway test fixtures like every other manual verification in this
+  plan used.
+- One thing left exactly as the source Excel had it, not "fixed": row 2 of
+  PIPES uses lowercase `"20x20"` while every other row uses uppercase
+  `"20X20"` — imported verbatim rather than silently normalizing the
+  client's own data.

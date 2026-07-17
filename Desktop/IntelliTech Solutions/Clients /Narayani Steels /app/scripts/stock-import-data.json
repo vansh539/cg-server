@@ -1,0 +1,662 @@
+{
+  "M.S. Pipes": [
+    {
+      "name": "20X20 (1.2mm)",
+      "weightPerPieceKg": 4.5
+    },
+    {
+      "name": "20x20 (1.5mm)",
+      "weightPerPieceKg": 5.5
+    },
+    {
+      "name": "20X20 (1.9mm)",
+      "weightPerPieceKg": 7
+    },
+    {
+      "name": "25X25 (1.2mm)",
+      "weightPerPieceKg": 5.5
+    },
+    {
+      "name": "25X25 (1.5mm)",
+      "weightPerPieceKg": 7
+    },
+    {
+      "name": "25X25 (1.9mm)",
+      "weightPerPieceKg": 8.5
+    },
+    {
+      "name": "25X25 (2.2mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "32X32 (1.2mm)",
+      "weightPerPieceKg": 7
+    },
+    {
+      "name": "32X32 (2mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "38X38 (1.2mm)",
+      "weightPerPieceKg": 8.5
+    },
+    {
+      "name": "38X38 (1.5mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "38X38 (1.9mm)",
+      "weightPerPieceKg": 14
+    },
+    {
+      "name": "38X38 (2.2mm)",
+      "weightPerPieceKg": 17
+    },
+    {
+      "name": "50X50 (1.2mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "50X50 (1.5mm)",
+      "weightPerPieceKg": 14
+    },
+    {
+      "name": "50X50 (1.9mm)",
+      "weightPerPieceKg": 17
+    },
+    {
+      "name": "50X50 (2.2mm)",
+      "weightPerPieceKg": 19
+    },
+    {
+      "name": "50X50 (2.5mm)",
+      "weightPerPieceKg": 22
+    },
+    {
+      "name": "50X50 (2.8mm)",
+      "weightPerPieceKg": 25
+    },
+    {
+      "name": "60X60 (1.6mm)",
+      "weightPerPieceKg": 18
+    },
+    {
+      "name": "60X60 (2mm)",
+      "weightPerPieceKg": 22
+    },
+    {
+      "name": "60X60 (2.5mm)",
+      "weightPerPieceKg": 27
+    },
+    {
+      "name": "72X72 (1.6mm)",
+      "weightPerPieceKg": 22
+    },
+    {
+      "name": "72X72 (2mm)",
+      "weightPerPieceKg": 27
+    },
+    {
+      "name": "72X72 (2.5mm)",
+      "weightPerPieceKg": 32
+    },
+    {
+      "name": "100X100 (2mm)",
+      "weightPerPieceKg": 37
+    },
+    {
+      "name": "100X100 (2.5mm)",
+      "weightPerPieceKg": 47
+    },
+    {
+      "name": "100X100 (3mm)",
+      "weightPerPieceKg": 55
+    },
+    {
+      "name": "100X100 (4mm)",
+      "weightPerPieceKg": 75
+    },
+    {
+      "name": "150X150 (2.5mm)",
+      "weightPerPieceKg": 75
+    },
+    {
+      "name": "150X150 (3mm)",
+      "weightPerPieceKg": 86
+    },
+    {
+      "name": "20X40 (1.2mm)",
+      "weightPerPieceKg": 7
+    },
+    {
+      "name": "20X40 (2mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "50x25 (1.2mm)",
+      "weightPerPieceKg": 8.5
+    },
+    {
+      "name": "50x25 (1.5mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "50X25 (1.9mm)",
+      "weightPerPieceKg": 14
+    },
+    {
+      "name": "50x25 (2.5mm)",
+      "weightPerPieceKg": 17
+    },
+    {
+      "name": "60X40 (1.2mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "60X40 (1.5mm)",
+      "weightPerPieceKg": 14
+    },
+    {
+      "name": "60X40 (1.9mm)",
+      "weightPerPieceKg": 18
+    },
+    {
+      "name": "60X40 (2.8mm)",
+      "weightPerPieceKg": 25
+    },
+    {
+      "name": "75X25 (1.5mm)",
+      "weightPerPieceKg": 14
+    },
+    {
+      "name": "75X25 (2mm)",
+      "weightPerPieceKg": 17
+    },
+    {
+      "name": "80x40 (1.6mm)",
+      "weightPerPieceKg": 18
+    },
+    {
+      "name": "80X40 (2mm)",
+      "weightPerPieceKg": 22
+    },
+    {
+      "name": "80X40 (2.5mm)",
+      "weightPerPieceKg": 27
+    },
+    {
+      "name": "80X40 (2.8mm)",
+      "weightPerPieceKg": 32
+    },
+    {
+      "name": "100X50 (1.6mm)",
+      "weightPerPieceKg": 22
+    },
+    {
+      "name": "100X50 (2mm)",
+      "weightPerPieceKg": 27
+    },
+    {
+      "name": "100X50 (2.5mm)",
+      "weightPerPieceKg": 32
+    },
+    {
+      "name": "122X61 (5 X 2.5 ) (2.5mm)",
+      "weightPerPieceKg": 43
+    },
+    {
+      "name": "145X82 (6 X 3) (2.5mm)",
+      "weightPerPieceKg": 53
+    },
+    {
+      "name": "32 OD (1.5mm)",
+      "weightPerPieceKg": 7
+    },
+    {
+      "name": "32 OD (1.9mm)",
+      "weightPerPieceKg": 9
+    },
+    {
+      "name": "32 OD (2.5mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "42 OD (1.2mm)",
+      "weightPerPieceKg": 7
+    },
+    {
+      "name": "42 OD (1.9mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "48 OD (1.2mm)",
+      "weightPerPieceKg": 8.5
+    },
+    {
+      "name": "48 OD (1.5mm)",
+      "weightPerPieceKg": 11
+    },
+    {
+      "name": "48 OD (2mm)",
+      "weightPerPieceKg": 14
+    },
+    {
+      "name": "48 OD (2.5mm)",
+      "weightPerPieceKg": 17
+    },
+    {
+      "name": "48 OD (2.8mm)",
+      "weightPerPieceKg": 20
+    },
+    {
+      "name": "60 OD (1.5mm)",
+      "weightPerPieceKg": 13
+    },
+    {
+      "name": "60 OD (2mm)",
+      "weightPerPieceKg": 16
+    },
+    {
+      "name": "60 OD (2.5mm)",
+      "weightPerPieceKg": 22
+    },
+    {
+      "name": "60 OD (2.8mm)",
+      "weightPerPieceKg": 25
+    },
+    {
+      "name": "76 OD (2mm)",
+      "weightPerPieceKg": 22
+    },
+    {
+      "name": "76 OD (2.5mm)",
+      "weightPerPieceKg": 27
+    },
+    {
+      "name": "76 OD (2.8mm)",
+      "weightPerPieceKg": 32
+    },
+    {
+      "name": "89 OD (2mm)",
+      "weightPerPieceKg": 27
+    },
+    {
+      "name": "89 OD (2.5mm)",
+      "weightPerPieceKg": 33
+    },
+    {
+      "name": "89 OD (2.8mm)",
+      "weightPerPieceKg": 37
+    },
+    {
+      "name": "89 OD (3.2mm)",
+      "weightPerPieceKg": 42
+    },
+    {
+      "name": "89 OD (3.6mm)",
+      "weightPerPieceKg": 46
+    },
+    {
+      "name": "114 OD (2.5mm)",
+      "weightPerPieceKg": 43
+    },
+    {
+      "name": "114 OD (3.5mm)",
+      "weightPerPieceKg": 58
+    },
+    {
+      "name": "165 OD (2.5mm)",
+      "weightPerPieceKg": 70
+    },
+    {
+      "name": "219 OD (2.5mm)",
+      "weightPerPieceKg": 84
+    }
+  ],
+  "M.S. Section": [
+    {
+      "name": "9MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "10MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "12MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "16MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "20MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "32MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50MM SQ",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "10MM ROUND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "12MM ROUND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "16MM ROUND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "20MM ROUND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25MM ROUND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "32MM ROUND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "20X5 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25X6 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "32X6 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40X6 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50X6 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "65X6 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "75X6 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "100X6 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "100X12 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "100X16 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25X10 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40X8 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40X10 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40X12 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50X8 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50X10 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50X12 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50X16 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "65X12 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "65X16 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "75X12 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "75X16 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "75X20 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "75X25 FLAT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "22X2 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25X3 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25 X5 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "32X4 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "35X5 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40X5 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40X6 ANGE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50X5 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "50X6 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "65X6 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "75X6 ANGLE",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "3X1.5 CH",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "4X2 CH",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "5X2.5 CH",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "6X3 CH",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "4X2 IB",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "5X2.5 IB",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "6X3 IB",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "8X4 IB",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "12X2 BEND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "17X2 BEND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "17X3 BEND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "18X4 BEND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25X3 BEND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "32X3 BEND",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "40X3 BEND",
+      "weightPerPieceKg": null
+    }
+  ],
+  "Rings": [
+    {
+      "name": "7 X 3 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 7 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 10 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 12 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 13 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 14 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 15 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 16 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 17 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "7 X 20 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "4 X 14 RING",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "4 X 13 RING",
+      "weightPerPieceKg": null
+    }
+  ],
+  "TMT Bars": [
+    {
+      "name": "06 MM TMT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "08 MM TMT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "10 MM TMT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "12 MM TMT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "16 MM TMT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "20 MM TMT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "25 MM TMT",
+      "weightPerPieceKg": null
+    },
+    {
+      "name": "32 MM TMT",
+      "weightPerPieceKg": null
+    }
+  ]
+}
