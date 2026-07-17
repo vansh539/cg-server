@@ -8,6 +8,7 @@ const http = require('node:http');
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-server-'));
 process.env.STOCK_DATA_PATH = path.join(tmpDir, 'stock.json');
+process.env.LEDGER_DATA_PATH = path.join(tmpDir, 'ledger.json');
 process.env.PORT = '0'; // unused directly by tests, but keeps server.js's default sane if ever invoked
 
 const app = require('./server.js');
@@ -155,6 +156,105 @@ test('a corrupted stock.json disables only /api/stock/* (500), not the rest of t
     assert.equal(stockRes.status, 500);
     const staticRes = await fetch(`${baseUrl(server)}/final-invoice-NS.html`);
     assert.equal(staticRes.status, 200); // rest of the app still works
+  } finally {
+    await close(server);
+  }
+});
+
+test('GET /api/ledger/customers starts empty', async () => {
+  const server = await listen();
+  try {
+    const res = await fetch(`${baseUrl(server)}/api/ledger/customers`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), []);
+  } finally {
+    await close(server);
+  }
+});
+
+test('POST /api/ledger/customers creates a customer, validates input', async () => {
+  const server = await listen();
+  try {
+    const res = await postJson(server, '/api/ledger/customers', { name: 'Lakshmi Steel', phone: '9876543210' });
+    assert.equal(res.status, 201);
+    const cust = await res.json();
+    assert.equal(cust.balance, 0);
+
+    const bad = await postJson(server, '/api/ledger/customers', { name: '', phone: '123' });
+    assert.equal(bad.status, 400);
+  } finally {
+    await close(server);
+  }
+});
+
+test('POST /api/ledger/invoices creates an invoice + due entry, excludes old balance from the due amount', async () => {
+  const server = await listen();
+  try {
+    const cust = await (await postJson(server, '/api/ledger/customers', { name: 'Test Buyer', phone: '9998887776' })).json();
+    const res = await postJson(server, '/api/ledger/invoices', {
+      customerId: cust.id, date: '17/07/2026', mobile: '9998887776', lorry: 'TS08AB1234',
+      items: [{ q: '500', name: 'MS Angle', p: '20', r: '52' }],
+      sub: 26000, lab: 200, weigh: 0, freight: 0, unload: 0, gst: 4716, others: 0, advance: 2000,
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.invoiceNo, 1);
+    assert.equal(body.customerName, 'Test Buyer');
+    assert.equal(body.total, 26000 + 200 + 4716);
+
+    const entriesRes = await fetch(`${baseUrl(server)}/api/ledger/customers/${cust.id}/entries`);
+    const entries = await entriesRes.json();
+    assert.equal(entries.length, 2);
+    assert.equal(entries[0].reason, 'invoice');
+    assert.equal(entries[1].reason, 'advance');
+
+    const custRes = await fetch(`${baseUrl(server)}/api/ledger/customers/${cust.id}`);
+    const custBody = await custRes.json();
+    assert.equal(custBody.balance, (26000 + 200 + 4716) - 2000);
+  } finally {
+    await close(server);
+  }
+});
+
+test('POST /api/ledger/customers/:id/old-balance and /cash-paid update the ledger; unknown customer is 404', async () => {
+  const server = await listen();
+  try {
+    const cust = await (await postJson(server, '/api/ledger/customers', { name: 'Backfill Co', phone: '5556667778' })).json();
+    const oldBalRes = await postJson(server, `/api/ledger/customers/${cust.id}/old-balance`, { amount: 15000, note: 'Pre-system' });
+    assert.equal(oldBalRes.status, 201);
+
+    const cashRes = await postJson(server, `/api/ledger/customers/${cust.id}/cash-paid`, { amount: 5000 });
+    assert.equal(cashRes.status, 201);
+
+    const custRes = await fetch(`${baseUrl(server)}/api/ledger/customers/${cust.id}`);
+    assert.equal((await custRes.json()).balance, 10000);
+
+    const missing = await postJson(server, '/api/ledger/customers/cust_ghost/old-balance', { amount: 100 });
+    assert.equal(missing.status, 404);
+  } finally {
+    await close(server);
+  }
+});
+
+test('GET /api/ledger/invoices/:id returns the snapshot with customerName; 404 for unknown', async () => {
+  const server = await listen();
+  try {
+    const cust = await (await postJson(server, '/api/ledger/customers', { name: 'Snapshot Co', phone: '2223334445' })).json();
+    const created = await (
+      await postJson(server, '/api/ledger/invoices', {
+        customerId: cust.id, date: '17/07/2026', mobile: '2223334445', lorry: 'TS09ZZ0001',
+        items: [{ q: '10', name: 'Rod', p: '1', r: '5' }], sub: 50, lab: 5, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 0,
+      })
+    ).json();
+
+    const res = await fetch(`${baseUrl(server)}/api/ledger/invoices/${created.id}`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.customerName, 'Snapshot Co');
+    assert.equal(body.items.length, 1);
+
+    const missing = await fetch(`${baseUrl(server)}/api/ledger/invoices/inv_ghost`);
+    assert.equal(missing.status, 404);
   } finally {
     await close(server);
   }

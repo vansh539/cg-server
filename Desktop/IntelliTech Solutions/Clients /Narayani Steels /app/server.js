@@ -7,6 +7,7 @@ const fs      = require('fs');
 const crypto  = require('crypto');
 const { execSync } = require('child_process');
 const { createStore } = require('./stockStore');
+const { createStore: createLedgerStore } = require('./ledgerStore');
 
 const app  = express();
 const PORT = process.env.PORT || 3300;
@@ -30,6 +31,28 @@ function sendStockError(res, err) {
 // the rest of the app (billing still needs to work) — it only disables stock.
 function requireStock(req, res, next) {
   if (_stockInitError) return res.status(500).json({ error: 'Stock data is unavailable — see server logs.' });
+  next();
+}
+
+const LEDGER_DATA_PATH = process.env.LEDGER_DATA_PATH || path.join(__dirname, 'data', 'ledger.json');
+const ledgerStore = createLedgerStore(LEDGER_DATA_PATH);
+let _ledgerInitError = null;
+try {
+  ledgerStore.init();
+} catch (err) {
+  _ledgerInitError = err;
+  console.error(`[Ledger] Failed to load ledger data: ${err.message}`);
+}
+
+function sendLedgerError(res, err) {
+  const status = /not found/i.test(err.message) ? 404 : 400;
+  res.status(status).json({ error: err.message });
+}
+
+// Guards every /api/ledger/* route — same reasoning as requireStock: a
+// corrupted ledger.json must not take down billing or Stock.
+function requireLedger(req, res, next) {
+  if (_ledgerInitError) return res.status(500).json({ error: 'Ledger data is unavailable — see server logs.' });
   next();
 }
 
@@ -153,6 +176,72 @@ app.get('/api/stock/items/:id/movements', (req, res) => {
     res.json(stockStore.listMovements(req.params.id));
   } catch (err) {
     sendStockError(res, err);
+  }
+});
+
+app.use('/api/ledger', requireLedger);
+
+app.get('/api/ledger/customers', (req, res) => {
+  res.json(ledgerStore.listCustomers());
+});
+
+app.post('/api/ledger/customers', (req, res) => {
+  try {
+    res.status(201).json(ledgerStore.addCustomer(req.body || {}));
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+app.get('/api/ledger/customers/:id', (req, res) => {
+  try {
+    res.json(ledgerStore.getCustomer(req.params.id));
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+app.get('/api/ledger/customers/:id/entries', (req, res) => {
+  try {
+    res.json(ledgerStore.listEntries(req.params.id));
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+app.post('/api/ledger/customers/:id/old-balance', (req, res) => {
+  try {
+    res.status(201).json(ledgerStore.addOldBalance(req.params.id, req.body && req.body.amount, req.body && req.body.note));
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+app.post('/api/ledger/customers/:id/cash-paid', (req, res) => {
+  try {
+    res.status(201).json(ledgerStore.addCashPaid(req.params.id, req.body && req.body.amount, req.body && req.body.note));
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+app.post('/api/ledger/invoices', (req, res) => {
+  try {
+    const invoice = ledgerStore.createInvoice(req.body || {});
+    const customer = ledgerStore.getCustomer(invoice.customerId);
+    res.status(201).json({ ...invoice, customerName: customer.name });
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+app.get('/api/ledger/invoices/:id', (req, res) => {
+  try {
+    const invoice = ledgerStore.getInvoice(req.params.id);
+    const customer = ledgerStore.getCustomer(invoice.customerId);
+    res.json({ ...invoice, customerName: customer.name });
+  } catch (err) {
+    sendLedgerError(res, err);
   }
 });
 
