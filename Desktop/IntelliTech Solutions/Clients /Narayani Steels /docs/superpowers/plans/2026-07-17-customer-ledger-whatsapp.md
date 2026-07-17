@@ -411,6 +411,24 @@ git commit -m "feat(narayani-steels): add JSON-backed customer ledger data layer
   - `POST /api/ledger/invoices` body `{customerId,date,mobile,lorry,items,sub,lab,weigh,freight,unload,gst,others,advance}` → `201 {invoice..., customerName}` or `400 {error}` — response is enriched with the customer's `name` (fetched in the route handler, not stored redundantly in `ledgerStore`) so the Chitti UI can show a confirmation without a second round-trip.
   - `GET /api/ledger/invoices/:id` → `200 {invoice..., customerName}` or `404 {error}`
 
+- [ ] **Step 0: Point `server.test.js` at a temp ledger file too**
+
+`server.test.js` already sets `process.env.STOCK_DATA_PATH` to a temp file before requiring `server.js`, but has no equivalent for the ledger store — without this, ledger tests silently write into the real `app/data/ledger.json` on every run, and repeated runs accumulate customers/invoices across runs (caught by actually running `npm test` twice in a row during implementation — the second run failed because the first run's test customers were still there). Add the missing line right next to the existing one:
+
+Replace:
+```js
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-server-'));
+process.env.STOCK_DATA_PATH = path.join(tmpDir, 'stock.json');
+process.env.PORT = '0'; // unused directly by tests, but keeps server.js's default sane if ever invoked
+```
+with:
+```js
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-server-'));
+process.env.STOCK_DATA_PATH = path.join(tmpDir, 'stock.json');
+process.env.LEDGER_DATA_PATH = path.join(tmpDir, 'ledger.json');
+process.env.PORT = '0'; // unused directly by tests, but keeps server.js's default sane if ever invoked
+```
+
 - [ ] **Step 1: Extend the failing test file**
 
 Append to `app/server.test.js` (after the existing Stock tests, before the final closing of the file — these are new `test(...)` blocks in the same file, reusing the existing `listen`/`close`/`baseUrl`/`postJson` helpers already defined there):
