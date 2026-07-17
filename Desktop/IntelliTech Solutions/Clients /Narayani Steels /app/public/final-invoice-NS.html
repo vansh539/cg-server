@@ -145,8 +145,9 @@ input[type=number]{-moz-appearance:textfield}
   <div class="step" id="s4">
     <div class="print-note">✓ Ready · <strong>A5 (2 copies) · Margins: None · Scale: 100% · Backgrounds: ON</strong></div>
     <div class="doc-wrap" id="preview-wrap"></div>
-    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" id="btn-deduct" onclick="deductStock()" style="display:none">📦 Deduct from Stock</button><button class="btn-s" onclick="reset()">New</button></div>
+    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" id="btn-deduct" onclick="deductStock()" style="display:none">📦 Deduct from Stock</button><button class="btn-s" id="btn-record-invoice" onclick="recordInvoice()" style="display:none">💾 Record Invoice</button><button class="btn-s" onclick="reset()">New</button></div>
     <div class="print-note" id="deduct-note" style="display:none"></div>
+    <div class="print-note" id="ledger-note" style="display:none"></div>
   </div>
   <div class="step" id="s9"><div class="card"><h2>Quotation format</h2>
     <div class="grid3">
@@ -287,6 +288,7 @@ const CONT_TOTAL=19;
 function buildContSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot){let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,gst,others,oldbal,advance].filter(v=>v>0).length:0;tbody+=emptyRows(Math.max(0,CONT_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot);return`<div class="doc-cont"><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
 function generate(){
   rows.forEach(r=>{r._deducted=false;});
+  recordedInvoiceId=null;
   let sub=0,tq=0;rows.forEach(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0;sub+=q*rt;tq+=q;});
   const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
   const taxable=sub+lab+weigh+freight+unload+others;
@@ -299,7 +301,52 @@ function generate(){
   let ph='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);ph+=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot,meta);});
   document.getElementById('preview-wrap').innerHTML=ph;
   let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,gst,others,oldbal,advance,tot,meta);prh+=`<div class="print-slip"><div class="a5-half"><div style="height:9mm"></div>${sh}</div><div class="a5-tear"></div><div class="a5-half"><div style="height:9mm"></div>${sh}</div></div>`;if(!il)prh+=`<div class="page-break"></div>`;});
-  document.getElementById('print-area').innerHTML=prh;go(4);updateDeductButton();
+  document.getElementById('print-area').innerHTML=prh;go(4);updateDeductButton();updateRecordInvoiceButton();
+}
+let recordedInvoiceId=null;
+function updateRecordInvoiceButton(){
+  const btn=document.getElementById('btn-record-invoice');
+  const custId=document.getElementById('f-customer').value;
+  document.getElementById('ledger-note').style.display='none';
+  if(dtype==='Invoice'&&custId){
+    btn.style.display='inline-block';btn.disabled=false;btn.textContent='💾 Record Invoice';
+  }else{
+    btn.style.display='none';
+  }
+}
+async function recordInvoice(){
+  const btn=document.getElementById('btn-record-invoice'),note=document.getElementById('ledger-note');
+  const custId=document.getElementById('f-customer').value;
+  if(!custId||recordedInvoiceId)return;
+  btn.disabled=true;
+  let sub=0;rows.forEach(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0;sub+=q*rt;});
+  const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
+  const taxable=sub+lab+weigh+freight+unload+others;
+  const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
+  const advance=gc('f-advance');
+  const payload={
+    customerId:custId,
+    date:document.getElementById('f-date').value,
+    mobile:document.getElementById('f-mobile').value,
+    lorry:document.getElementById('f-lorry').value,
+    items:rows.map(r=>({q:r.q,name:r.name,p:r.p,r:r.r})),
+    sub,lab,weigh,freight,unload,gst,others,advance,
+  };
+  try{
+    const res=await fetch('/api/ledger/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const body=await res.json();
+    if(!res.ok)throw new Error(body.error||'Could not record invoice');
+    recordedInvoiceId=body.id;
+    btn.textContent=`✓ Recorded (Invoice #${body.invoiceNo})`;
+    note.style.display='block';
+    note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';
+    note.textContent=`Recorded as Invoice #${body.invoiceNo} for ${body.customerName}.`;
+  }catch(err){
+    btn.disabled=false;
+    note.style.display='block';
+    note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';
+    note.textContent=`Error: ${err.message}`;
+  }
 }
 function updateDeductButton(){
   const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
