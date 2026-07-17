@@ -344,9 +344,11 @@ function createStore(filePath) {
 
   function listMovements(itemId) {
     ensureLoaded();
-    return data.movements
-      .filter((m) => m.itemId === itemId)
-      .sort((a, b) => b.at.localeCompare(a.at));
+    // Movements are always appended in chronological order, so reversing
+    // gives newest-first deterministically — sorting by the `at` ISO string
+    // instead would tie (and misorder) any movements written within the
+    // same millisecond, which happens routinely for sync same-tick writes.
+    return data.movements.filter((m) => m.itemId === itemId).reverse();
   }
 
   return { init, listCategories, addCategory, listItems, getItem, addItem, stockIn, adjust, deduct, listMovements };

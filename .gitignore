@@ -2,3 +2,22 @@ capital_gains_portal.html
 .license_keys/
 license*.lic
 generate_license.py
+
+# System / tool directories that cause EAS build issues
+.docker/
+Library/
+.local/
+.npm/
+.cache/
+.nvm/
+.conda/
+.ollama/
+.ssh/
+.vnc/
+.pm2/
+.swarm/
+*.sock
+*.socket
+
+# Narayani Steels stock module — runtime business data, never committed
+Desktop/IntelliTech Solutions/Clients /Narayani Steels /app/data/
