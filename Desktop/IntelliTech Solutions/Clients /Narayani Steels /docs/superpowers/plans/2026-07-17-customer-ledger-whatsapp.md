@@ -955,6 +955,7 @@ async function submitEntry() {
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || 'Could not save entry');
     openForm = null;
+    renderForm();
     await loadAll();
   } catch (err) {
     errEl.textContent = err.message;
