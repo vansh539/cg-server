@@ -10,7 +10,15 @@ function newId(prefix) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
+// `currentStockKg`/`deltaKg`/`kg`/`newTotalKg` throughout this file are the
+// generic tracked quantity — for `unit:'pcs'` items (e.g. Covering Blocks)
+// they hold a piece count, not literally kilograms. Kept unrenamed
+// deliberately (vs. a `currentStock`/`qty` rename across this file, the
+// routes, stock.html, and the Chitti's deduct payload) to keep this change
+// surgical — the meaning is unit-dependent, tracked via the new `unit`
+// field below, not the field name.
 function computePieces(item) {
+  if (item.unit === 'pcs') return null; // the tracked quantity already *is* the piece count — no separate derived value needed
   return item.weightPerPieceKg ? Math.floor(item.currentStockKg / item.weightPerPieceKg) : null;
 }
 
@@ -81,17 +89,23 @@ function createStore(filePath) {
     return { ...item, pieces: computePieces(item) };
   }
 
-  function addItem({ categoryId, name, weightPerPieceKg, initialStockKg }) {
+  function addItem({ categoryId, name, unit, weightPerPieceKg, initialStockKg }) {
     ensureLoaded();
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Item name is required');
     if (!data.categories.some((c) => c.id === categoryId)) throw new Error('Category not found');
 
+    const resolvedUnit = unit === 'pcs' ? 'pcs' : 'kg';
+
+    // Pieces-mode items (pure count, e.g. Covering Blocks) have no weight
+    // concept at all — silently ignore any weightPerPieceKg passed for them
+    // rather than erroring, since the UI simply won't show that field for
+    // this unit and a stray value shouldn't block item creation.
     const weight =
-      weightPerPieceKg === null || weightPerPieceKg === undefined || weightPerPieceKg === ''
+      resolvedUnit === 'pcs' || weightPerPieceKg === null || weightPerPieceKg === undefined || weightPerPieceKg === ''
         ? null
         : Number(weightPerPieceKg);
-    if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) {
+    if (resolvedUnit === 'kg' && weight !== null && (!Number.isFinite(weight) || weight <= 0)) {
       throw new Error('Weight per piece must be a positive number or omitted');
     }
 
@@ -100,7 +114,7 @@ function createStore(filePath) {
       throw new Error('Initial stock must be zero or a positive number');
     }
 
-    const item = { id: newId('item'), categoryId, name: trimmedName, weightPerPieceKg: weight, currentStockKg: initial };
+    const item = { id: newId('item'), categoryId, name: trimmedName, unit: resolvedUnit, weightPerPieceKg: weight, currentStockKg: initial };
     data.items.push(item);
     if (initial > 0) {
       data.movements.push({ id: newId('mv'), itemId: item.id, deltaKg: initial, reason: 'initial', note: '', at: new Date().toISOString() });

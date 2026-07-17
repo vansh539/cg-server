@@ -228,7 +228,13 @@ function stockDisplayName(item){const cat=stockCategories.find(c=>c.id===item.ca
 async function loadStockDatalist(){
   try{
     const [catsRes,itemsRes]=await Promise.all([fetch('/api/stock/categories'),fetch('/api/stock/items')]);
-    stockCategories=await catsRes.json();stockItems=await itemsRes.json();
+    stockCategories=await catsRes.json();
+    // Chitti quantities are always kg (Loading Charges, GST base, etc. are
+    // all computed from the kg total across rows) — pcs-only stock items
+    // (e.g. Covering Blocks) can't be sold through this flow without
+    // corrupting that math, so they're simply never offered here. They're
+    // tracked purely on the Stock page (Stock In/Adjust), not via Chitti sales.
+    stockItems=(await itemsRes.json()).filter(it=>it.unit!=='pcs');
     document.getElementById('stock-items-datalist').innerHTML=stockItems.map(it=>`<option value="${stockDisplayName(it)}">`).join('');
   }catch(err){/* stock module optional; billing works without it */}
 }

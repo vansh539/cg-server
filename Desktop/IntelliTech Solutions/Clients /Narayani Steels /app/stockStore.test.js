@@ -61,6 +61,39 @@ test('addItem validates category, name, weight, and initial stock', () => {
   const item = store.addItem({ categoryId: tmt.id, name: 'TMT 12mm Bar', weightPerPieceKg: 10.5, initialStockKg: 105 });
   assert.equal(item.currentStockKg, 105);
   assert.equal(item.pieces, 10); // floor(105 / 10.5) === 10
+  assert.equal(item.unit, 'kg'); // default when not specified — backward compatible with items created before `unit` existed
+});
+
+test('addItem with unit:"pcs" tracks a pure piece count — no weight concept, pieces is not separately computed', () => {
+  const store = createStore(tempFile());
+  const [cat] = store.listCategories();
+  const item = store.addItem({ categoryId: cat.id, name: 'Covering Block 4in', unit: 'pcs', initialStockKg: 500 });
+  assert.equal(item.unit, 'pcs');
+  assert.equal(item.currentStockKg, 500); // the tracked quantity itself is the piece count
+  assert.equal(item.weightPerPieceKg, null);
+  assert.equal(item.pieces, null); // no separate derived value — Stock already *is* pieces for this unit
+
+  // A weightPerPieceKg passed alongside unit:'pcs' is silently ignored, not an error —
+  // the UI never shows that field for this unit, a stray value shouldn't block creation.
+  const item2 = store.addItem({ categoryId: cat.id, name: 'Covering Block 6in', unit: 'pcs', weightPerPieceKg: 5, initialStockKg: 200 });
+  assert.equal(item2.weightPerPieceKg, null);
+});
+
+test('stockIn/adjust/deduct work identically for unit:"pcs" items — same quantity semantics, just pieces not kg', () => {
+  const store = createStore(tempFile());
+  const [cat] = store.listCategories();
+  const item = store.addItem({ categoryId: cat.id, name: 'Covering Block 4in', unit: 'pcs', initialStockKg: 500 });
+
+  const afterStockIn = store.stockIn(item.id, 100);
+  assert.equal(afterStockIn.currentStockKg, 600);
+  assert.equal(afterStockIn.pieces, null);
+
+  const afterAdjust = store.adjust(item.id, 550);
+  assert.equal(afterAdjust.currentStockKg, 550);
+
+  const afterDeduct = store.deduct(item.id, 50);
+  assert.equal(afterDeduct.currentStockKg, 500);
+  assert.equal(afterDeduct.unit, 'pcs');
 });
 
 test('addItem allows a null weightPerPieceKg and reports pieces as null', () => {

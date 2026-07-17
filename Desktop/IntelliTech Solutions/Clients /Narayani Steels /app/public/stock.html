@@ -68,7 +68,7 @@ table.stbl{width:100%;border-collapse:collapse;font-size:13px}
   <div class="card">
     <h3 id="items-heading">Items</h3>
     <table class="stbl">
-      <thead><tr><th>Name</th><th>Wt/Pc (kg)</th><th class="r">Stock (kg)</th><th class="r">Pieces</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Wt/Pc (kg)</th><th class="r">Stock</th><th class="r">Pieces</th><th>Actions</th></tr></thead>
       <tbody id="items-tbody"></tbody>
     </table>
     <div class="empty-note" id="empty-note" style="display:none">No items in this category yet.</div>
@@ -80,9 +80,16 @@ table.stbl{width:100%;border-collapse:collapse;font-size:13px}
       <div class="fg"><label>Category</label><select id="new-item-cat"></select></div>
       <div class="fg"><label>Name</label><input id="new-item-name" type="text" placeholder="TMT 12mm Bar"></div>
     </div>
+    <div class="fg">
+      <label>Tracked by</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn-s btn-sm" id="unit-btn-kg" onclick="setNewItemUnit('kg')">By Weight (kg)</button>
+        <button type="button" class="btn-s btn-sm" id="unit-btn-pcs" onclick="setNewItemUnit('pcs')">By Piece Count</button>
+      </div>
+    </div>
     <div class="grid2">
-      <div class="fg"><label>Weight/Piece (kg, optional)</label><input id="new-item-weight" type="number" min="0" step="any" placeholder="10.5" oninput="updateNewItemPreview()"></div>
-      <div class="fg"><label>Initial Stock (kg)</label><input id="new-item-stock" type="number" min="0" step="any" placeholder="0" oninput="updateNewItemPreview()"></div>
+      <div class="fg" id="new-item-weight-fg"><label>Weight/Piece (kg, optional)</label><input id="new-item-weight" type="number" min="0" step="any" placeholder="10.5" oninput="updateNewItemPreview()"></div>
+      <div class="fg"><label id="new-item-stock-label">Initial Stock (kg)</label><input id="new-item-stock" type="number" min="0" step="any" placeholder="0" oninput="updateNewItemPreview()"></div>
     </div>
     <div class="pieces-preview" id="new-item-preview">Pieces: —</div>
     <div class="err" id="item-err" style="display:none"></div>
@@ -96,6 +103,7 @@ let categories = [];
 let items = [];
 let selectedCatId = null;
 let openRow = null; // {itemId, mode: 'stock-in'|'adjust'|'history'}
+let newItemUnit = 'kg';
 
 function fmtKg(v) {
   return Number(v.toFixed(2));
@@ -174,8 +182,9 @@ function renderItems() {
   document.getElementById('empty-note').style.display = catItems.length ? 'none' : 'block';
   tbody.innerHTML = catItems
     .map((item) => {
+      const stockLabel = `${fmtKg(item.currentStockKg)} ${item.unit === 'pcs' ? 'pcs' : 'kg'}`;
       const rows = [
-        `<tr><td>${item.name}</td><td>${item.weightPerPieceKg ?? '—'}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${fmtKg(item.currentStockKg)}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button></td></tr>`,
+        `<tr><td>${item.name}</td><td>${item.unit === 'pcs' ? '—' : (item.weightPerPieceKg ?? '—')}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${stockLabel}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button></td></tr>`,
       ];
       if (openRow && openRow.itemId === item.id) rows.push(renderExpandedRow(item));
       return rows.join('');
@@ -183,10 +192,28 @@ function renderItems() {
     .join('');
 }
 
+// Items with unit:'kg' AND a set weightPerPieceKg (e.g. Binding Wire with
+// an average weight-per-bundle) can have Stock In/Adjust entered as EITHER
+// kg or pieces — a unit dropdown appears next to the input in that case,
+// and the entered number is converted to kg (the API's one true unit for
+// unit:'kg' items) before submitting. Pure unit:'pcs' items never show this
+// toggle — there's only one unit for them.
+function rowUnitToggle(item) {
+  if (item.unit === 'pcs' || !item.weightPerPieceKg) return '';
+  return `<select id="row-unit"><option value="kg">kg</option><option value="pcs">pcs</option></select>`;
+}
+function rowInputToStockValue(item) {
+  const raw = parseFloat(document.getElementById('row-input').value);
+  const unitSel = document.getElementById('row-unit');
+  if (unitSel && unitSel.value === 'pcs') return raw * item.weightPerPieceKg;
+  return raw;
+}
 function renderExpandedRow(item) {
+  const unitLabel = item.unit === 'pcs' ? 'pcs' : 'kg';
   if (openRow.mode === 'stock-in') {
     return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
-      <input id="row-input" type="number" min="0" step="any" placeholder="Kg received">
+      <input id="row-input" type="number" min="0" step="any" placeholder="${item.unit === 'pcs' ? 'Pieces received' : 'Kg received'}">
+      ${rowUnitToggle(item)}
       <button class="btn-p btn-sm" onclick="submitStockIn('${item.id}')">Save</button>
       <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
       <span class="err" id="row-err" style="display:none"></span>
@@ -194,7 +221,8 @@ function renderExpandedRow(item) {
   }
   if (openRow.mode === 'adjust') {
     return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
-      <input id="row-input" type="number" step="any" placeholder="New true total (kg)" value="${fmtKg(item.currentStockKg)}">
+      <input id="row-input" type="number" step="any" placeholder="New true total (${unitLabel})" value="${fmtKg(item.currentStockKg)}">
+      ${rowUnitToggle(item)}
       <button class="btn-p btn-sm" onclick="submitAdjust('${item.id}')">Save</button>
       <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
       <span class="err" id="row-err" style="display:none"></span>
@@ -218,19 +246,22 @@ function closeRow() {
 }
 
 async function loadHistory(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  const unitLabel = item && item.unit === 'pcs' ? 'pcs' : 'kg';
   const res = await fetch(`${API}/items/${itemId}/movements`);
   const movements = await res.json();
   const cell = document.getElementById('history-cell');
   if (!cell) return;
   cell.innerHTML = movements.length
     ? `<ul>${movements
-        .map((m) => `<li>${new Date(m.at).toLocaleString('en-IN')} — ${m.reason} — ${m.deltaKg > 0 ? '+' : ''}${fmtKg(m.deltaKg)}kg${m.note ? ` (${m.note})` : ''}</li>`)
+        .map((m) => `<li>${new Date(m.at).toLocaleString('en-IN')} — ${m.reason} — ${m.deltaKg > 0 ? '+' : ''}${fmtKg(m.deltaKg)}${unitLabel}${m.note ? ` (${m.note})` : ''}</li>`)
         .join('')}</ul>`
     : 'No movements yet.';
 }
 
 async function submitStockIn(itemId) {
-  const kg = parseFloat(document.getElementById('row-input').value);
+  const item = items.find((i) => i.id === itemId);
+  const kg = rowInputToStockValue(item);
   const errEl = document.getElementById('row-err');
   try {
     const res = await fetch(`${API}/items/${itemId}/stock-in`, {
@@ -249,7 +280,8 @@ async function submitStockIn(itemId) {
 }
 
 async function submitAdjust(itemId) {
-  const newTotalKg = parseFloat(document.getElementById('row-input').value);
+  const item = items.find((i) => i.id === itemId);
+  const newTotalKg = rowInputToStockValue(item);
   const errEl = document.getElementById('row-err');
   try {
     const res = await fetch(`${API}/items/${itemId}/adjust`, {
@@ -267,6 +299,17 @@ async function submitAdjust(itemId) {
   }
 }
 
+function setNewItemUnit(unit) {
+  newItemUnit = unit;
+  document.getElementById('unit-btn-kg').style.background = unit === 'kg' ? '#c45c00' : '#fff';
+  document.getElementById('unit-btn-kg').style.color = unit === 'kg' ? '#fff' : '#333';
+  document.getElementById('unit-btn-pcs').style.background = unit === 'pcs' ? '#c45c00' : '#fff';
+  document.getElementById('unit-btn-pcs').style.color = unit === 'pcs' ? '#fff' : '#333';
+  document.getElementById('new-item-weight-fg').style.display = unit === 'pcs' ? 'none' : 'flex';
+  document.getElementById('new-item-stock-label').textContent = unit === 'pcs' ? 'Initial Stock (pcs)' : 'Initial Stock (kg)';
+  document.getElementById('new-item-preview').style.display = unit === 'pcs' ? 'none' : 'block';
+}
+
 function updateNewItemPreview() {
   const weight = parseFloat(document.getElementById('new-item-weight').value);
   const stock = parseFloat(document.getElementById('new-item-stock').value) || 0;
@@ -278,7 +321,7 @@ async function saveNewItem() {
   const categoryId = document.getElementById('new-item-cat').value;
   const name = document.getElementById('new-item-name').value;
   const weightRaw = document.getElementById('new-item-weight').value;
-  const weightPerPieceKg = weightRaw === '' ? null : parseFloat(weightRaw);
+  const weightPerPieceKg = newItemUnit === 'pcs' || weightRaw === '' ? null : parseFloat(weightRaw);
   const initialStockKg = parseFloat(document.getElementById('new-item-stock').value) || 0;
   const errEl = document.getElementById('item-err');
   errEl.style.display = 'none';
@@ -286,7 +329,7 @@ async function saveNewItem() {
     const res = await fetch(`${API}/items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoryId, name, weightPerPieceKg, initialStockKg }),
+      body: JSON.stringify({ categoryId, name, unit: newItemUnit, weightPerPieceKg, initialStockKg }),
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || 'Could not save item');
@@ -301,6 +344,7 @@ async function saveNewItem() {
   }
 }
 
+setNewItemUnit('kg');
 loadAll();
 </script>
 </body>

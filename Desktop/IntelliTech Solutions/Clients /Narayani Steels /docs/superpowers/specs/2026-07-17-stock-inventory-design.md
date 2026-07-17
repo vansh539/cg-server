@@ -231,3 +231,44 @@ will be scoped separately once the Excel is in hand.
   pattern (TeamViewer live check), since `app/data/stock.json` and the new
   routes need to exist there too — this isn't a static-file-only update like
   most prior changes to this project.
+
+## 2026-07-17 update — piece-count-only items (Covering Blocks) and kg↔pcs entry (Binding Wire)
+
+Two real gaps found once actual items beyond weight-based steel started
+getting added: some stock genuinely has no weight concept at all (Covering
+Blocks — you count them), and some is bought/sold in a mix of weight and
+bundle count where either could be the number on hand at the moment
+(Binding Wire).
+
+- **New `unit: 'kg' | 'pcs'` field on items** (default `'kg'` — fully
+  backward compatible with every item created before this existed).
+  `unit:'pcs'` items track a pure piece count directly — no weight field
+  shown at all, `weightPerPieceKg` is always `null`, and `pieces` is never
+  separately computed (the tracked quantity *is* the piece count already).
+  Deliberately **not** a rename of `currentStockKg`/`deltaKg`/the `kg` API
+  params to something unit-agnostic — that would touch `stockStore.js`,
+  `server.js`'s routes, `stock.html`, and the Chitti's deduct payload for a
+  purely cosmetic gain. Those field/param names now mean "the tracked
+  quantity, in whatever unit the item uses" — documented inline in
+  `stockStore.js` rather than renamed everywhere.
+- **`stock.html` gets a "Tracked by" toggle** (By Weight / By Piece Count)
+  on the Add Item form, and items with a set `weightPerPieceKg` (regardless
+  of category — this isn't Binding-Wire-specific code, any weight+avg-piece
+  item gets it) get a small kg/pcs unit dropdown next to the Stock In and
+  Adjust inputs. Entering a value in "pcs" mode multiplies by
+  `weightPerPieceKg` client-side before hitting the API — the API and
+  stored data are still always kg for `unit:'kg'` items; this is purely an
+  entry-convenience conversion, not a second stored number.
+- **Chitti's stock-item datalist now excludes `unit:'pcs'` items entirely.**
+  The whole Chitti pricing model (Loading Charges, GST base, etc.) is
+  computed from the kg total across item rows — mixing in a piece-counted
+  row would corrupt that math. Pieces-mode items are tracked purely via the
+  Stock page's own Stock In/Adjust, not sellable through the Chitti
+  auto-deduct flow. Confirmed live: the datalist correctly offers kg items
+  only, Covering Blocks never appears as a match candidate.
+- Live-verified end-to-end: added "Covering Blocks" category with a
+  pcs-tracked item (500 pcs initial stock, Pieces column correctly shows
+  "—" not a redundant duplicate number), and "Binding Wire" with a
+  kg-tracked item (2kg avg/bundle, 100kg initial → 50 bundles shown),
+  then Stock In'd 10 pcs via the new toggle and confirmed it correctly
+  added 20kg (10 × 2kg) → 120kg / 60 bundles.
