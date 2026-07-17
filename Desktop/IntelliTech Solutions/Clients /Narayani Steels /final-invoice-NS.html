@@ -87,16 +87,18 @@ input[type=number]{-moz-appearance:textfield}
   <div class="app-title">🏭 Narayani Steels</div>
   <div class="app-sub">Nothing is saved · Instant print only</div>
   <div class="step active" id="s2"><div class="card"><h2>Document type</h2>
-    <div class="grid3" style="grid-template-columns:1fr 1fr 1fr 1fr">
+    <div class="grid3" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr">
       <button class="type-btn" onclick="pickType('Quotation',this)"><div class="tl">📋 Quotation</div></button>
       <button class="type-btn" onclick="pickType('Invoice',this)"><div class="tl">🧾 Invoice / Chitti</div></button>
       <button class="type-btn" onclick="pickType('Challan',this)"><div class="tl">🚚 Delivery Challan</div></button>
       <a class="type-btn" href="stock.html" style="text-decoration:none;display:block"><div class="tl">📦 Stock</div></a>
+      <a class="type-btn" href="ledger.html" style="text-decoration:none;display:block"><div class="tl">📒 Ledger</div></a>
     </div>
     <div class="acts"><button class="btn-p" id="n2" onclick="go(3)" disabled>Continue →</button></div>
   </div></div>
   <div class="step" id="s3">
     <div class="card"><h3>Customer details</h3>
+      <div class="fg"><label>Ledger Customer (optional — links this invoice to their account)</label><select id="f-customer" onchange="onCustomerPick()"><option value="">— Walk-in, not tracked —</option></select></div>
       <div class="grid2">
         <div class="fg"><label>M/s. (Customer name)</label><input id="f-name" type="text" placeholder="Customer name"></div>
         <div class="fg"><label>Date</label><input id="f-date" type="text" placeholder="21/04/2026"></div>
@@ -233,6 +235,31 @@ function matchStockItem(i,value){
   const trimmed=value.trim().toLowerCase();
   const match=stockItems.find(it=>stockDisplayName(it).toLowerCase()===trimmed);
   rows[i].stockItemId=match?match.id:null;
+}
+let ledgerCustomers=[];
+async function loadLedgerCustomers(){
+  try{
+    const res=await fetch('/api/ledger/customers');
+    ledgerCustomers=await res.json();
+    const sel=document.getElementById('f-customer');
+    sel.innerHTML='<option value="">— Walk-in, not tracked —</option>'+ledgerCustomers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  }catch(err){/* ledger module optional; billing works without it */}
+}
+async function onCustomerPick(){
+  const id=document.getElementById('f-customer').value;
+  const oldbalEl=document.getElementById('f-oldbal');
+  if(!id){
+    oldbalEl.readOnly=false;oldbalEl.style.background='';oldbalEl.style.color='';
+    recalc();
+    return;
+  }
+  try{
+    const res=await fetch(`/api/ledger/customers/${id}`);
+    const cust=await res.json();
+    oldbalEl.value=cust.balance;
+    oldbalEl.readOnly=true;oldbalEl.style.background='#f0f0f0';oldbalEl.style.color='#666';
+    recalc();
+  }catch(err){/* ignore — leave old balance as whatever was last typed */}
 }
 function calcAmt(row){const q=parseFloat(row.q)||0,r=parseFloat(row.r)||0,a=q*r;return a>0?''+Math.round(a).toLocaleString('en-IN'):'—';}
 function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);recalc();}
@@ -431,6 +458,8 @@ function reset(){
   rows=[];dtype='';qRows=[];qFormat='';
   document.getElementById('tbody').innerHTML='';
   ['f-name','f-date','f-mobile','f-lorry','f-labour','f-weigh','f-freight','f-unload','f-others','f-advance','f-oldbal'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('f-customer').value='';
+  document.getElementById('f-oldbal').readOnly=false;document.getElementById('f-oldbal').style.background='';document.getElementById('f-oldbal').style.color='';
   document.getElementById('f-gst').checked=false;
   ['q-to','q-date','q-addr','q-gstin','q-subject','q-kanta','q-transport','q-unload'].forEach(function(id){document.getElementById(id).value='';});
   document.querySelectorAll('.type-btn').forEach(function(b){b.classList.remove('on');});
@@ -439,4 +468,5 @@ function reset(){
   recalc();go(2);
 }
 loadStockDatalist();
+loadLedgerCustomers();
 </script></body></html>
