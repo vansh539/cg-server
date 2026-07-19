@@ -43,7 +43,7 @@ test('createInvoice with a customer and on-account leaves the due open', async (
   assert.equal(Number(balance.balance), 18000);
 });
 
-test('createInvoice with no customer (walk-in) does not touch the ledger', async () => {
+test('createInvoice with no customer (walk-in) is not persisted at all', async () => {
   const result = await createInvoice({
     customerId: null,
     items: [{ particulars: 'OPC Cement', grade: '43', vch: '3', qty: 10, rate: 350 }],
@@ -52,10 +52,17 @@ test('createInvoice with no customer (walk-in) does not touch the ledger', async
     createdBy: '9999900000',
   });
 
+  assert.equal(result.invoice, null);
   assert.equal(result.dueId, null);
   assert.equal(result.claimId, null);
-  const { rows } = await pool.query('SELECT count(*) FROM dues');
-  assert.equal(rows[0].count, '0');
+  assert.equal(result.total, 3500);
+
+  const { rows: dueRows } = await pool.query('SELECT count(*) FROM dues');
+  assert.equal(dueRows[0].count, '0');
+  const { rows: invoiceRows } = await pool.query('SELECT count(*) FROM invoices');
+  assert.equal(invoiceRows[0].count, '0');
+  const { rows: itemRows } = await pool.query('SELECT count(*) FROM invoice_items');
+  assert.equal(itemRows[0].count, '0');
 });
 
 test('createInvoice rejects an item with non-positive qty', async () => {

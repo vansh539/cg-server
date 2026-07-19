@@ -3,33 +3,110 @@
 <head>
 <meta charset="utf-8">
 <title>Aaral Marketing — Customers</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="stylesheet" href="/styles.css">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; color: #1a1a1a; }
-  h1 { font-size: 1.3rem; display: flex; justify-content: space-between; align-items: center; }
-  h1 a { font-size: 0.85rem; }
-  input { padding: 0.5rem; width: 100%; box-sizing: border-box; font-size: 0.95rem; margin-bottom: 1rem; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { border-bottom: 1px solid #e2e2e2; padding: 0.5rem; text-align: left; font-size: 0.9rem; }
-  th { color: #666; font-size: 0.75rem; text-transform: uppercase; }
-  td.balance { text-align: right; font-variant-numeric: tabular-nums; }
-  .owes { color: #b1402f; }
-  .credit { color: #3f7a52; }
-  .settled { color: #888; }
-  tr { cursor: pointer; }
-  tr:hover { background: #f7f7f7; }
+  .search-wrap { margin-bottom: 1.2rem; max-width: 420px; }
+
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(12,8,40,0.45); z-index: 20; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal-box { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.6rem; width: 100%; max-width: 360px; }
+  .modal-box h3 { margin: 0 0 1.1rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
+  .modal-box label { display: block; font-size: 0.9rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
+  .modal-box .field-group { margin-bottom: 1.1rem; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; }
+  .btn-secondary { background: none; border: 1px solid var(--line); color: var(--ink-muted); border-radius: 999px; padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+  .btn-secondary:hover { background: var(--concrete); }
 </style>
 </head>
 <body>
 
-<h1>Customers <a href="/chitti.html">+ New Chitti</a></h1>
-<input type="text" id="search" placeholder="Search by name or phone…">
-<table>
-  <thead><tr><th>Name</th><th>Phone</th><th style="text-align:right;">Balance</th></tr></thead>
-  <tbody id="rows"></tbody>
-</table>
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a class="active" href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a href="/chitti.html">New Chitti</a>
+        <a href="/payment.html">New Payment</a>
+      </nav>
+    </div>
+    <div class="hero-heading">
+      <div class="eyebrow">Ledger overview</div>
+      <h2>Who owes what, at a glance.</h2>
+    </div>
+    <div class="stat-row">
+      <div class="stat-tile">
+        <div class="label">Customers</div>
+        <div class="value" id="statCount">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Outstanding</div>
+        <div class="value rust" id="statOwed">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">In credit</div>
+        <div class="value moss" id="statCredit">—</div>
+      </div>
+    </div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
+</div>
+
+<div class="page">
+  <div class="toolbar">
+    <h3>All customers</h3>
+    <button class="btn-primary" id="openAddCustomer" type="button">+ Add Customer</button>
+  </div>
+
+  <div class="search-wrap">
+    <input type="text" id="search" placeholder="Search by name or phone…">
+  </div>
+
+  <div class="card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Name</th><th>Phone</th><th class="num">Balance</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="empty-state" style="display:none;">No customers found.</div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="addCustomerModal">
+  <div class="modal-box">
+    <h3>Add Customer</h3>
+    <div class="field-group">
+      <label>Name</label>
+      <input type="text" id="newCustomerName" autocomplete="off">
+    </div>
+    <div class="field-group">
+      <label>Phone number</label>
+      <input type="text" id="newCustomerPhone" placeholder="10-digit WhatsApp number" autocomplete="off">
+    </div>
+    <div id="addCustomerError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelAddCustomer" type="button">Cancel</button>
+      <button class="btn-primary" id="saveAddCustomer" type="button">Save</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const rowsEl = document.getElementById('rows');
+const emptyEl = document.getElementById('emptyState');
 
 function balanceClass(balance) {
   if (Number(balance) > 0) return 'owes';
@@ -37,21 +114,75 @@ function balanceClass(balance) {
   return 'settled';
 }
 
+function fmt(n) {
+  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.abs(n));
+}
+
 async function load(term) {
   const url = term ? `/api/customers?q=${encodeURIComponent(term)}` : '/api/customers';
   const res = await fetch(url);
   const customers = await res.json();
   rowsEl.innerHTML = '';
+  emptyEl.style.display = customers.length ? 'none' : 'block';
+
+  let owed = 0, credit = 0;
   customers.forEach((c) => {
+    const bal = Number(c.balance);
+    if (bal > 0) owed += bal; else credit += -bal;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${c.name}</td><td>${c.phone_number}</td><td class="balance ${balanceClass(c.balance)}">₹${c.balance}</td>`;
+    tr.className = 'clickable';
+    tr.innerHTML = `<td>${c.name}</td><td>${c.phone_number}</td><td class="num"><span class="balance-pill ${balanceClass(c.balance)}">₹${c.balance}</span></td>`;
     tr.addEventListener('click', () => { window.location.href = `/customer.html?id=${c.customer_id}`; });
     rowsEl.appendChild(tr);
   });
+
+  if (!term) {
+    document.getElementById('statCount').textContent = customers.length;
+    document.getElementById('statOwed').textContent = `₹${fmt(owed)}`;
+    document.getElementById('statCredit').textContent = `₹${fmt(credit)}`;
+  }
 }
 
 document.getElementById('search').addEventListener('input', (e) => load(e.target.value.trim()));
 load();
+
+const modal = document.getElementById('addCustomerModal');
+const nameInput = document.getElementById('newCustomerName');
+const phoneInput = document.getElementById('newCustomerPhone');
+const errorEl = document.getElementById('addCustomerError');
+
+function openModal() {
+  nameInput.value = '';
+  phoneInput.value = '';
+  errorEl.textContent = '';
+  modal.classList.add('open');
+  nameInput.focus();
+}
+function closeModal() { modal.classList.remove('open'); }
+
+document.getElementById('openAddCustomer').addEventListener('click', openModal);
+document.getElementById('cancelAddCustomer').addEventListener('click', closeModal);
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+document.getElementById('saveAddCustomer').addEventListener('click', async () => {
+  const name = nameInput.value.trim();
+  const phoneNumber = phoneInput.value.trim();
+  if (!name || !phoneNumber) {
+    errorEl.textContent = 'Name and phone number are both required.';
+    return;
+  }
+  const res = await fetch('/api/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, phoneNumber }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    errorEl.textContent = data.error;
+    return;
+  }
+  window.location.href = `/customer.html?id=${data.customerId}`;
+});
 </script>
 </body>
 </html>

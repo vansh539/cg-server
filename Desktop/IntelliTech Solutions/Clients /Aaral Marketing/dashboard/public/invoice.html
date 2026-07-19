@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Invoice — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a href="/chitti.html">New Chitti</a>
+        <a href="/payment.html">New Payment</a>
+      </nav>
+    </div>
+    <div class="hero-heading">
+      <div class="eyebrow" id="invoiceMeta">Invoice</div>
+      <h2 id="invoiceTitle">Loading…</h2>
+    </div>
+    <div class="stat-row">
+      <div class="stat-tile">
+        <div class="label">Total</div>
+        <div class="value" id="invoiceTotal">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Status</div>
+        <div class="value" id="invoiceStatus" style="font-size:1rem;">—</div>
+      </div>
+      <div class="stat-tile" id="destinationTile" style="display:none;">
+        <div class="label">Destination</div>
+        <div class="value" id="invoiceDestination" style="font-size:1rem;">—</div>
+      </div>
+    </div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
+</div>
+
+<div class="page">
+  <a class="back-link" href="/" id="backLink">&larr; All customers</a>
+
+  <div class="card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>S No.</th><th>Particulars</th><th>Grade</th><th>Vch</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const invoiceId = params.get('id');
+
+async function load() {
+  const res = await fetch(`/api/invoices/${invoiceId}`);
+  if (!res.ok) {
+    document.getElementById('invoiceTitle').textContent = 'Invoice not found';
+    return;
+  }
+  const { invoice, items } = await res.json();
+
+  document.getElementById('invoiceTitle').textContent = `Invoice #${invoice.invoice_number}`;
+  const date = new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  document.getElementById('invoiceMeta').textContent = date;
+  document.getElementById('invoiceTotal').textContent = `₹${Number(invoice.total).toLocaleString('en-IN')}`;
+  document.getElementById('invoiceStatus').textContent = invoice.paid_now ? 'Paid' : 'On account';
+  if (invoice.destination) {
+    document.getElementById('destinationTile').style.display = '';
+    document.getElementById('invoiceDestination').textContent = invoice.destination;
+  }
+
+  if (invoice.customer_id) {
+    document.getElementById('backLink').href = `/customer.html?id=${invoice.customer_id}`;
+    document.getElementById('backLink').innerHTML = '&larr; Back to ledger';
+  }
+
+  const rowsEl = document.getElementById('rows');
+  rowsEl.innerHTML = '';
+  items.forEach((item) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${item.s_no}</td><td>${item.particulars}</td><td>${item.grade || ''}</td><td>${item.vch || ''}</td><td class="num">${Number(item.qty)}</td><td class="num">₹${Number(item.rate).toFixed(2)}</td><td class="num">₹${Number(item.amount).toFixed(2)}</td>`;
+    rowsEl.appendChild(tr);
+  });
+  if (invoice.unloading_charge) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td></td><td colspan="4">Unloading charges</td><td></td><td class="num">₹${Number(invoice.unloading_charge).toFixed(2)}</td>`;
+    rowsEl.appendChild(tr);
+  }
+  const totalTr = document.createElement('tr');
+  totalTr.innerHTML = `<td></td><td colspan="4" style="font-weight:700;">Total</td><td></td><td class="num" style="font-weight:700;font-size:1.1rem;">₹${Number(invoice.total).toFixed(2)}</td>`;
+  rowsEl.appendChild(totalTr);
+}
+
+load();
+</script>
+</body>
+</html>

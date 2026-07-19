@@ -10,7 +10,9 @@ module.exports = {
       max_memory_restart: '1G',
       env: { NODE_ENV: 'production' },
       restart_delay: 30000,
-      max_restarts: 5,
+      // Keep retrying forever after a crash/outage instead of giving up —
+      // see whatsapp-bot/ecosystem.config.js for why.
+      max_restarts: 1000000,
       min_uptime: '30s',
     },
   ],

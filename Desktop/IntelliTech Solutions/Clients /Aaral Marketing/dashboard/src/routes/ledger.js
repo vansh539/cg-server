@@ -1,5 +1,6 @@
 const express = require('express');
 const balances = require('payment-ledger-core/ledger/balances');
+const customers = require('payment-ledger-core/ledger/customers');
 const { query } = require('payment-ledger-core/db');
 
 const router = express.Router();
@@ -14,15 +15,62 @@ router.get('/customers', async (req, res) => {
   res.json(rows);
 });
 
+router.post('/customers', async (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    const phoneNumber = (req.body.phoneNumber || '').trim();
+    if (!name) return res.status(400).json({ ok: false, error: 'Name is required' });
+    if (!phoneNumber) return res.status(400).json({ ok: false, error: 'Phone number is required' });
+
+    const existing = await customers.findByPhone(phoneNumber);
+    if (existing) return res.status(400).json({ ok: false, error: `A customer with this phone number already exists: ${existing.name}` });
+
+    const customer = await customers.createCustomer({ name, phoneNumber });
+    res.json({ ok: true, customerId: customer.id });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/customers/:id/opening-balance', async (req, res) => {
+  try {
+    const customer = await customers.findById(req.params.id);
+    if (!customer) return res.status(404).json({ ok: false, error: 'Customer not found' });
+
+    const amount = Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount === 0) {
+      return res.status(400).json({ ok: false, error: 'Amount must be a non-zero number' });
+    }
+    const description = (req.body.description || '').trim() || 'Opening Balance';
+    const effectiveDate = req.body.date ? new Date(`${req.body.date}T${new Date().toTimeString().split(' ')[0]}`) : null;
+
+    await query(
+      `INSERT INTO dues (customer_id, description, amount_due, created_at)
+       VALUES ($1, $2, $3, COALESCE($4, now()))`,
+      [customer.id, description, amount, effectiveDate]
+    );
+
+    const balance = await balances.getBalanceByCustomerId(customer.id);
+    res.json({ ok: true, balance: balance ? balance.balance : null });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.get('/customers/:id/ledger', async (req, res) => {
   const balance = await balances.getBalanceByCustomerId(req.params.id);
   if (!balance) return res.status(404).json({ ok: false, error: 'Customer not found' });
 
   const { rows } = await query(
-    `SELECT 'invoice' AS type, id, description AS label, amount_due AS amount, created_at AS occurred_at
-     FROM dues WHERE customer_id = $1
+    `SELECT 'invoice' AS type, d.id, d.description AS label, d.amount_due AS amount, d.created_at AS occurred_at,
+            i.id AS invoice_id
+     FROM dues d
+     LEFT JOIN invoices i ON i.customer_id = d.customer_id
+       AND i.invoice_number = NULLIF(substring(d.description FROM 'Invoice #(\\d+)'), '')::int
+     WHERE d.customer_id = $1
      UNION ALL
-     SELECT 'payment' AS type, id, proof_type AS label, amount_claimed AS amount, reported_at AS occurred_at
+     SELECT 'payment' AS type, id, proof_type AS label, amount_claimed AS amount, reported_at AS occurred_at,
+            NULL AS invoice_id
      FROM payment_claims WHERE customer_id = $1 AND status = 'confirmed'
      ORDER BY occurred_at ASC`,
     [req.params.id]

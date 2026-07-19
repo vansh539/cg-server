@@ -3,31 +3,123 @@
 <head>
 <meta charset="utf-8">
 <title>Customer Ledger — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="stylesheet" href="/styles.css">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; color: #1a1a1a; }
-  a.back { font-size: 0.85rem; }
-  h1 { font-size: 1.3rem; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  th, td { border-bottom: 1px solid #e2e2e2; padding: 0.5rem; text-align: left; font-size: 0.9rem; }
-  th { color: #666; font-size: 0.75rem; text-transform: uppercase; }
-  td.amount, td.running { text-align: right; font-variant-numeric: tabular-nums; }
-  tr.invoice td.amount { color: #b1402f; }
-  tr.payment td.amount { color: #3f7a52; }
+  tr.invoice td.num { color: var(--rust); }
+  tr.payment td.num { color: var(--moss); }
+  a.invoice-link { color: var(--navy); font-weight: 600; text-decoration: none; }
+  a.invoice-link:hover { color: var(--cyan); text-decoration: underline; }
+  .type-badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0.55rem; border-radius: 6px; }
+  tr.invoice .type-badge { color: var(--rust); background: var(--rust-bg); }
+  tr.payment .type-badge { color: var(--moss); background: var(--moss-bg); }
+
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; gap: 1rem; flex-wrap: wrap; }
+
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(12,8,40,0.45); z-index: 20; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal-box { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.6rem; width: 100%; max-width: 360px; }
+  .modal-box h3 { margin: 0 0 1.1rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
+  .modal-box label { display: block; font-size: 0.9rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
+  .modal-box .field-group { margin-bottom: 1.1rem; }
+  .modal-box .hint { font-size: 0.78rem; color: var(--ink-muted); margin-top: -0.7rem; margin-bottom: 1.1rem; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; }
+  .btn-secondary { background: none; border: 1px solid var(--line); color: var(--ink-muted); border-radius: 999px; padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+  .btn-secondary:hover { background: var(--concrete); }
 </style>
 </head>
 <body>
 
-<a class="back" href="/">&larr; All customers</a>
-<h1 id="customerName">Loading…</h1>
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a href="/chitti.html">New Chitti</a>
+        <a href="/payment.html">New Payment</a>
+      </nav>
+    </div>
+    <div class="hero-heading">
+      <div class="eyebrow" id="customerPhone">Customer Ledger</div>
+      <h2 id="customerName">Loading…</h2>
+    </div>
+    <div class="stat-row">
+      <div class="stat-tile">
+        <div class="label">Balance</div>
+        <div class="value" id="customerBalance">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Entries</div>
+        <div class="value" id="statEntries">—</div>
+      </div>
+    </div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
+</div>
 
-<table>
-  <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead>
-  <tbody id="rows"></tbody>
-</table>
+<div class="page">
+  <div class="toolbar">
+    <a class="back-link" href="/" style="margin:0;">&larr; All customers</a>
+    <button class="btn-primary" id="openOldBalance" type="button">+ Add Opening Balance</button>
+  </div>
+
+  <div class="card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="oldBalanceModal">
+  <div class="modal-box">
+    <h3>Add Opening Balance</h3>
+    <div class="field-group">
+      <label>Amount</label>
+      <input type="number" id="oldBalanceAmount" step="0.01" placeholder="e.g. 15000">
+    </div>
+    <div class="hint">Positive = customer owed this before this system was set up. Negative = they were in credit.</div>
+    <div class="field-group">
+      <label>As of date</label>
+      <input type="date" id="oldBalanceDate">
+    </div>
+    <div class="field-group">
+      <label>Description (optional)</label>
+      <input type="text" id="oldBalanceDescription" placeholder="Opening Balance">
+    </div>
+    <div id="oldBalanceError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelOldBalance" type="button">Cancel</button>
+      <button class="btn-primary" id="saveOldBalance" type="button">Save</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
 const customerId = params.get('id');
+
+const METHOD_LABELS = { cash: 'Cash', gpay: 'GPay', bank_transfer: 'Bank Transfer', screenshot: 'Screenshot', utr_text: 'UTR' };
+
+function balanceColor(balance) {
+  if (Number(balance) > 0) return 'var(--rust)';
+  if (Number(balance) < 0) return 'var(--moss)';
+  return 'var(--ink-muted)';
+}
 
 async function load() {
   const res = await fetch(`/api/customers/${customerId}/ledger`);
@@ -39,13 +131,66 @@ async function load() {
     tr.className = e.type;
     const date = new Date(e.occurred_at).toLocaleDateString();
     const sign = e.type === 'invoice' ? '+' : '-';
-    tr.innerHTML = `<td>${date}</td><td>${e.type}</td><td>${e.label}</td><td class="amount">${sign}₹${Number(e.amount).toFixed(2)}</td><td class="running">₹${e.runningBalance.toFixed(2)}</td>`;
+    const label = e.type === 'payment' ? (METHOD_LABELS[e.label] || e.label) : e.label.replace(/\b\w/g, (c) => c.toUpperCase());
+    const detail = e.invoice_id
+      ? `<a class="invoice-link" href="/invoice.html?id=${e.invoice_id}">${label}</a>`
+      : (e.type === 'payment' ? `<a class="invoice-link" href="/receipt.html?id=${e.id}">${label}</a>` : label);
+    tr.innerHTML = `<td>${date}</td><td><span class="type-badge">${e.type}</span></td><td>${detail}</td><td class="num">${sign}₹${Number(e.amount).toFixed(2)}</td><td class="num">₹${e.runningBalance.toFixed(2)}</td>`;
     rowsEl.appendChild(tr);
   });
-  document.getElementById('customerName').textContent = `${customer.name} — ${customer.phone_number} (Balance: ₹${customer.balance})`;
+  document.getElementById('customerName').textContent = customer.name;
+  document.getElementById('customerPhone').textContent = customer.phone_number;
+  document.getElementById('statEntries').textContent = entries.length;
+  const balEl = document.getElementById('customerBalance');
+  balEl.textContent = `₹${customer.balance}`;
+  balEl.style.color = balanceColor(customer.balance);
 }
 
 load();
+
+const oldBalanceModal = document.getElementById('oldBalanceModal');
+const oldBalanceAmount = document.getElementById('oldBalanceAmount');
+const oldBalanceDate = document.getElementById('oldBalanceDate');
+const oldBalanceDescription = document.getElementById('oldBalanceDescription');
+const oldBalanceError = document.getElementById('oldBalanceError');
+
+function openOldBalanceModal() {
+  oldBalanceAmount.value = '';
+  oldBalanceDate.value = new Date().toLocaleDateString('en-CA');
+  oldBalanceDescription.value = '';
+  oldBalanceError.textContent = '';
+  oldBalanceModal.classList.add('open');
+  oldBalanceAmount.focus();
+}
+function closeOldBalanceModal() { oldBalanceModal.classList.remove('open'); }
+
+document.getElementById('openOldBalance').addEventListener('click', openOldBalanceModal);
+document.getElementById('cancelOldBalance').addEventListener('click', closeOldBalanceModal);
+oldBalanceModal.addEventListener('click', (e) => { if (e.target === oldBalanceModal) closeOldBalanceModal(); });
+
+document.getElementById('saveOldBalance').addEventListener('click', async () => {
+  const amount = oldBalanceAmount.value;
+  if (!amount || Number(amount) === 0) {
+    oldBalanceError.textContent = 'Enter a non-zero amount.';
+    return;
+  }
+  const res = await fetch(`/api/customers/${customerId}/opening-balance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount,
+      date: oldBalanceDate.value || null,
+      description: oldBalanceDescription.value.trim() || null,
+    }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    oldBalanceError.textContent = data.error;
+    return;
+  }
+  closeOldBalanceModal();
+  load();
+});
 </script>
 </body>
 </html>

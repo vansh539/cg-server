@@ -72,12 +72,20 @@ app.use((req, res, next) => {
 
 app.use('/api', require('./src/routes/invoices'));
 app.use('/api', require('./src/routes/ledger'));
+app.use('/api', require('./src/routes/quotations'));
+app.use('/api', require('./src/routes/payments'));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.listen(PORT, '127.0.0.1', () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Aaral Marketing — Ledger Dashboard`);
-  console.log(`  Open in browser: http://localhost:${PORT}`);
+  console.log(`  On this machine:  http://localhost:${PORT}`);
+  const nets = require('os').networkInterfaces();
+  for (const iface of Object.values(nets).flat()) {
+    if (iface.family === 'IPv4' && !iface.internal) {
+      console.log(`  On the network:   http://${iface.address}:${PORT}`);
+    }
+  }
 });
 
 module.exports = app;

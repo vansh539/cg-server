@@ -176,8 +176,19 @@ function formatBalanceLine(balance) {
   return `Remaining balance: ₹${balance}`;
 }
 
+function buildInstructionsMessage() {
+  return (
+    `*How this works:*\n` +
+    `• When you make a payment to us, reply *PAID* here.\n` +
+    `• I'll ask how much, then ask for proof — a screenshot, the UPI reference/UTR number, or just reply *CASH*.\n` +
+    `• Our team verifies it and confirms — you'll get a message here either way.\n` +
+    `• Whenever we issue you a new invoice/Chitti, you'll get a message here too, with your running balance.\n\n` +
+    `Reply *HELP* any time to see this again.`
+  );
+}
+
 module.exports = {
   handleRegistrationName, handleAmountReply, handleProofReply, parseAdminCommand,
   toWhatsAppChatId, extractAmountMatch, extractTxnId, extractPaymentDate,
-  isScreenshotDateStale, screenshotAgeDays, formatBalanceLine,
+  isScreenshotDateStale, screenshotAgeDays, formatBalanceLine, buildInstructionsMessage,
 };

@@ -1,6 +1,7 @@
 const express = require('express');
 const { createInvoice } = require('../invoices');
-const { notify } = require('../notify');
+const { notify, notifyWithPdf } = require('../notify');
+const { renderInvoicePdf } = require('../pdf');
 const customers = require('payment-ledger-core/ledger/customers');
 const balances = require('payment-ledger-core/ledger/balances');
 const { query } = require('payment-ledger-core/db');
@@ -9,8 +10,11 @@ const router = express.Router();
 
 router.post('/invoices', async (req, res) => {
   try {
-    const { customerId, items, unloadingCharge, paidNow, createdBy } = req.body;
-    const result = await createInvoice({ customerId, items, unloadingCharge, paidNow, createdBy });
+    const {
+      customerId, items, unloadingCharge, paidNow, createdBy, sendWhatsapp,
+      invoiceDate, destination, paperWidthMm, paperHeightMm,
+    } = req.body;
+    const result = await createInvoice({ customerId, items, unloadingCharge, paidNow, createdBy, invoiceDate, destination });
 
     if (customerId) {
       const customer = await customers.findById(customerId);
@@ -24,16 +28,31 @@ router.post('/invoices', async (req, res) => {
         ? `Payment of ₹${result.invoice.total} received from ${customer.name}. ${balanceLine}`
         : `Invoice #${result.invoice.invoice_number} (₹${result.invoice.total}) issued to ${customer.name}. ${balanceLine}`;
 
-      notify(customer.phone_number, customerMsg);
+      if (sendWhatsapp) {
+        const pdfItems = result.items.map((item) => ({
+          s_no: item.sNo, particulars: item.particulars, grade: item.grade,
+          vch: item.vch, qty: item.qty, rate: item.rate, amount: item.amount,
+        }));
+        renderInvoicePdf({
+          invoice: result.invoice, items: pdfItems, customerName: customer.name,
+          paperWidthMm, paperHeightMm,
+        })
+          .then((pdfBuffer) => notifyWithPdf(
+            customer.phone_number, customerMsg, pdfBuffer, `Invoice-${result.invoice.invoice_number}.pdf`
+          ))
+          .catch((err) => console.error('[Invoices] Failed to generate/send invoice PDF:', err.message));
+      } else {
+        notify(customer.phone_number, customerMsg);
+      }
       const { rows: admins } = await query('SELECT phone_number FROM admins WHERE active = true');
       for (const admin of admins) notify(admin.phone_number, adminMsg);
     }
 
     res.json({
       ok: true,
-      invoiceId: result.invoice.id,
-      invoiceNumber: result.invoice.invoice_number,
-      total: result.invoice.total,
+      invoiceId: result.invoice ? result.invoice.id : null,
+      invoiceNumber: result.invoice ? result.invoice.invoice_number : null,
+      total: result.invoice ? result.invoice.total : result.total,
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

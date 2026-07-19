@@ -76,13 +76,19 @@ function startNotifyServer() {
     req.on('end', async () => {
       res.setHeader('Content-Type', 'application/json');
       try {
-        const { phone, message } = JSON.parse(body);
+        const { phone, message, pdfBase64, filename } = JSON.parse(body);
         if (!phone || !message) {
           res.writeHead(400);
           res.end(JSON.stringify({ sent: false, reason: 'phone and message are required' }));
           return;
         }
-        await client.sendMessage(flows.toWhatsAppChatId(phone), message);
+        const chatId = flows.toWhatsAppChatId(phone);
+        if (pdfBase64) {
+          const media = new MessageMedia('application/pdf', pdfBase64, filename || 'invoice.pdf');
+          await client.sendMessage(chatId, media, { caption: message });
+        } else {
+          await client.sendMessage(chatId, message);
+        }
         res.writeHead(200);
         res.end(JSON.stringify({ sent: true }));
       } catch (e) {
@@ -206,10 +212,107 @@ if (require.main === module) {
   process.on('SIGQUIT', () => { logger.info('[WhatsApp] SIGQUIT — clean exit'); stopOcrService().then(() => process.exit(0)); });
 }
 
-const startupWatchdog = setTimeout(() => {
-  logger.error('[WhatsApp] Startup watchdog: not ready after 3 min — exiting for PM2 restart');
-  stopOcrService().then(() => process.exit(1));
-}, 3 * 60 * 1000);
+// ── Reconnect backoff state ─────────────────────────────────────
+// WhatsApp Web silently soft-throttles reconnects attempted too close
+// together: client.initialize() just never resolves or rejects (confirmed
+// live — no 'ready', 'disconnected', 'auth_failure', or unhandled
+// rejection ever fires, only this startup watchdog after 3 min). PM2's own
+// restart delay can't reliably back this off, because each failed attempt
+// runs the full 3 minutes — well past min_uptime — so PM2 sees a "stable"
+// run, not a crash loop, and won't grow its restart delay the way a
+// tight crash-loop would. This file-persisted counter survives across
+// PM2-restarted processes and grows the pre-connect delay exponentially
+// (10min, 20min, 30min capped) until a real cooldown emerges on its own —
+// the goal being a bot that self-heals after a power cut or ISP outage
+// without anyone having to notice and manually wait it out. Base starts
+// at 10 min, not something small like 15s: live testing on 2026-07-11
+// showed every reconnect attempted within a ~15 min gap of a prior one
+// failed (3/3), while gaps of 20+ min succeeded every time observed — so
+// a fast initial retry would just burn cycles on an attempt already known
+// to be very likely doomed.
+const BACKOFF_STATE_FILE = path.join(SESSION_DIR, '.reconnect-backoff.json');
+const BACKOFF_BASE_MS = 10 * 60 * 1000;
+const BACKOFF_MAX_MS = 30 * 60 * 1000;
+
+function readBackoffState() {
+  try {
+    return JSON.parse(fs.readFileSync(BACKOFF_STATE_FILE, 'utf8'));
+  } catch (e) {
+    return { failCount: 0, lastAttemptAt: 0 };
+  }
+}
+
+function writeBackoffState(state) {
+  try {
+    fs.mkdirSync(path.dirname(BACKOFF_STATE_FILE), { recursive: true });
+    fs.writeFileSync(BACKOFF_STATE_FILE, JSON.stringify(state));
+  } catch (e) {
+    logger.warn('[WhatsApp] Failed to persist reconnect backoff state', { error: e.message });
+  }
+}
+
+function recordConnectFailure() {
+  const state = readBackoffState();
+  writeBackoffState({ failCount: state.failCount + 1, lastAttemptAt: Date.now() });
+}
+
+function recordConnectSuccess() {
+  writeBackoffState({ failCount: 0, lastAttemptAt: Date.now() });
+}
+
+async function waitForBackoffCooldown() {
+  const state = readBackoffState();
+  if (state.failCount === 0) return;
+  const delay = Math.min(BACKOFF_BASE_MS * 2 ** (state.failCount - 1), BACKOFF_MAX_MS);
+  const remaining = delay - (Date.now() - state.lastAttemptAt);
+  if (remaining <= 0) return;
+  logger.warn(`[WhatsApp] Backing off ${Math.round(remaining / 1000)}s before reconnecting (after ${state.failCount} consecutive failed attempt(s))`);
+  await new Promise((resolve) => setTimeout(resolve, remaining));
+}
+
+// Armed explicitly right before client.initialize() is actually called
+// (see bottom of file) — NOT at module load. The backoff wait above can
+// now run for minutes before we ever attempt a connection; if this timer
+// started at module load instead, it would fire mid-wait and force-exit
+// before initialize() was even called, falsely counting as a failure and
+// making the backoff grow forever without ever attempting a real connect.
+// Diagnostic-only: whatsapp-web.js calls page.goto(WhatsWebURL, { timeout: 0 })
+// internally, so if that hangs we get zero library-level signal — no error,
+// no event, nothing — until our own watchdog fires. This polls the
+// underlying Puppeteer page directly so that when a hang happens, the logs
+// show whether navigation ever actually started (page still blank vs. sat
+// on web.whatsapp.com) instead of pure silence for 3 minutes.
+let connectHeartbeat = null;
+function startConnectHeartbeat() {
+  const startedAt = Date.now();
+  connectHeartbeat = setInterval(async () => {
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    try {
+      const url = client.pupPage ? await client.pupPage.url() : null;
+      const readyState = client.pupPage
+        ? await client.pupPage.evaluate(() => document.readyState).catch(() => 'eval-failed')
+        : null;
+      logger.info(`[WhatsApp] Still connecting (${elapsed}s)`, { url, readyState });
+    } catch (e) {
+      logger.info(`[WhatsApp] Still connecting (${elapsed}s) — page not queryable`, { error: e.message });
+    }
+  }, 20000);
+}
+function stopConnectHeartbeat() {
+  if (connectHeartbeat) clearInterval(connectHeartbeat);
+  connectHeartbeat = null;
+}
+
+let startupWatchdog = null;
+function armStartupWatchdog() {
+  startConnectHeartbeat();
+  startupWatchdog = setTimeout(() => {
+    logger.error('[WhatsApp] Startup watchdog: not ready after 3 min — exiting for PM2 restart');
+    stopConnectHeartbeat();
+    recordConnectFailure();
+    stopOcrService().then(() => process.exit(1));
+  }, 3 * 60 * 1000);
+}
 
 // ── Bot State ──────────────────────────────────────────────────
 const pendingConfirmations = new Map();
@@ -359,8 +462,20 @@ client.on('qr', (qr) => {
   qrcode.generate(qr, { small: true });
 });
 
+// Diagnostic only — these only fire if we got past the initial page load
+// and inject() succeeded, so seeing (or not seeing) them tells us whether
+// a hang is happening before or after that point.
+client.on('loading_screen', (percent, message) => {
+  logger.info(`[WhatsApp] Loading screen: ${percent}% — ${message}`);
+});
+client.on('change_state', (state) => {
+  logger.info(`[WhatsApp] State changed: ${state}`);
+});
+
 client.on('ready', () => {
   clearTimeout(startupWatchdog);
+  stopConnectHeartbeat();
+  recordConnectSuccess();
   logger.info('[WhatsApp] Bot connected and ready!');
   startNotifyServer();
   setInterval(async () => {
@@ -421,7 +536,7 @@ client.on('message', async (msg) => {
     const customer = await customers.findByPhone(waNumber);
     if (!customer) {
       setPending(waNumber, 'registration_name', {});
-      await safeSend(msg, "Welcome! I don't have you registered yet. What's your name?");
+      await safeSend(msg, "👋 Welcome to *Aaral Marketing*! I don't have you registered yet — what's your name?");
       return;
     }
 
@@ -431,7 +546,12 @@ client.on('message', async (msg) => {
       return;
     }
 
-    await safeSend(msg, `Hi ${customer.name}! Reply *PAID* any time you make a payment to CoKarma.`);
+    if (/^help$/i.test(text)) {
+      await safeSend(msg, `Hi ${customer.name}!\n\n${flows.buildInstructionsMessage()}`);
+      return;
+    }
+
+    await safeSend(msg, `Hi ${customer.name}! Reply *PAID* any time you make a payment to Aaral Marketing, or *HELP* for instructions.`);
   } catch (e) {
     logger.error('[WhatsApp] message handler error', { error: e.message });
   }
@@ -469,7 +589,11 @@ async function handlePendingReply(msg, waNumber, pending, text) {
     if (!result.ok) { await safeSend(msg, result.error); return; }
     const customer = await customers.createCustomer({ name: result.name, phoneNumber: waNumber });
     clearPending(waNumber);
-    await safeSend(msg, `Thanks, ${customer.name}! You're registered. Reply *PAID* any time you make a payment to CoKarma.`);
+    await safeSend(
+      msg,
+      `Thanks, ${customer.name}! You're registered with *Aaral Marketing*.\n\n` +
+      flows.buildInstructionsMessage()
+    );
     return;
   }
 
@@ -695,7 +819,11 @@ if (require.main === module) {
 if (require.main === module) {
   waitForOcrService()
     .catch((e) => logger.error('[OCR] Unexpected error waiting for OCR service', { error: e.message }))
-    .then(() => client.initialize());
+    .then(() => waitForBackoffCooldown())
+    .then(() => {
+      armStartupWatchdog();
+      return client.initialize();
+    });
 }
 
 module.exports = {

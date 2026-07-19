@@ -3,103 +3,317 @@
 <head>
 <meta charset="utf-8">
 <title>New Chitti — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="stylesheet" href="/styles.css">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; color: #1a1a1a; }
-  h1 { font-size: 1.3rem; }
-  label { display: block; font-size: 0.85rem; color: #555; margin-top: 0.8rem; }
-  input, select { padding: 0.4rem; font-size: 0.95rem; width: 100%; box-sizing: border-box; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  th, td { border: 1px solid #ccc; padding: 0.4rem; font-size: 0.85rem; text-align: left; }
-  th { background: #f2f2f2; }
-  td input { border: none; width: 100%; }
+  .form-card { padding: 1.6rem; }
+  .form-card label { display: block; font-size: 0.95rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
+  .field-group { margin-bottom: 1.1rem; max-width: 260px; }
+
+  .paper-size-box { border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 1.1rem; background: var(--concrete); max-width: 420px; }
+  .paper-size-box select { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-size: 0.9rem; background: var(--paper); }
+  .custom-dims { display: none; gap: 0.6rem; margin-top: 0.6rem; }
+  .custom-dims > div { flex: 1; }
+  .custom-dims label { font-size: 0.72rem; }
+  .custom-dims input { padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; font-family: inherit; }
+
+  #customerSearchWrap { position: relative; max-width: 420px; }
+  #customerResults { border: 1px solid var(--line); border-radius: 8px; margin-top: 0.3rem; max-height: 160px; overflow-y: auto; display: none; background: var(--paper); box-shadow: var(--shadow); position: absolute; width: 100%; z-index: 5; }
+  #customerResults div { padding: 0.6rem 0.8rem; cursor: pointer; font-size: 0.88rem; }
+  #customerResults div:hover { background: var(--concrete); }
+  #selectedCustomer { margin-top: 0.5rem; font-size: 0.85rem; color: var(--ink-muted); }
+
+  #itemsTable { width: 100%; border-collapse: collapse; margin-top: 0.4rem; }
+  #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem; font-size: 0.85rem; text-align: left; }
+  #itemsTable th { background: #eee; text-transform: uppercase; font-size: 0.72rem; }
+  #itemsTable td input { border: none; width: 100%; font-family: inherit; background: transparent; padding: 0; }
+  #itemsTable td input:focus { outline: none; }
   .row-amount, .totals span { font-variant-numeric: tabular-nums; }
-  .totals { margin-top: 1rem; text-align: right; font-size: 1rem; }
-  .totals .grand { font-weight: 700; font-size: 1.2rem; }
-  button { margin-top: 1.2rem; padding: 0.6rem 1.2rem; font-size: 0.95rem; cursor: pointer; }
-  #customerResults { border: 1px solid #ccc; max-height: 140px; overflow-y: auto; display: none; }
-  #customerResults div { padding: 0.4rem; cursor: pointer; }
-  #customerResults div:hover { background: #f2f2f2; }
+
+  button.add-row { margin-top: 0.8rem; padding: 0.5rem 1rem; font-size: 0.85rem; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; cursor: pointer; }
+  button.add-row:hover { background: var(--concrete); }
+
+  .totals { margin-top: 1.2rem; text-align: right; font-size: 1rem; }
+  .totals .grand { font-weight: 700; font-size: 1.25rem; border-top: 2px solid #000; padding-top: 0.5rem; margin-top: 0.4rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
+
+  .toggle-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 1rem; font-size: 1.05rem; color: var(--ink); }
+  .toggle-row input { width: 1.25em; height: 1.25em; cursor: pointer; }
+  .toggle-row label { font-size: 1.05rem; cursor: pointer; }
+
+  .only-print { display: none; }
+
   @media print {
-    button, #addRow, #customerSearch, #customerResults, .no-print { display: none; }
+    .hero, .no-print, #selectedCustomer, #status, .totals { display: none !important; }
+    body { background: #fff; }
+    body::before { display: none; }
+    .page { padding: 0; max-width: none; margin: 0; }
+    .card { background: none; box-shadow: none; border: none; border-radius: 0; padding: 0; }
+
+    #itemsTable { border: 2px solid #000; }
+    #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem 0.65rem; font-size: 1.05rem; }
+    #itemsTable thead tr.col-headers th { text-transform: none; font-weight: 700; background: #fff; font-size: 0.95rem; }
+    #itemsTable tbody td { font-weight: 600; font-size: 1.05rem; }
+    #itemsTable tbody td input { font-weight: 600; font-size: 1.05rem; }
+    #itemsTable .only-print { display: table-row; }
+
+    #itemsTable thead tr.print-title-row th { background: #ffe600; text-align: center; font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 1.7rem; text-transform: uppercase; padding: 0.7rem; letter-spacing: 0.02em; }
+    #itemsTable thead tr.print-date-row th, #itemsTable thead tr.print-destination-row th { background: #fff; text-align: left; font-weight: 500; font-size: 1.15rem; text-transform: none; padding: 0.55rem 0.8rem; }
+    #itemsTable thead tr.print-date-row .print-date-value, #itemsTable thead tr.print-destination-row .print-date-value { font-weight: 800; font-size: 1.25rem; float: right; }
+
+    #itemsTable tfoot td { font-weight: 800; font-size: 1.35rem; border-top: 2px solid #000; }
+    .footer-total-label { text-align: right; }
   }
 </style>
 </head>
 <body>
 
-<h1>Aaral Marketing — New Chitti</h1>
+<style id="pageSizeStyle"></style>
 
-<label>Customer (leave blank for a walk-in / cash sale)</label>
-<input type="text" id="customerSearch" placeholder="Search by name or phone…" autocomplete="off">
-<div id="customerResults"></div>
-<div id="selectedCustomer" style="margin-top:0.4rem;font-size:0.9rem;color:#555;"></div>
-
-<table id="itemsTable">
-  <thead>
-    <tr><th>S No.</th><th>Particulars</th><th>Grade</th><th>Vch</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
-<button id="addRow" class="no-print" type="button">+ Add line</button>
-
-<div class="totals">
-  <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
-  <div class="no-print">
-    <label style="display:inline;">Unloading charges: ₹</label>
-    <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a class="active" href="/chitti.html">New Chitti</a>
+        <a href="/payment.html">New Payment</a>
+      </nav>
+    </div>
+    <div class="hero-heading">
+      <div class="eyebrow">Sales voucher</div>
+      <h2>New Chitti</h2>
+    </div>
   </div>
-  <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
 </div>
 
-<div class="no-print" style="margin-top:1rem;">
-  <label style="display:inline;"><input type="checkbox" id="paidNow" checked style="width:auto;"> Paid now</label>
-</div>
+<div class="page">
+  <a class="back-link no-print" href="/">&larr; All customers</a>
 
-<button id="saveAndPrint" type="button">Save &amp; Print</button>
-<div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
+  <div class="card form-card">
+    <div class="paper-size-box no-print">
+      <label>Print paper size</label>
+      <select id="paperPreset">
+        <option value="a4">A4 (210 × 297 mm)</option>
+        <option value="a5">A5 (148 × 210 mm)</option>
+        <option value="a6">A6 (105 × 148 mm)</option>
+        <option value="letter">Letter (216 × 279 mm)</option>
+        <option value="custom">Custom size…</option>
+      </select>
+      <div class="custom-dims" id="customDims">
+        <div><label>Width (mm)</label><input type="number" id="customWidth" min="10" step="1" value="148"></div>
+        <div><label>Height (mm)</label><input type="number" id="customHeight" min="10" step="1" value="210"></div>
+      </div>
+    </div>
+
+    <div class="field-group no-print">
+      <label>Date</label>
+      <input type="date" id="invoiceDate">
+    </div>
+
+    <div class="field-group no-print">
+      <label>Destination</label>
+      <input type="text" id="destination" placeholder="e.g. site / delivery location" autocomplete="off">
+    </div>
+
+    <div class="field-group no-print" id="customerSearchWrap">
+      <label>Customer (leave blank for a walk-in / cash sale)</label>
+      <input type="text" id="customerSearch" placeholder="Search by name or phone…" autocomplete="off">
+      <div id="customerResults"></div>
+    </div>
+    <div id="selectedCustomer" class="no-print"></div>
+
+    <datalist id="particularsOptions"></datalist>
+    <datalist id="gradeOptions"></datalist>
+
+    <div class="table-scroll">
+      <table id="itemsTable">
+        <thead>
+          <tr class="only-print print-title-row"><th colspan="7" id="printCustomerName"></th></tr>
+          <tr class="only-print print-date-row"><th colspan="7"><span>Date:</span> <span class="print-date-value" id="printDateValue"></span></th></tr>
+          <tr class="only-print print-destination-row" id="printDestinationRow"><th colspan="7"><span>Destination:</span> <span class="print-date-value" id="printDestinationValue"></span></th></tr>
+          <tr class="col-headers"><th>Sl</th><th>Particulars</th><th>Grade</th><th>Vch</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot class="only-print">
+          <tr><td colspan="6" class="footer-total-label">Total</td><td id="footerTotal" class="row-amount"></td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <button id="addRow" class="add-row no-print" type="button">+ Add line</button>
+
+    <div class="totals">
+      <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
+      <div class="no-print">
+        <label style="display:inline;">Unloading charges: ₹</label>
+        <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
+      </div>
+      <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
+    </div>
+
+    <div class="toggle-row no-print">
+      <input type="checkbox" id="paidNow" checked><label style="margin:0;">Paid now</label>
+    </div>
+    <div class="toggle-row no-print">
+      <input type="checkbox" id="sendWhatsapp" disabled><label style="margin:0;">Send invoice PDF to customer via WhatsApp</label>
+    </div>
+
+    <button id="saveAndPrint" class="btn-primary no-print" type="button" style="margin-top:1.4rem;">Save &amp; Print</button>
+    <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
+  </div>
+</div>
 
 <script>
 let selectedCustomerId = null;
 const tbody = document.querySelector('#itemsTable tbody');
+
+function historyCombobox(storageKey, datalistId) {
+  const dl = document.getElementById(datalistId);
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem(storageKey)) || []; } catch (e) { history = []; }
+
+  function render() {
+    dl.innerHTML = history.map((v) => `<option value="${v.replace(/"/g, '&quot;')}"></option>`).join('');
+  }
+  render();
+
+  return function add(value) {
+    const trimmed = value.trim();
+    if (!trimmed || history.includes(trimmed)) return;
+    history.push(trimmed);
+    localStorage.setItem(storageKey, JSON.stringify(history));
+    render();
+  };
+}
+
+const addParticular = historyCombobox('aaral_particulars_history', 'particularsOptions');
+const addGrade = historyCombobox('aaral_grade_history', 'gradeOptions');
 
 function addRow() {
   const tr = document.createElement('tr');
   const sNo = tbody.children.length + 1;
   tr.innerHTML = `
     <td>${sNo}</td>
-    <td><input class="particulars"></td>
-    <td><input class="grade"></td>
+    <td><input class="particulars" list="particularsOptions" autocomplete="off"></td>
+    <td><input class="grade" list="gradeOptions" autocomplete="off"></td>
     <td><input class="vch"></td>
     <td><input class="qty" type="number" min="0" step="0.01"></td>
     <td><input class="rate" type="number" min="0" step="0.01"></td>
     <td class="row-amount">0.00</td>`;
   tbody.appendChild(tr);
   tr.querySelectorAll('.qty, .rate').forEach((el) => el.addEventListener('input', recalc));
+  tr.querySelector('.grade').addEventListener('change', (e) => addGrade(e.target.value));
+  tr.querySelector('.particulars').addEventListener('change', (e) => addParticular(e.target.value));
+}
+
+function formatMoney(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
 function recalc() {
   let subtotal = 0;
   tbody.querySelectorAll('tr').forEach((tr) => {
-    const qty = Number(tr.querySelector('.qty').value) || 0;
-    const rate = Number(tr.querySelector('.rate').value) || 0;
+    const qtyVal = tr.querySelector('.qty').value;
+    const rateVal = tr.querySelector('.rate').value;
+    const qty = Number(qtyVal) || 0;
+    const rate = Number(rateVal) || 0;
     const amount = qty * rate;
-    tr.querySelector('.row-amount').textContent = amount.toFixed(2);
+    tr.querySelector('.row-amount').textContent = (qtyVal === '' && rateVal === '') ? '' : formatMoney(amount);
     subtotal += amount;
   });
   const unloading = Number(document.getElementById('unloading').value) || 0;
-  document.getElementById('subtotal').textContent = subtotal.toFixed(2);
-  document.getElementById('grandTotal').textContent = (subtotal + unloading).toFixed(2);
+  const grandTotal = subtotal + unloading;
+  document.getElementById('subtotal').textContent = formatMoney(subtotal);
+  document.getElementById('grandTotal').textContent = formatMoney(grandTotal);
+  document.getElementById('footerTotal').textContent = formatMoney(grandTotal);
+}
+
+function updatePrintCustomerName() {
+  const name = document.getElementById('customerSearch').value.trim();
+  document.getElementById('printCustomerName').textContent = name || 'WALK-IN / CASH SALE';
+}
+
+function updatePrintDate() {
+  const val = document.getElementById('invoiceDate').value;
+  let display = '';
+  if (val) {
+    const [y, m, d] = val.split('-');
+    display = `${d}-${m}-${y}`;
+  }
+  document.getElementById('printDateValue').textContent = display;
+}
+
+function updatePrintDestination() {
+  const val = document.getElementById('destination').value.trim();
+  document.getElementById('printDestinationValue').textContent = val;
+  document.getElementById('printDestinationRow').style.display = val ? '' : 'none';
 }
 
 document.getElementById('unloading').addEventListener('input', recalc);
 document.getElementById('addRow').addEventListener('click', addRow);
-addRow();
+for (let i = 0; i < 5; i++) addRow();
+recalc();
+updatePrintCustomerName();
+
+document.getElementById('invoiceDate').value = new Date().toLocaleDateString('en-CA');
+document.getElementById('invoiceDate').addEventListener('input', updatePrintDate);
+updatePrintDate();
+
+document.getElementById('destination').addEventListener('input', updatePrintDestination);
+updatePrintDestination();
+
+const PAPER_PRESETS = { a4: [210, 297], a5: [148, 210], a6: [105, 148], letter: [215.9, 279.4] };
+const paperPresetSelect = document.getElementById('paperPreset');
+const customDims = document.getElementById('customDims');
+const customWidthInput = document.getElementById('customWidth');
+const customHeightInput = document.getElementById('customHeight');
+const pageSizeStyle = document.getElementById('pageSizeStyle');
+
+let currentPaperSize = { w: 148, h: 210 };
+
+function updatePageSize() {
+  const preset = paperPresetSelect.value;
+  let w, h;
+  if (preset === 'custom') {
+    w = Number(customWidthInput.value) || 148;
+    h = Number(customHeightInput.value) || 210;
+  } else {
+    [w, h] = PAPER_PRESETS[preset];
+  }
+  currentPaperSize = { w, h };
+  pageSizeStyle.textContent = `@page { size: ${w}mm ${h}mm; margin: 5mm; }`;
+}
+
+paperPresetSelect.addEventListener('change', () => {
+  customDims.style.display = paperPresetSelect.value === 'custom' ? 'flex' : 'none';
+  updatePageSize();
+});
+customWidthInput.addEventListener('input', updatePageSize);
+customHeightInput.addEventListener('input', updatePageSize);
+updatePageSize();
 
 const searchInput = document.getElementById('customerSearch');
 const resultsBox = document.getElementById('customerResults');
 let searchTimer = null;
+const sendWhatsappCheckbox = document.getElementById('sendWhatsapp');
+
 searchInput.addEventListener('input', () => {
   clearTimeout(searchTimer);
   selectedCustomerId = null;
+  sendWhatsappCheckbox.checked = false;
+  sendWhatsappCheckbox.disabled = true;
+  updatePrintCustomerName();
   const term = searchInput.value.trim();
   if (!term) { resultsBox.style.display = 'none'; return; }
   searchTimer = setTimeout(async () => {
@@ -114,6 +328,8 @@ searchInput.addEventListener('input', () => {
         document.getElementById('selectedCustomer').textContent = `Selected: ${c.name} (₹${c.balance} balance)`;
         resultsBox.style.display = 'none';
         searchInput.value = c.name;
+        sendWhatsappCheckbox.disabled = false;
+        updatePrintCustomerName();
       });
       resultsBox.appendChild(div);
     });
@@ -122,18 +338,25 @@ searchInput.addEventListener('input', () => {
 });
 
 document.getElementById('saveAndPrint').addEventListener('click', async () => {
-  const items = [...tbody.querySelectorAll('tr')].map((tr) => ({
-    particulars: tr.querySelector('.particulars').value,
-    grade: tr.querySelector('.grade').value,
-    vch: tr.querySelector('.vch').value,
-    qty: tr.querySelector('.qty').value,
-    rate: tr.querySelector('.rate').value,
-  }));
+  const items = [...tbody.querySelectorAll('tr')]
+    .map((tr) => ({
+      particulars: tr.querySelector('.particulars').value,
+      grade: tr.querySelector('.grade').value,
+      vch: tr.querySelector('.vch').value,
+      qty: tr.querySelector('.qty').value,
+      rate: tr.querySelector('.rate').value,
+    }))
+    .filter((item) => item.particulars.trim() || item.qty || item.rate);
   const body = {
     customerId: selectedCustomerId,
     items,
     unloadingCharge: document.getElementById('unloading').value || null,
     paidNow: document.getElementById('paidNow').checked,
+    sendWhatsapp: selectedCustomerId ? sendWhatsappCheckbox.checked : false,
+    invoiceDate: document.getElementById('invoiceDate').value || null,
+    destination: document.getElementById('destination').value.trim() || null,
+    paperWidthMm: currentPaperSize.w,
+    paperHeightMm: currentPaperSize.h,
     createdBy: 'dashboard',
   };
   const statusEl = document.getElementById('status');
@@ -145,11 +368,13 @@ document.getElementById('saveAndPrint').addEventListener('click', async () => {
   const data = await res.json();
   if (!data.ok) {
     statusEl.textContent = `Error: ${data.error}`;
-    statusEl.style.color = '#b1402f';
+    statusEl.style.color = 'var(--rust)';
     return;
   }
-  statusEl.textContent = `Saved as Invoice #${data.invoiceNumber}.`;
-  statusEl.style.color = '#3f7a52';
+  statusEl.textContent = data.invoiceNumber
+    ? `Saved as Invoice #${data.invoiceNumber}.`
+    : 'Chitti ready to print (walk-in sale — not stored).';
+  statusEl.style.color = 'var(--moss)';
   window.print();
 });
 </script>

@@ -1,0 +1,225 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>New Payment — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .form-card { padding: 1.6rem; }
+  .form-card label { display: block; font-size: 0.95rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
+  .field-group { margin-bottom: 1.1rem; max-width: 360px; }
+
+  #customerSearchWrap { position: relative; max-width: 360px; }
+  #customerResults { border: 1px solid var(--line); border-radius: 8px; margin-top: 0.3rem; max-height: 200px; overflow-y: auto; display: none; background: var(--paper); box-shadow: var(--shadow); position: absolute; width: 100%; z-index: 5; }
+  #customerResults div { padding: 0.6rem 0.8rem; cursor: pointer; font-size: 0.88rem; }
+  #customerResults div:hover { background: var(--concrete); }
+  #customerResults div.create-new { color: var(--cyan); font-weight: 600; border-top: 1px solid var(--line); }
+  #selectedCustomer { margin-top: 0.5rem; font-size: 0.85rem; color: var(--ink-muted); }
+
+  .method-row { display: flex; gap: 0.6rem; margin-bottom: 1.1rem; }
+  .method-btn {
+    flex: 1; padding: 0.7rem 0.5rem; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--paper); cursor: pointer; text-align: center; font-weight: 600; font-size: 0.88rem;
+    color: var(--ink-muted); transition: all 0.15s ease;
+  }
+  .method-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  .toggle-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 1rem; font-size: 1.05rem; color: var(--ink); }
+  .toggle-row input { width: 1.25em; height: 1.25em; cursor: pointer; }
+  .toggle-row label { font-size: 1.05rem; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a href="/chitti.html">New Chitti</a>
+        <a class="active" href="/payment.html">New Payment</a>
+      </nav>
+    </div>
+    <div class="hero-heading">
+      <div class="eyebrow">Manual ledger update</div>
+      <h2>New Payment</h2>
+    </div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
+</div>
+
+<div class="page">
+  <a class="back-link" href="/">&larr; All customers</a>
+
+  <div class="card form-card">
+    <div class="field-group" id="customerSearchWrap">
+      <label>Customer</label>
+      <input type="text" id="customerSearch" placeholder="Search by name or phone…" autocomplete="off">
+      <div id="customerResults"></div>
+    </div>
+    <div id="selectedCustomer"></div>
+
+    <div class="field-group" id="newPhoneGroup" style="display:none;">
+      <label>Phone number (new customer)</label>
+      <input type="text" id="newCustomerPhone" placeholder="10-digit WhatsApp number" autocomplete="off">
+    </div>
+
+    <div class="field-group">
+      <label>Date</label>
+      <input type="date" id="paymentDate">
+    </div>
+
+    <div class="field-group">
+      <label>Amount received</label>
+      <input type="number" id="amount" min="0" step="0.01" placeholder="0.00">
+    </div>
+
+    <div class="field-group">
+      <label>Mode of payment</label>
+      <div class="method-row">
+        <div class="method-btn active" data-method="cash">Cash</div>
+        <div class="method-btn" data-method="gpay">GPay</div>
+        <div class="method-btn" data-method="bank_transfer">Bank</div>
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <input type="checkbox" id="sendWhatsapp" disabled>
+      <label for="sendWhatsapp">Send payment slip to customer via WhatsApp</label>
+    </div>
+
+    <button id="save" class="btn-primary" type="button" style="margin-top:1.4rem;">Record Payment</button>
+    <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
+  </div>
+</div>
+
+<script>
+let selectedCustomerId = null;
+let selectedMethod = 'cash';
+
+document.getElementById('paymentDate').value = new Date().toLocaleDateString('en-CA');
+
+document.querySelectorAll('.method-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.method-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedMethod = btn.dataset.method;
+  });
+});
+
+const searchInput = document.getElementById('customerSearch');
+const resultsBox = document.getElementById('customerResults');
+const sendWhatsappCheckbox = document.getElementById('sendWhatsapp');
+const newPhoneGroup = document.getElementById('newPhoneGroup');
+const selectedCustomerEl = document.getElementById('selectedCustomer');
+let searchTimer = null;
+let pendingNewName = null;
+
+function clearSelection() {
+  selectedCustomerId = null;
+  pendingNewName = null;
+  sendWhatsappCheckbox.checked = false;
+  sendWhatsappCheckbox.disabled = true;
+  newPhoneGroup.style.display = 'none';
+  selectedCustomerEl.textContent = '';
+}
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  clearSelection();
+  const term = searchInput.value.trim();
+  if (!term) { resultsBox.style.display = 'none'; return; }
+  searchTimer = setTimeout(async () => {
+    const res = await fetch(`/api/customers?q=${encodeURIComponent(term)}`);
+    const matches = await res.json();
+    resultsBox.innerHTML = '';
+    matches.forEach((c) => {
+      const div = document.createElement('div');
+      div.textContent = `${c.name} — ${c.phone_number} (Balance: ₹${c.balance})`;
+      div.addEventListener('click', () => {
+        selectedCustomerId = c.customer_id;
+        pendingNewName = null;
+        selectedCustomerEl.textContent = `Selected: ${c.name} (₹${c.balance} balance)`;
+        resultsBox.style.display = 'none';
+        searchInput.value = c.name;
+        newPhoneGroup.style.display = 'none';
+        sendWhatsappCheckbox.disabled = false;
+      });
+      resultsBox.appendChild(div);
+    });
+    const createDiv = document.createElement('div');
+    createDiv.className = 'create-new';
+    createDiv.textContent = `+ Create new customer "${term}"`;
+    createDiv.addEventListener('click', () => {
+      selectedCustomerId = null;
+      pendingNewName = term;
+      selectedCustomerEl.textContent = `New customer: ${term}`;
+      resultsBox.style.display = 'none';
+      newPhoneGroup.style.display = '';
+      sendWhatsappCheckbox.disabled = false;
+    });
+    resultsBox.appendChild(createDiv);
+    resultsBox.style.display = 'block';
+  }, 250);
+});
+
+document.getElementById('save').addEventListener('click', async () => {
+  const statusEl = document.getElementById('status');
+  const amount = document.getElementById('amount').value;
+  const newPhone = document.getElementById('newCustomerPhone').value.trim();
+
+  if (!selectedCustomerId && !pendingNewName) {
+    statusEl.textContent = 'Select an existing customer or create a new one.';
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  if (pendingNewName && !newPhone) {
+    statusEl.textContent = 'Phone number is required for a new customer.';
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  if (!amount || Number(amount) <= 0) {
+    statusEl.textContent = 'Enter a valid amount.';
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+
+  const body = {
+    customerId: selectedCustomerId,
+    newCustomerName: pendingNewName || undefined,
+    newCustomerPhone: pendingNewName ? newPhone : undefined,
+    amount,
+    method: selectedMethod,
+    date: document.getElementById('paymentDate').value || null,
+    sendWhatsapp: sendWhatsappCheckbox.checked,
+  };
+
+  const res = await fetch('/api/payments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    statusEl.textContent = `Error: ${data.error}`;
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  window.location.href = `/receipt.html?id=${data.paymentId}`;
+});
+</script>
+</body>
+</html>

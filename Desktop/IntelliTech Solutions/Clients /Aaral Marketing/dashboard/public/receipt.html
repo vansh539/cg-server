@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Payment Receipt — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .receipt-card { padding: 2rem; max-width: 480px; margin: 0 auto; text-align: center; }
+  .receipt-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cyan); margin-bottom: 0.6rem; }
+  .receipt-amount { font-family: 'Space Grotesk', sans-serif; font-size: 3rem; font-weight: 800; color: var(--navy); margin: 0.4rem 0 1.2rem; }
+  .receipt-meta { display: flex; justify-content: center; gap: 2.5rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
+  .receipt-meta .item { text-align: center; }
+  .receipt-meta .item .label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+  .receipt-meta .item .value { font-size: 1rem; font-weight: 600; color: var(--ink); margin-top: 0.2rem; }
+  @media print {
+    .hero, .no-print { display: none !important; }
+    body { background: #fff; }
+    body::before { display: none; }
+    .page { padding: 0; }
+    .receipt-card { box-shadow: none; border: 1px solid #000; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a href="/chitti.html">New Chitti</a>
+        <a href="/payment.html">New Payment</a>
+      </nav>
+    </div>
+    <div class="hero-heading">
+      <div class="eyebrow">Payment receipt</div>
+      <h2 id="receiptTitle">Loading…</h2>
+    </div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
+</div>
+
+<div class="page">
+  <a class="back-link no-print" href="/" id="backLink">&larr; All customers</a>
+
+  <div class="card receipt-card">
+    <div class="receipt-label">Amount received</div>
+    <div class="receipt-amount" id="receiptAmount">—</div>
+    <div class="receipt-meta">
+      <div class="item">
+        <div class="label">Date</div>
+        <div class="value" id="receiptDate">—</div>
+      </div>
+      <div class="item">
+        <div class="label">Mode</div>
+        <div class="value" id="receiptMode">—</div>
+      </div>
+      <div class="item">
+        <div class="label">Balance after</div>
+        <div class="value" id="receiptBalance">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="no-print" style="text-align:center; margin-top:1.4rem;">
+    <button class="btn-primary" onclick="window.print()">Print</button>
+  </div>
+</div>
+
+<script>
+const METHOD_LABELS = { cash: 'Cash', gpay: 'GPay', bank_transfer: 'Bank Transfer' };
+const params = new URLSearchParams(window.location.search);
+const paymentId = params.get('id');
+
+async function load() {
+  const res = await fetch(`/api/payments/${paymentId}`);
+  if (!res.ok) {
+    document.getElementById('receiptTitle').textContent = 'Payment not found';
+    return;
+  }
+  const { payment, balance } = await res.json();
+  document.getElementById('receiptTitle').textContent = payment.customer_name;
+  document.getElementById('receiptAmount').textContent = `₹${Number(payment.amount_claimed).toLocaleString('en-IN')}`;
+  document.getElementById('receiptDate').textContent = new Date(payment.reported_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  document.getElementById('receiptMode').textContent = METHOD_LABELS[payment.proof_type] || payment.proof_type;
+  document.getElementById('receiptBalance').textContent = balance !== null ? `₹${Number(balance).toLocaleString('en-IN')}` : '—';
+  document.getElementById('backLink').href = `/customer.html?id=${payment.customer_id}`;
+  document.getElementById('backLink').innerHTML = '&larr; Back to ledger';
+}
+
+load();
+</script>
+</body>
+</html>

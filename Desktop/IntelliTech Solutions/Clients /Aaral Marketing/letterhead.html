@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aaral Marketing – Letterhead</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+@page { size: A4 portrait; margin: 0; }
+
+:root {
+  --navy: #211155;
+  --blue: #0093d9;
+  --blue-light: #5fc4ef;
+  --ink: #14101b;
+  --muted: #5b6b82;
+  --line: #dfe6f0;
+}
+
+body {
+  width: 210mm;
+  min-height: 297mm;
+  background: #dfe6f0;
+  font-family: 'Inter', Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  padding: 10mm;
+}
+
+.page {
+  width: 210mm;
+  height: 297mm;
+  background: #ffffff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 32px rgba(20, 16, 27, 0.18);
+}
+
+.top-bar {
+  height: 6mm;
+  background: linear-gradient(90deg, var(--navy) 0%, var(--blue) 55%, var(--blue-light) 100%);
+}
+
+.header {
+  padding: 6mm 14mm 4mm;
+  display: flex;
+  align-items: center;
+  gap: 6mm;
+}
+
+.header img { height: 22mm; width: auto; display: block; }
+
+.header-text { flex: 1; }
+
+.firm-name {
+  font-family: 'Sora', sans-serif;
+  font-size: 22pt;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--navy);
+  line-height: 1;
+}
+
+.tagline {
+  font-size: 9pt;
+  color: var(--muted);
+  margin-top: 2mm;
+  letter-spacing: 0.02em;
+}
+
+.header-contact {
+  text-align: right;
+  font-size: 10.5pt;
+  color: var(--ink);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.header-contact .gstin {
+  display: inline-block;
+  margin-top: 1.5mm;
+  font-size: 10.5pt;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.divider {
+  height: 2px;
+  background: linear-gradient(90deg, var(--navy) 0%, var(--blue) 55%, var(--blue-light) 100%);
+  margin: 0 14mm;
+}
+
+.content-area {
+  padding: 10mm 14mm;
+  min-height: 175mm;
+}
+
+.footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+.footer-strip {
+  background: var(--navy);
+  color: #fff;
+  padding: 5mm 14mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 8pt;
+  line-height: 1.6;
+}
+
+.footer-strip .bank-details { white-space: pre-line; }
+.footer-strip .bank-label { font-weight: 700; color: var(--blue-light); text-transform: uppercase; font-size: 7.5pt; letter-spacing: 0.06em; margin-bottom: 1mm; }
+
+.bottom-bar {
+  height: 4mm;
+  background: linear-gradient(90deg, var(--navy) 0%, var(--blue) 55%, var(--blue-light) 100%);
+}
+
+@media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { background: #fff !important; padding: 0 !important; }
+  .page { box-shadow: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="top-bar"></div>
+
+  <div class="header">
+    <img src="Logo-enhanced.png" alt="Aaral Marketing Logo">
+    <div class="header-text">
+      <div class="firm-name">AARAL MARKETING</div>
+      <div class="tagline">Cement &amp; Building Materials Trading</div>
+    </div>
+    <div class="header-contact">5-4-57 to 62, 1st floor, Sri Krishna Govinda Complex
+Distillery Road, Secunderabad – 500 003, Telangana
+Ph: +91 80082 22501
+aaralmarketing@gmail.com
+<span class="gstin">GSTIN: 36ABEFA2347P1Z6</span></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="content-area"></div>
+
+  <div class="footer">
+    <div class="footer-strip">
+      <div class="bank-details">
+        <div class="bank-label">Bank Details</div>
+        Aaral Marketing
+        A/c No: 512020010018707
+        IFSC: CIUB0000076
+        City Union Bank Ltd, Ranigunj, Secunderabad – 3
+      </div>
+      <div class="bank-details" style="text-align:right;">
+        <div class="bank-label">Registered Office</div>
+        5-4-57 to 62, 1st floor
+        Sri Krishna Govinda Complex, Distillery Road
+        Secunderabad – 500 003, Telangana
+      </div>
+    </div>
+    <div class="bottom-bar"></div>
+  </div>
+
+</div>
+</body>
+</html>
