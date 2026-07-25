@@ -36,7 +36,7 @@ export default function LoginScreen() {
       if (data.companies.length === 1) {
         const co = data.companies[0];
         setAuth(data.token, co.id, co.name);
-        router.replace('/(tabs)/');
+        router.replace('/');
       } else {
         setToken(data.token);
         setCompanies(data.companies);
@@ -49,7 +49,7 @@ export default function LoginScreen() {
   const selectCompany = (co: any) => {
     setAuth(token, co.id, co.name);
     setShowPicker(false);
-    router.replace('/(tabs)/');
+    router.replace('/');
   };
 
   return (

@@ -12,7 +12,7 @@ api.interceptors.request.use((config) => {
 });
 
 export const clientLogin = (mobile: string, password: string) =>
-  api.post('/portal/login', { mobile, password }).then(r => r.data);
+  api.post('/portal/login', { mobile, password, company_code: 'VI' }).then(r => r.data);
 
 export const getAccount = () =>
   api.get('/portal/account').then(r => r.data);

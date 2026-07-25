@@ -29,7 +29,7 @@ export default function ClientLoginScreen() {
         data.party?.name ?? '',
         data.company?.name ?? 'Vansh Iron'
       );
-      router.replace('/(tabs)/');
+      router.replace('/');
     },
     onError: () => Alert.alert('Login failed', 'Check your mobile number and password'),
   });

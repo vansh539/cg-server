@@ -2,6 +2,7 @@
   "expo": {
     "name": "Vansh Iron",
     "slug": "vi-portal",
+    "owner": "vansh5399",
     "version": "1.0.0",
     "scheme": "vi-portal",
     "orientation": "portrait",
@@ -28,11 +29,16 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font",
-      "expo-sharing"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0c0852d7-ec20-4523-8017-fb0b0aab6324"
+      }
     }
   }
 }

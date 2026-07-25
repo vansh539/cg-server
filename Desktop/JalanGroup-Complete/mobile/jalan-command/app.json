@@ -2,6 +2,7 @@
   "expo": {
     "name": "Jalan Command",
     "slug": "jalan-command",
+    "owner": "vansh5399",
     "version": "1.0.0",
     "scheme": "jalan-command",
     "orientation": "portrait",
@@ -12,7 +13,10 @@
     },
     "ios": {
       "bundleIdentifier": "com.jalangroup.command",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.jalangroup.command",
@@ -22,7 +26,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#06100A"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",
@@ -31,12 +36,17 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font",
-      "expo-sharing",
-      "expo-web-browser"
+      "expo-font"
     ],
+    "newArchEnabled": false,
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "125cb8e1-7aaa-4915-a24d-b9af96c2acc5"
+      }
     }
   }
 }

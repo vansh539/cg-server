@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { sendPaymentNotification, BASE } from '../../src/api';
 import { useClientStore } from '../../src/store';

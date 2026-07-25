@@ -1,12 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { getAccount } from '../../src/api';
@@ -24,22 +17,24 @@ export default function HomeScreen() {
     refetchInterval: 60000,
   });
 
-  const pulseAnim = useSharedValue(1);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const loopRef = useRef<Animated.CompositeAnimation | null>(null);
+
   useEffect(() => {
     if ((data?.overdue ?? 0) > 0) {
-      pulseAnim.value = withRepeat(
-        withSequence(
-          withTiming(1.03, { duration: 800 }),
-          withTiming(1, { duration: 800 })
-        ),
-        -1,
-        false
+      loopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.03, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
       );
+      loopRef.current.start();
+    } else {
+      loopRef.current?.stop();
+      pulseAnim.setValue(1);
     }
+    return () => loopRef.current?.stop();
   }, [data?.overdue]);
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseAnim.value }],
-  }));
 
   const fmt = (n: number) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
 
@@ -60,7 +55,7 @@ export default function HomeScreen() {
           {fmt(data?.outstanding ?? 0)}
         </GoldShimmerText>
         {(data?.overdue ?? 0) > 0 && (
-          <Animated.View style={[styles.dueBadge, pulseStyle]}>
+          <Animated.View style={[styles.dueBadge, { transform: [{ scale: pulseAnim }] }]}>
             <Text style={styles.dueText}>⚠ {fmt(data!.overdue)} overdue</Text>
           </Animated.View>
         )}

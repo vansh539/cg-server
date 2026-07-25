@@ -72,9 +72,16 @@ export default function BotScreen() {
       <View style={styles.messageList}>
         {(messagesData?.messages ?? []).slice(0, 8).map((m: any, i: number) => (
           <View key={i} style={styles.msgRow}>
-            <Text style={styles.msgFrom}>{m.from_name ?? m.from}</Text>
-            <Text style={styles.msgText} numberOfLines={1}>{m.body}</Text>
-            <Text style={styles.msgTime}>{m.time_ago}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={styles.msgFrom}>{m.party_name ?? m.wa_number ?? m.from_name ?? m.from}</Text>
+              <Text style={[styles.msgTime, { color: m.direction === 'inbound' ? colors.ok : colors.txt3 }]}>
+                {m.direction === 'inbound' ? '↓' : '↑'} {m.msg_type ?? ''}
+              </Text>
+            </View>
+            <Text style={styles.msgText} numberOfLines={1}>{m.message ?? m.body}</Text>
+            <Text style={styles.msgTime}>
+              {m.sent_at ? new Date(m.sent_at).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true }) : m.time_ago}
+            </Text>
           </View>
         ))}
         {!(messagesData?.messages?.length) && (

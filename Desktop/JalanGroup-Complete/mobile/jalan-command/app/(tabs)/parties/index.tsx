@@ -28,11 +28,12 @@ export default function PartiesScreen() {
       <FlatList
         data={parties}
         keyExtractor={(item: any) => item.id}
+        style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 32 }}
         renderItem={({ item }: { item: any }) => (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => router.push(`/(tabs)/parties/${item.id}`)}
+            onPress={() => router.push(`/parties/${item.id}`)}
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{item.name}</Text>

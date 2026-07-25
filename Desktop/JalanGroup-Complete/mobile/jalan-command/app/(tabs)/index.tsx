@@ -1,17 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Animated,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { getDashboard, sendReminders } from '../../src/api';
@@ -34,18 +28,15 @@ export default function DashboardScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
   });
 
-  const glowAnim = useSharedValue(0.2);
+  const glowAnim = useRef(new Animated.Value(0.2)).current;
   useEffect(() => {
-    glowAnim.value = withRepeat(
-      withSequence(
-        withTiming(0.6, { duration: 2000 }),
-        withTiming(0.2, { duration: 2000 })
-      ),
-      -1,
-      false
-    );
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 0.6, duration: 2000, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0.2, duration: 2000, useNativeDriver: true }),
+      ])
+    ).start();
   }, []);
-  const glowStyle = useAnimatedStyle(() => ({ opacity: glowAnim.value }));
 
   const fmt = (n: number) =>
     n >= 100000
@@ -57,7 +48,7 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Animated.Text style={[styles.brandName, glowStyle]}>
+          <Animated.Text style={[styles.brandName, { opacity: glowAnim }]}>
             {companyName ?? 'Vansh Iron'}
           </Animated.Text>
           <Text style={styles.brandSub}>Command Centre</Text>
@@ -101,9 +92,9 @@ export default function DashboardScreen() {
       <View style={styles.qaGrid}>
         {[
           { icon: '📣', label: 'Remind All', onPress: () => remind() },
-          { icon: '💰', label: 'Live Rates',  onPress: () => router.push('/(tabs)/rates') },
-          { icon: '💬', label: 'WA Bot',      onPress: () => router.push('/(tabs)/bot') },
-          { icon: '📦', label: 'Orders',      onPress: () => router.push('/(tabs)/orders/') },
+          { icon: '💰', label: 'Live Rates',  onPress: () => router.push('/rates') },
+          { icon: '💬', label: 'WA Bot',      onPress: () => router.push('/bot') },
+          { icon: '📦', label: 'Orders',      onPress: () => router.push('/orders') },
         ].map((a) => (
           <TouchableOpacity key={a.label} style={styles.qaBtn} onPress={a.onPress}>
             <Text style={styles.qaIcon}>{a.icon}</Text>

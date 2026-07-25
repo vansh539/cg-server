@@ -1,13 +1,5 @@
-import React, { useEffect } from 'react';
-import { TextStyle } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-  interpolateColor,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { Animated, TextStyle } from 'react-native';
 import { colors, fonts } from '../theme';
 
 interface Props {
@@ -16,28 +8,25 @@ interface Props {
 }
 
 export function GoldShimmerText({ children, style }: Props) {
-  const progress = useSharedValue(0);
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    progress.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 1800 }),
-        withTiming(0, { duration: 1800 })
-      ),
-      -1,
-      false
-    );
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(progress, { toValue: 1, duration: 1800, useNativeDriver: false }),
+        Animated.timing(progress, { toValue: 0, duration: 1800, useNativeDriver: false }),
+      ])
+    ).start();
   }, []);
 
-  const animStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(progress.value, [0, 1], [colors.txt, colors.viGoldLt]),
-  }));
+  const color = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.txt, colors.viGoldLt],
+  });
 
   return (
-    <Animated.Text style={[styles.base, style, animStyle]}>
+    <Animated.Text style={[{ fontFamily: fonts.cormorantItalic, color: colors.txt }, style, { color }]}>
       {children}
     </Animated.Text>
   );
 }
-
-const styles = { base: { fontFamily: fonts.cormorantItalic, color: colors.txt } };

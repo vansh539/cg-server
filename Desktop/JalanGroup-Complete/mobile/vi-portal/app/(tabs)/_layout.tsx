@@ -1,9 +1,16 @@
 import React from 'react';
-import { Text } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Text, View } from 'react-native';
+import { Tabs, Redirect } from 'expo-router';
 import { colors, fonts } from '../../src/theme';
+import { useClientStore } from '../../src/store';
 
 export default function TabLayout() {
+  const token = useClientStore((s) => s.token);
+  const ready = useClientStore((s) => s.ready);
+
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!token) return <Redirect href="/(auth)/login" />;
+
   return (
     <Tabs
       screenOptions={{

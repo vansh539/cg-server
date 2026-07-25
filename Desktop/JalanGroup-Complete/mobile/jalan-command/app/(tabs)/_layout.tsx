@@ -1,9 +1,16 @@
 import React from 'react';
-import { Text } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Text, View } from 'react-native';
+import { Tabs, Redirect } from 'expo-router';
 import { colors, fonts } from '../../src/theme';
+import { useAuthStore } from '../../src/store';
 
 export default function TabLayout() {
+  const token = useAuthStore((s) => s.token);
+  const ready = useAuthStore((s) => s.ready);
+
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!token) return <Redirect href="/(auth)/login" />;
+
   return (
     <Tabs
       screenOptions={{
@@ -69,6 +76,8 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="rates"            options={{ href: null }} />
+      <Tabs.Screen name="parties/[id]"     options={{ href: null }} />
     </Tabs>
   );
 }

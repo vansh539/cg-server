@@ -5,6 +5,7 @@ interface AuthState {
   token: string | null;
   companyId: string | null;
   companyName: string | null;
+  ready: boolean;
   setAuth: (token: string, companyId: string, companyName: string) => Promise<void>;
   clearAuth: () => Promise<void>;
   loadFromStorage: () => Promise<void>;
@@ -14,6 +15,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   token: null,
   companyId: null,
   companyName: null,
+  ready: false,
   setAuth: async (token, companyId, companyName) => {
     await SecureStore.setItemAsync('token', token);
     await SecureStore.setItemAsync('companyId', companyId);
@@ -30,6 +32,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     const token = await SecureStore.getItemAsync('token');
     const companyId = await SecureStore.getItemAsync('companyId');
     const companyName = await SecureStore.getItemAsync('companyName');
-    if (token && companyId) set({ token, companyId, companyName: companyName || '' });
+    set({ token: token || null, companyId: companyId || null, companyName: companyName || null, ready: true });
   },
 }));

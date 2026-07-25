@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Modal, Clipboard } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Modal, Share } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../src/store';
@@ -22,7 +22,7 @@ export default function SettingsScreen() {
         style: 'destructive',
         onPress: () => {
           clearAuth();
-          router.replace('/(auth)/login');
+          router.replace('/login');
         },
       },
     ]);
@@ -86,10 +86,7 @@ export default function SettingsScreen() {
           </View>
           <TouchableOpacity
             style={styles.copyBtn}
-            onPress={() => {
-              Clipboard.setString(configJson);
-              Alert.alert('Copied!', 'Config copied to clipboard');
-            }}
+            onPress={() => Share.share({ message: configJson })}
           >
             <Text style={styles.copyBtnText}>Copy Config</Text>
           </TouchableOpacity>
