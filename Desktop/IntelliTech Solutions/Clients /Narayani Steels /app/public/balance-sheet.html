@@ -122,7 +122,7 @@ body{font-family:system-ui,sans-serif;background:#f4f4f0;min-height:100vh;paddin
 
   <div class="no-print bs-actions">
     <button class="btn" onclick="saveDay()">Save</button>
-    <button class="btn secondary" onclick="window.print()">Print</button>
+    <button class="btn secondary" onclick="printDay()">Print</button>
   </div>
   <div class="no-print save-note" id="save-note"></div>
 </div>
@@ -238,12 +238,20 @@ async function saveDay() {
     const err = await res.json().catch(() => ({}));
     note.style.color = '#dc2626';
     note.textContent = err.error || 'Save failed';
-    return;
+    return false;
   }
   current = await res.json();
   renderAll();
   note.style.color = '#16a34a';
   note.textContent = 'Saved ✓';
+  return true;
+}
+
+async function printDay() {
+  const saved = await saveDay();
+  if (!saved) return;
+  const key = dateKey(currentDate);
+  window.open(`${API}/${key}/pdf`, '_blank');
 }
 
 loadDay();

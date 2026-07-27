@@ -525,6 +525,97 @@ app.post('/api/ledger/invoices/:id/send-whatsapp', async (req, res) => {
   }
 });
 
+// ─── Balance Sheet PDF rendering ──────────────────────────────────────────────
+//
+// Rendered the same way as the invoice PDF above (headless Chrome,
+// --no-pdf-header-footer) rather than relying on the browser's own print
+// dialog from balance-sheet.html directly — Chrome's native print dialog
+// injects its own header (page title) and footer (date/URL) around
+// whatever a page prints, which isn't something page-level CSS can
+// suppress. Vansh saw exactly that (a date top-right, the page title
+// centered) on a real test print and asked for it gone; generating an
+// actual PDF server-side sidesteps the browser chrome entirely, matching
+// how the Invoice/Quotation flow already avoids the same problem.
+function bsRowsHtml(rows) {
+  return rows.map((r) => `<div class="row"><span>${r.label}</span><span class="amt">${pdfFmt(r.amount)}</span></div>`).join('');
+}
+function bsSection(title, rows, totalLabel, total) {
+  return `<div class="section"><h4>${title}</h4>${bsRowsHtml(rows)}<div class="total-row"><span>${totalLabel}</span><span>${pdfFmt(total)}</span></div></div>`;
+}
+function renderBalanceSheetPdf(day) {
+  const dateStr = new Date(`${day.date}T00:00:00`).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    @page{size:A4 portrait;margin:14mm}
+    body{font-family:'Times New Roman',serif;color:#000}
+    .shri{text-align:center;font-size:20pt;font-weight:700;font-family:'Noto Sans Devanagari','Nirmala UI',sans-serif;margin-bottom:6mm}
+    .rule{border:none;border-top:1.5px solid #000;margin:0 0 4mm 0}
+    .titlerow{display:flex;justify-content:space-between;align-items:baseline;font-size:12pt;margin-bottom:4mm}
+    .hindi{font-weight:700;font-family:'Noto Sans Devanagari','Nirmala UI',sans-serif;font-size:13pt}
+    .cols{display:flex}
+    .col{flex:1}
+    .col.left{padding-right:6mm;border-right:1px solid #000}
+    .col.right{padding-left:6mm}
+    .section{margin-bottom:8mm}
+    .section h4{font-size:10.5pt;letter-spacing:0.04em;margin-bottom:2mm;font-family:Arial,sans-serif}
+    .row{display:flex;justify-content:space-between;font-size:10.5pt;padding:1mm 0;border-bottom:1px dotted #ccc}
+    .total-row{display:flex;justify-content:space-between;font-weight:700;font-size:10.5pt;border-top:1px solid #000;padding-top:1.5mm;margin-top:1mm}
+    .totals{display:flex;justify-content:flex-end;gap:14mm;margin-top:6mm;padding-top:4mm;border-top:1.5px solid #000;font-size:10.5pt}
+    .totals .lbl{font-size:8.5pt;color:#444;text-transform:uppercase}
+    .totals .val{font-weight:700;font-size:12pt}
+    .totals .closing .val{font-size:14pt}
+  </style></head><body>
+    <div class="shri">श्री</div>
+    <hr class="rule">
+    <div class="titlerow"><div class="hindi">श्री रानी सती दादी</div><div>${dateStr}</div></div>
+    <hr class="rule">
+    <div class="cols">
+      <div class="col left">
+        ${bsSection('CASH IN', day.cashIn, 'Cash Total', day.cashTotal)}
+        ${bsSection('BANK IN', day.bankIn, 'Bank In Total', day.bankInTotal)}
+      </div>
+      <div class="col right">
+        ${bsSection('EXPENSES', day.expenses, 'Expenses Total', day.expensesTotal)}
+        ${bsSection('BANK OUT', day.bankOut, 'Bank Out Total', day.bankOutTotal)}
+      </div>
+    </div>
+    <div class="totals">
+      <div><div class="lbl">Cash Subtotal</div><div class="val">${pdfFmt(day.cashSubtotal)}</div></div>
+      <div><div class="lbl">Bank Subtotal</div><div class="val">${pdfFmt(day.bankSubtotal)}</div></div>
+      <div class="closing"><div class="lbl">Closing Balance</div><div class="val">${pdfFmt(day.closingBalance)}</div></div>
+    </div>
+  </body></html>`;
+
+  const tmpHtml = path.join(os.tmpdir(), `ns-balance-sheet-${day.date}.html`);
+  const tmpPdf = path.join(os.tmpdir(), `ns-balance-sheet-${day.date}.pdf`);
+  fs.writeFileSync(tmpHtml, html);
+  execFileSync(
+    CHROME_PATH,
+    ['--headless=new', '--disable-gpu', '--no-pdf-header-footer', `--print-to-pdf=${tmpPdf}`, `file://${tmpHtml}`],
+    { timeout: 15000 }
+  );
+  const pdfBuffer = fs.readFileSync(tmpPdf);
+  fs.unlinkSync(tmpHtml);
+  fs.unlinkSync(tmpPdf);
+  return pdfBuffer;
+}
+
+app.get('/api/balance-sheet/:date/pdf', (req, res) => {
+  try {
+    const day = balanceSheetStore.getDay(req.params.date);
+    const pdfBuffer = renderBalanceSheetPdf(day);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.send(pdfBuffer);
+  } catch (err) {
+    sendBalanceSheetError(res, err);
+  }
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 if (require.main === module) {
