@@ -9,6 +9,7 @@ const { execSync, execFileSync } = require('child_process');
 const os = require('os');
 const { createStore } = require('./stockStore');
 const { createStore: createLedgerStore } = require('./ledgerStore');
+const { createStore: createBalanceSheetStore } = require('./balanceSheetStore');
 
 const app  = express();
 const PORT = process.env.PORT || 3300;
@@ -54,6 +55,28 @@ function sendLedgerError(res, err) {
 // corrupted ledger.json must not take down billing or Stock.
 function requireLedger(req, res, next) {
   if (_ledgerInitError) return res.status(500).json({ error: 'Ledger data is unavailable — see server logs.' });
+  next();
+}
+
+const BALANCE_SHEET_DATA_PATH = process.env.BALANCE_SHEET_DATA_PATH || path.join(__dirname, 'data', 'balance-sheet.json');
+const balanceSheetStore = createBalanceSheetStore(BALANCE_SHEET_DATA_PATH);
+let _balanceSheetInitError = null;
+try {
+  balanceSheetStore.init();
+} catch (err) {
+  _balanceSheetInitError = err;
+  console.error(`[BalanceSheet] Failed to load balance sheet data: ${err.message}`);
+}
+
+function sendBalanceSheetError(res, err) {
+  res.status(400).json({ error: err.message });
+}
+
+// Guards every /api/balance-sheet/* route — same reasoning as requireStock
+// and requireLedger: a corrupted balance-sheet.json must not take down
+// billing, Stock, or Ledger.
+function requireBalanceSheet(req, res, next) {
+  if (_balanceSheetInitError) return res.status(500).json({ error: 'Balance sheet data is unavailable — see server logs.' });
   next();
 }
 
@@ -147,6 +170,23 @@ app.post('/api/stock/items', (req, res) => {
   }
 });
 
+app.patch('/api/stock/items/:id', (req, res) => {
+  try {
+    res.json(stockStore.updateItem(req.params.id, req.body || {}));
+  } catch (err) {
+    sendStockError(res, err);
+  }
+});
+
+app.delete('/api/stock/items/:id', (req, res) => {
+  try {
+    stockStore.deleteItem(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    sendStockError(res, err);
+  }
+});
+
 app.post('/api/stock/items/:id/stock-in', (req, res) => {
   try {
     res.json(stockStore.stockIn(req.params.id, req.body && req.body.kg, req.body && req.body.note));
@@ -166,6 +206,14 @@ app.post('/api/stock/items/:id/adjust', (req, res) => {
 app.post('/api/stock/items/:id/deduct', (req, res) => {
   try {
     res.json(stockStore.deduct(req.params.id, req.body && req.body.kg, req.body && req.body.note));
+  } catch (err) {
+    sendStockError(res, err);
+  }
+});
+
+app.get('/api/stock/report', (req, res) => {
+  try {
+    res.json(stockStore.getReport({ type: req.query.type, date: req.query.date }));
   } catch (err) {
     sendStockError(res, err);
   }
@@ -283,6 +331,24 @@ app.get('/api/ledger/invoices/:id', (req, res) => {
     res.json({ ...invoice, customerName: customer.name });
   } catch (err) {
     sendLedgerError(res, err);
+  }
+});
+
+app.use('/api/balance-sheet', requireBalanceSheet);
+
+app.get('/api/balance-sheet/:date', (req, res) => {
+  try {
+    res.json(balanceSheetStore.getDay(req.params.date));
+  } catch (err) {
+    sendBalanceSheetError(res, err);
+  }
+});
+
+app.put('/api/balance-sheet/:date', (req, res) => {
+  try {
+    res.json(balanceSheetStore.saveDay(req.params.date, req.body || {}));
+  } catch (err) {
+    sendBalanceSheetError(res, err);
   }
 });
 
