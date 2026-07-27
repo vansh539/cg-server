@@ -163,7 +163,7 @@ function renderRows(square) {
       const locked = square === 'cashIn' && i === 0;
       return `<div class="bs-row${locked ? ' locked' : ''}">
         <input class="lbl" value="${escapeAttr(r.label)}" ${locked ? 'readonly' : ''} oninput="onRowInput('${square}',${i},'label',this.value)">
-        <input class="amt" type="number" min="0" step="1" value="${r.amount}" oninput="onRowInput('${square}',${i},'amount',this.value)">
+        <input class="amt" type="number" min="0" step="1" value="${r.amount}" onfocus="this.select()" oninput="onRowInput('${square}',${i},'amount',this.value)">
         ${locked ? '' : `<button class="del no-print" onclick="deleteRow('${square}',${i})">✕</button>`}
       </div>`;
     })
