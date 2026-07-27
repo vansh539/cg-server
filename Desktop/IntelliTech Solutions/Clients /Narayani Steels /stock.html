@@ -49,9 +49,15 @@ table.stbl{width:100%;border-collapse:collapse;font-size:13px}
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="final-invoice-NS.html">← Back to Billing</a>
+  <div style="display:flex;justify-content:space-between">
+    <a class="back-link" href="final-invoice-NS.html">← Back to Billing</a>
+    <a class="back-link" href="balance-sheet.html">🧮 Balance Sheet</a>
+    <a class="back-link" href="reports.html">📊 Reports →</a>
+  </div>
   <div class="app-title">📦 Narayani Steels — Stock</div>
   <div class="app-sub">Categories, items, and current stock levels</div>
+
+  <div class="fg"><input id="stock-search" type="text" placeholder="🔍 Search items across all categories…" oninput="onSearchInput()"></div>
 
   <div class="cat-bar" id="cat-bar"></div>
 
@@ -102,8 +108,15 @@ const API = '/api/stock';
 let categories = [];
 let items = [];
 let selectedCatId = null;
-let openRow = null; // {itemId, mode: 'stock-in'|'adjust'|'history'}
+let openRow = null; // {itemId, mode: 'stock-in'|'adjust'|'history'|'edit'}
 let newItemUnit = 'kg';
+let searchQuery = '';
+
+function onSearchInput() {
+  searchQuery = document.getElementById('stock-search').value.trim().toLowerCase();
+  openRow = null;
+  renderItems();
+}
 
 function fmtKg(v) {
   return Number(v.toFixed(2));
@@ -138,6 +151,8 @@ function renderItemCatSelect() {
 function selectCategory(id) {
   selectedCatId = id;
   openRow = null;
+  searchQuery = '';
+  document.getElementById('stock-search').value = '';
   renderCatBar();
   renderItemCatSelect();
   renderItems();
@@ -173,18 +188,31 @@ async function saveCategory() {
   }
 }
 
+function catName(categoryId) {
+  return categories.find((c) => c.id === categoryId)?.name || '';
+}
+
 function renderItems() {
   const heading = document.getElementById('items-heading');
-  const cat = categories.find((c) => c.id === selectedCatId);
-  heading.textContent = cat ? `Items — ${cat.name}` : 'Items';
-  const catItems = items.filter((i) => i.categoryId === selectedCatId);
+  const searching = searchQuery.length > 0;
+  let visibleItems;
+  if (searching) {
+    heading.textContent = `Search results for "${document.getElementById('stock-search').value.trim()}"`;
+    visibleItems = items.filter((i) => i.name.toLowerCase().includes(searchQuery));
+  } else {
+    const cat = categories.find((c) => c.id === selectedCatId);
+    heading.textContent = cat ? `Items — ${cat.name}` : 'Items';
+    visibleItems = items.filter((i) => i.categoryId === selectedCatId);
+  }
   const tbody = document.getElementById('items-tbody');
-  document.getElementById('empty-note').style.display = catItems.length ? 'none' : 'block';
-  tbody.innerHTML = catItems
+  document.getElementById('empty-note').style.display = visibleItems.length ? 'none' : 'block';
+  document.getElementById('empty-note').textContent = searching ? 'No items match your search.' : 'No items in this category yet.';
+  tbody.innerHTML = visibleItems
     .map((item) => {
       const stockLabel = `${fmtKg(item.currentStockKg)} ${item.unit === 'pcs' ? 'pcs' : 'kg'}`;
+      const nameCell = searching ? `${item.name} <span style="color:#999;font-size:11px">(${catName(item.categoryId)})</span>` : item.name;
       const rows = [
-        `<tr><td>${item.name}</td><td>${item.unit === 'pcs' ? '—' : (item.weightPerPieceKg ?? '—')}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${stockLabel}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button></td></tr>`,
+        `<tr><td>${nameCell}</td><td>${item.unit === 'pcs' ? '—' : (item.weightPerPieceKg ?? '—')}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${stockLabel}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','edit')">Edit</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button><button class="btn-s btn-sm" onclick="deleteItemPrompt('${item.id}')" style="color:#dc2626">Delete</button></td></tr>`,
       ];
       if (openRow && openRow.itemId === item.id) rows.push(renderExpandedRow(item));
       return rows.join('');
@@ -224,6 +252,18 @@ function renderExpandedRow(item) {
       <input id="row-input" type="number" step="any" placeholder="New true total (${unitLabel})" value="${fmtKg(item.currentStockKg)}">
       ${rowUnitToggle(item)}
       <button class="btn-p btn-sm" onclick="submitAdjust('${item.id}')">Save</button>
+      <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+      <span class="err" id="row-err" style="display:none"></span>
+    </div></td></tr>`;
+  }
+  if (openRow.mode === 'edit') {
+    const weightField = item.unit === 'kg'
+      ? `<input id="edit-weight" type="number" min="0" step="any" placeholder="Weight/Piece (kg, optional)" value="${item.weightPerPieceKg ?? ''}">`
+      : '';
+    return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+      <input id="edit-name" type="text" placeholder="Item name" value="${item.name}">
+      ${weightField}
+      <button class="btn-p btn-sm" onclick="submitEdit('${item.id}')">Save</button>
       <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
       <span class="err" id="row-err" style="display:none"></span>
     </div></td></tr>`;
@@ -296,6 +336,49 @@ async function submitAdjust(itemId) {
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
+  }
+}
+
+async function submitEdit(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  const name = document.getElementById('edit-name').value;
+  const weightEl = document.getElementById('edit-weight');
+  const errEl = document.getElementById('row-err');
+  const body = { name };
+  if (weightEl) {
+    const raw = weightEl.value;
+    body.weightPerPieceKg = raw === '' ? null : parseFloat(raw);
+  }
+  try {
+    const res = await fetch(`${API}/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const resBody = await res.json();
+    if (!res.ok) throw new Error(resBody.error || 'Could not save');
+    closeRow();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteItemPrompt(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  if (!item) return;
+  if (!confirm(`Delete "${item.name}"? This also removes its stock movement history. This cannot be undone.`)) return;
+  try {
+    const res = await fetch(`${API}/items/${itemId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Could not delete item');
+    }
+    if (openRow && openRow.itemId === itemId) openRow = null;
+    await loadAll();
+  } catch (err) {
+    alert(err.message);
   }
 }
 
