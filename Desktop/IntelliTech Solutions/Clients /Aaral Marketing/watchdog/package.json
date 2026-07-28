@@ -1,0 +1,17 @@
+{
+  "name": "aaral-watchdog",
+  "version": "1.0.0",
+  "description": "Ops watchdog for the Aaral Marketing office server — pushes a heartbeat to the Jalan Group backend and alerts admins over WhatsApp on a local crash-loop.",
+  "private": true,
+  "main": "watchdog.js",
+  "scripts": {
+    "start": "node watchdog.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "pm2": "^5.4.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

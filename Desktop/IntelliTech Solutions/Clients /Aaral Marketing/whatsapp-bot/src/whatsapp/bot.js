@@ -66,7 +66,7 @@ function startNotifyServer() {
   notifyServerStarted = true;
 
   const server = http.createServer((req, res) => {
-    if (req.method !== 'POST' || req.url !== '/notify') {
+    if (req.method !== 'POST' || (req.url !== '/notify' && req.url !== '/notify-admins')) {
       res.writeHead(404);
       res.end();
       return;
@@ -76,6 +76,22 @@ function startNotifyServer() {
     req.on('end', async () => {
       res.setHeader('Content-Type', 'application/json');
       try {
+        if (req.url === '/notify-admins') {
+          // Used by watchdog/ (a separate PM2 process on this same machine)
+          // to push an ops alert (e.g. a crash-loop) straight to whoever is
+          // in the `admins` table — no customer phone number involved.
+          const { message } = JSON.parse(body);
+          if (!message) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ sent: false, reason: 'message is required' }));
+            return;
+          }
+          await notifyAdmins(message);
+          res.writeHead(200);
+          res.end(JSON.stringify({ sent: true }));
+          return;
+        }
+
         const { phone, message, pdfBase64, filename } = JSON.parse(body);
         if (!phone || !message) {
           res.writeHead(400);
