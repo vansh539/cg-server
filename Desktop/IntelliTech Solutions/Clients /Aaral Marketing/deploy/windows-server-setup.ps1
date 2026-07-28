@@ -34,8 +34,17 @@ Set-Location "IntelliTech Solutions\packages\payment-ledger-core"; npm install
 Set-Location "..\..\Clients\Aaral Marketing\dashboard"; npm install
 Set-Location "..\whatsapp-bot"; npm install
 Set-Location "..\watchdog"; npm install
-# Copy each app's real .env into place (DB connection string, ports, etc.)
-# before starting anything below.
+
+# Each app already has a .env.production template committed (dashboard/,
+# whatsapp-bot/, watchdog/). Rename each to .env, then fill in the
+# DB_PASSWORD placeholder with the real Postgres password you set in step 2
+# (dashboard and whatsapp-bot both need it — watchdog needs no DB access
+# at all, its template is ready to use as-is):
+Copy-Item "..\dashboard\.env.production" "..\dashboard\.env"
+Copy-Item "..\whatsapp-bot\.env.production" "..\whatsapp-bot\.env"
+Copy-Item "..\watchdog\.env.production" "..\watchdog\.env"
+# Then edit dashboard\.env and whatsapp-bot\.env by hand to set the real
+# DB_PASSWORD before starting anything below.
 
 # ── 4. Start everything under PM2 ───────────────────────────────
 Set-Location "..\dashboard"; pm2 start ecosystem.config.js
