@@ -163,3 +163,46 @@ test('data survives being reloaded from disk by a fresh store instance', () => {
   assert.equal(reloaded.getCustomer(cust.id).balance, 500);
   assert.equal(reloaded.listEntries(cust.id).length, 1);
 });
+
+test('updateEntry edits the amount and note of a manual entry and recomputes balance', () => {
+  const store = createStore(tempFile());
+  const cust = store.addCustomer({ name: 'Editable Co', phone: '1112223334' });
+  const entry = store.addOldBalance(cust.id, 500, 'typo, should be 600');
+
+  const updated = store.updateEntry(entry.id, { amount: 600, note: 'corrected' });
+  assert.equal(updated.amount, 600);
+  assert.equal(updated.note, 'corrected');
+  assert.equal(store.getCustomer(cust.id).balance, 600);
+
+  assert.throws(() => store.updateEntry(entry.id, { amount: 0 }), /Amount must be a positive number/);
+  assert.throws(() => store.updateEntry('le_ghost', { amount: 100 }), /Ledger entry not found/);
+});
+
+test('deleteEntry removes a manual entry and recomputes balance; unknown id throws', () => {
+  const store = createStore(tempFile());
+  const cust = store.addCustomer({ name: 'Deletable Co', phone: '1112223335' });
+  const entry = store.addCashPaid(cust.id, 200);
+  assert.equal(store.getCustomer(cust.id).balance, -200);
+
+  store.deleteEntry(entry.id);
+  assert.equal(store.getCustomer(cust.id).balance, 0);
+  assert.equal(store.listEntries(cust.id).length, 0);
+
+  assert.throws(() => store.deleteEntry('le_ghost'), /Ledger entry not found/);
+});
+
+test('updateEntry and deleteEntry reject invoice and advance entries — those stay paired with the printed invoice', () => {
+  const store = createStore(tempFile());
+  const cust = store.addCustomer({ name: 'Invoice Co', phone: '1112223336' });
+  store.createInvoice({
+    customerId: cust.id,
+    items: [{ q: '10', name: 'Rod', p: '1', r: '5' }],
+    sub: 50, lab: 0, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 20,
+  });
+  const [invoiceEntry, advanceEntry] = store.listEntries(cust.id);
+  assert.equal(invoiceEntry.reason, 'invoice');
+  assert.equal(advanceEntry.reason, 'advance');
+
+  assert.throws(() => store.updateEntry(invoiceEntry.id, { amount: 999 }), /Only manually-added entries/);
+  assert.throws(() => store.deleteEntry(advanceEntry.id), /Only manually-added entries/);
+});

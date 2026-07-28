@@ -314,6 +314,23 @@ app.post('/api/ledger/customers/:id/cash-paid', async (req, res) => {
   }
 });
 
+app.patch('/api/ledger/entries/:id', (req, res) => {
+  try {
+    res.json(ledgerStore.updateEntry(req.params.id, req.body || {}));
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+app.delete('/api/ledger/entries/:id', (req, res) => {
+  try {
+    ledgerStore.deleteEntry(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
 app.post('/api/ledger/invoices', (req, res) => {
   try {
     const invoice = ledgerStore.createInvoice(req.body || {});

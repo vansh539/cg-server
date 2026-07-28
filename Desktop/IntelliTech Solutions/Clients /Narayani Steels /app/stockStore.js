@@ -155,6 +155,123 @@ function createStore(filePath) {
     return applyDelta(itemId, -n, 'invoice-deduct', note);
   }
 
+  function updateItem(id, { name, weightPerPieceKg } = {}) {
+    ensureLoaded();
+    const item = data.items.find((i) => i.id === id);
+    if (!item) throw new Error('Item not found');
+    if (name !== undefined) {
+      const trimmedName = (name || '').trim();
+      if (!trimmedName) throw new Error('Item name is required');
+      item.name = trimmedName;
+    }
+    if (weightPerPieceKg !== undefined) {
+      if (item.unit !== 'kg') throw new Error('Weight per piece only applies to weight-tracked items');
+      const weight = weightPerPieceKg === null || weightPerPieceKg === '' ? null : Number(weightPerPieceKg);
+      if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) {
+        throw new Error('Weight per piece must be a positive number or omitted');
+      }
+      item.weightPerPieceKg = weight;
+    }
+    save();
+    return { ...item, pieces: computePieces(item) };
+  }
+
+  function deleteItem(id) {
+    ensureLoaded();
+    const idx = data.items.findIndex((i) => i.id === id);
+    if (idx === -1) throw new Error('Item not found');
+    data.items.splice(idx, 1);
+    data.movements = data.movements.filter((m) => m.itemId !== id);
+    save();
+  }
+
+  function round2(n) {
+    return Math.round(n * 100) / 100 + 0; // +0 normalizes -0 to 0
+  }
+
+  function startOfDay(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
+
+  // Monday-start week, matching how the shop actually thinks about a
+  // "week" (not the JS/US Sunday-start convention).
+  function periodBounds(type, anchor) {
+    const a = startOfDay(anchor);
+    if (type === 'daily') {
+      const start = a;
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      return { start, end };
+    }
+    if (type === 'weekly') {
+      const day = a.getDay(); // 0=Sun..6=Sat
+      const diffToMonday = day === 0 ? 6 : day - 1;
+      const start = new Date(a);
+      start.setDate(start.getDate() - diffToMonday);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      return { start, end };
+    }
+    if (type === 'monthly') {
+      const start = new Date(a.getFullYear(), a.getMonth(), 1);
+      const end = new Date(a.getFullYear(), a.getMonth() + 1, 1);
+      return { start, end };
+    }
+    throw new Error('Report type must be daily, weekly, or monthly');
+  }
+
+  // Reconstructs opening/closing balances for ANY period (not just the
+  // current one) by walking backward from each item's live currentStockKg —
+  // undoing every movement that happened at/after the period end gives the
+  // balance as it stood at that moment in the past. `stock-in` and the
+  // one-time `initial` seed movement are both counted as "came in" (an item
+  // is rarely created mid-reporting-period, so a dedicated bucket for
+  // `initial` isn't worth the extra column); `adjustment` is kept separate
+  // from both since it's a correction, not a delivery or a sale — opening +
+  // stockIn - sold + adjustments always reconciles exactly to closing
+  // because every movement has exactly one of these three reasons.
+  function getReport({ type, date } = {}) {
+    ensureLoaded();
+    const anchor = date ? new Date(date) : new Date();
+    if (Number.isNaN(anchor.getTime())) throw new Error('Invalid date');
+    const { start, end } = periodBounds(type, anchor);
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+
+    const rows = data.items.map((item) => {
+      const itemMovements = data.movements.filter((m) => m.itemId === item.id);
+      const afterPeriodDelta = itemMovements
+        .filter((m) => new Date(m.at).getTime() >= endMs)
+        .reduce((sum, m) => sum + m.deltaKg, 0);
+      const closing = item.currentStockKg - afterPeriodDelta;
+
+      const inPeriod = itemMovements.filter((m) => {
+        const t = new Date(m.at).getTime();
+        return t >= startMs && t < endMs;
+      });
+      const stockIn = inPeriod.filter((m) => m.reason === 'stock-in' || m.reason === 'initial').reduce((s, m) => s + m.deltaKg, 0);
+      const sold = -inPeriod.filter((m) => m.reason === 'invoice-deduct').reduce((s, m) => s + m.deltaKg, 0);
+      const adjustments = inPeriod.filter((m) => m.reason === 'adjustment').reduce((s, m) => s + m.deltaKg, 0);
+      const opening = closing - stockIn + sold - adjustments;
+
+      return {
+        itemId: item.id,
+        name: item.name,
+        categoryId: item.categoryId,
+        unit: item.unit,
+        opening: round2(opening),
+        stockIn: round2(stockIn),
+        sold: round2(sold),
+        adjustments: round2(adjustments),
+        closing: round2(closing),
+      };
+    });
+
+    return { type, periodStart: start.toISOString(), periodEnd: end.toISOString(), rows };
+  }
+
   function listMovements(itemId) {
     ensureLoaded();
     // Movements are always appended in chronological order, so reversing
@@ -164,7 +281,7 @@ function createStore(filePath) {
     return data.movements.filter((m) => m.itemId === itemId).reverse();
   }
 
-  return { init, listCategories, addCategory, listItems, getItem, addItem, stockIn, adjust, deduct, listMovements };
+  return { init, listCategories, addCategory, listItems, getItem, addItem, updateItem, deleteItem, stockIn, adjust, deduct, listMovements, getReport };
 }
 
 module.exports = { createStore, PRESET_CATEGORIES };

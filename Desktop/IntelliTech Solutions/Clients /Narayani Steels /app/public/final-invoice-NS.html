@@ -112,7 +112,8 @@ input[type=number]{-moz-appearance:textfield}
       </div>
     </div>
     <div class="card"><h3>Items</h3>
-      <table class="itbl"><thead><tr><th style="width:78px">Qty (kg)</th><th>Particulars</th><th style="width:50px">Pcs.</th><th style="width:82px">Rate/kg</th><th style="width:90px;text-align:right">Amount</th><th style="width:28px"></th></tr></thead><tbody id="tbody"></tbody></table>
+      <table class="itbl"><thead><tr><th style="width:78px">Qty (kg)</th><th>Particulars</th><th style="width:50px">Pcs.</th><th style="width:82px">Rate</th><th style="width:90px;text-align:right">Amount</th><th style="width:28px"></th></tr></thead><tbody id="tbody"></tbody></table>
+      <div style="font-size:11px;color:#888;margin:-6px 0 10px">Leave Qty (kg) blank and fill Pcs + Rate for items sold by piece (no kg stock kept) — amount = Pcs × Rate.</div>
       <button class="add-row" onclick="addRow()">+ Add item</button>
       <h3>Additional charges</h3>
       <div class="charges-grid">
@@ -121,6 +122,10 @@ input[type=number]{-moz-appearance:textfield}
         <div class="fg"><label>Freight</label><input id="f-freight" type="number" min="0" placeholder="0" oninput="recalc()"></div>
         <div class="fg"><label>Unloading</label><input id="f-unload" type="number" min="0" placeholder="0" oninput="recalc()"></div>
         <div class="fg"><label>Others</label><input id="f-others" type="number" min="0" placeholder="0" oninput="recalc()"></div>
+      </div>
+      <div class="fg" style="flex-direction:row;align-items:center;gap:7px;margin-bottom:14px">
+        <input id="f-no-loading" type="checkbox" style="width:16px;height:16px" onchange="recalc()">
+        <label for="f-no-loading" style="margin:0">No Loading Charges</label>
       </div>
       <div class="fg" style="flex-direction:row;align-items:center;gap:7px;margin-bottom:14px">
         <input id="f-gst" type="checkbox" style="width:16px;height:16px" onchange="recalc()">
@@ -229,17 +234,16 @@ function renderRows(){
   rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td><input type="text" list="stock-items-datalist" value="${row.name}" placeholder="Item" oninput="upd(${i},'name',this.value);matchStockItem(${i},this.value)"></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});recalc();
 }
 let stockCategories=[],stockItems=[];
-function stockDisplayName(item){const cat=stockCategories.find(c=>c.id===item.categoryId);return cat?`${item.name} (${cat.name})`:item.name;}
+function stockDisplayName(item){const cat=stockCategories.find(c=>c.id===item.categoryId);const base=cat?`${item.name} (${cat.name})`:item.name;return item.unit==='pcs'?`${base} — sold by piece`:base;}
 async function loadStockDatalist(){
   try{
     const [catsRes,itemsRes]=await Promise.all([fetch('/api/stock/categories'),fetch('/api/stock/items')]);
     stockCategories=await catsRes.json();
-    // Chitti quantities are always kg (Loading Charges, GST base, etc. are
-    // all computed from the kg total across rows) — pcs-only stock items
-    // (e.g. Covering Blocks) can't be sold through this flow without
-    // corrupting that math, so they're simply never offered here. They're
-    // tracked purely on the Stock page (Stock In/Adjust), not via Chitti sales.
-    stockItems=(await itemsRes.json()).filter(it=>it.unit!=='pcs');
+    // Both kg and pcs stock items are offered here. Loading Charges/GST base
+    // are still computed from the kg total only (see rowAmount/recalc) — a
+    // pcs item (e.g. Covering Blocks) is billed as Pcs x Rate and simply
+    // contributes 0 to that kg total, same as any manually-typed pcs-only row.
+    stockItems=await itemsRes.json();
     document.getElementById('stock-items-datalist').innerHTML=stockItems.map(it=>`<option value="${stockDisplayName(it)}">`).join('');
   }catch(err){/* stock module optional; billing works without it */}
 }
@@ -282,15 +286,26 @@ async function onCustomerPick(){
     recalc();
   }catch(err){/* ignore — leave old balance as whatever was last typed */}
 }
-function calcAmt(row){const q=parseFloat(row.q)||0,r=parseFloat(row.r)||0,a=q*r;return a>0?''+Math.round(a).toLocaleString('en-IN'):'—';}
+// A row is billed as Pcs x Rate only when all three hold: no Qty(kg) was
+// entered, Pcs was entered, and Rate was entered — e.g. one-off items the
+// client sells without keeping kg stock of (a random casting, a covering
+// block). Otherwise it's the normal Qty(kg) x Rate billing.
+function rowAmount(row){const q=parseFloat(row.q)||0,p=parseFloat(row.p)||0,r=parseFloat(row.r)||0;if(q<=0&&p>0&&r>0)return p*r;return q*r;}
+function rowStockQty(row){
+  if(!row.stockItemId)return 0;
+  const item=stockItems.find(it=>it.id===row.stockItemId);
+  return item&&item.unit==='pcs'?(parseFloat(row.p)||0):(parseFloat(row.q)||0);
+}
+function calcAmt(row){const a=rowAmount(row);return a>0?''+Math.round(a).toLocaleString('en-IN'):'—';}
 function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);recalc();}
 function delRow(i){rows.splice(i,1);if(!rows.length)rows.push({q:'',name:'',p:'',r:''});renderRows();}
 function gc(id){return parseFloat(document.getElementById(id).value)||0;}
 function fmt(v){return''+Math.round(v).toLocaleString('en-IN');}
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function recalc(){
-  let sub=0,tq=0;rows.forEach(r=>{const q=parseFloat(r.q)||0;sub+=q*(parseFloat(r.r)||0);tq+=q;});
-  const lab=Math.round(tq/1000*400);document.getElementById('f-labour').value=lab;
+  let sub=0,tq=0;rows.forEach(r=>{sub+=rowAmount(r);tq+=parseFloat(r.q)||0;});
+  const noLoading=document.getElementById('f-no-loading').checked;
+  const lab=noLoading?0:Math.round(tq/1000*400);document.getElementById('f-labour').value=lab;
   const weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
   const taxable=sub+lab+weigh+freight+unload+others;
   const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
@@ -298,7 +313,7 @@ function recalc(){
   const tot=taxable+gst+oldbal-advance;
   document.getElementById('d-sub').textContent=fmt(sub);document.getElementById('d-lab').textContent=fmt(lab);document.getElementById('d-weigh').textContent=fmt(weigh);document.getElementById('d-freight').textContent=fmt(freight);document.getElementById('d-unload').textContent=fmt(unload);document.getElementById('d-others').textContent=fmt(others);document.getElementById('d-gst').textContent=fmt(gst);document.getElementById('d-oldbal').textContent=fmt(oldbal);document.getElementById('d-advance').textContent=fmt(advance);document.getElementById('d-tot').textContent=fmt(tot);
 }
-function tableRows(c){return c.map(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0,a=q*rt;return`<tr><td class="c">${r.q||''}</td><td class="lbl">${r.name||''}</td><td class="c">${r.p||''}</td><td class="r">${rt?''+rt:''}</td><td class="r">${a>0?''+Math.round(a).toLocaleString('en-IN'):''}</td></tr>`;}).join('');}
+function tableRows(c){return c.map(r=>{const rt=parseFloat(r.r)||0,a=rowAmount(r);return`<tr><td class="c">${r.q||''}</td><td class="lbl">${r.name||''}</td><td class="c">${r.p||''}</td><td class="r">${rt?''+rt:''}</td><td class="r">${a>0?''+Math.round(a).toLocaleString('en-IN'):''}</td></tr>`;}).join('');}
 function colgroup(){return`<colgroup><col style="width:17%"><col style="width:36%"><col style="width:11%"><col style="width:17%"><col style="width:19%"></colgroup>`;}
 function thead(){return`<thead><tr><th>Qty.</th><th>Particulars</th><th>Pcs.</th><th>Rate</th><th>Amount</th></tr></thead>`;}
 function emptyRows(n){let r='';for(let i=0;i<n;i++)r+=`<tr class="empty"><td></td><td></td><td></td><td></td><td></td></tr>`;return r;}
@@ -310,7 +325,7 @@ function buildContSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,gst,others,oldb
 function generate(){
   rows.forEach(r=>{r._deducted=false;});
   recordedInvoiceId=null;
-  let sub=0,tq=0;rows.forEach(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0;sub+=q*rt;tq+=q;});
+  let sub=0,tq=0;rows.forEach(r=>{sub+=rowAmount(r);tq+=parseFloat(r.q)||0;});
   const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
   const taxable=sub+lab+weigh+freight+unload+others;
   const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
@@ -360,7 +375,7 @@ async function recordInvoice(){
   btn.disabled=true;
   let invoiceNo,customerName;
   if(!recordedInvoiceId){
-    let sub=0;rows.forEach(r=>{const q=parseFloat(r.q)||0,rt=parseFloat(r.r)||0;sub+=q*rt;});
+    let sub=0;rows.forEach(r=>{sub+=rowAmount(r);});
     const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),others=gc('f-others');
     const taxable=sub+lab+weigh+freight+unload+others;
     const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
@@ -385,7 +400,7 @@ async function recordInvoice(){
     }
   }
   btn.textContent='📦 Updating stock…';
-  const stockHasPending=rows.some(r=>r.stockItemId&&(parseFloat(r.q)||0)>0&&!r._deducted);
+  const stockHasPending=rows.some(r=>r.stockItemId&&rowStockQty(r)>0&&!r._deducted);
   const stock=stockHasPending?await performStockDeduction():{succeeded:[],failure:null};
   const stockNote=stock.failure
     ? ` Stock deduction failed: ${stock.failure}.`
@@ -419,15 +434,19 @@ function updateDeductButton(){
   }
 }
 async function performStockDeduction(){
-  const pending=rows.filter(r=>r.stockItemId&&(parseFloat(r.q)||0)>0&&!r._deducted);
+  const pending=rows.filter(r=>r.stockItemId&&rowStockQty(r)>0&&!r._deducted);
   const succeeded=[];let failure=null;
   for(const r of pending){
-    const kg=parseFloat(r.q)||0;
+    const item=stockItems.find(it=>it.id===r.stockItemId);
+    const isPcs=item&&item.unit==='pcs';
+    const qty=rowStockQty(r);
     try{
-      const res=await fetch(`/api/stock/items/${r.stockItemId}/deduct`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kg,note:'Chitti/Invoice'})});
+      // The stock API's kg field is a generic tracked-quantity field — for
+      // pcs items it holds piece count, same convention as stockStore.js.
+      const res=await fetch(`/api/stock/items/${r.stockItemId}/deduct`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kg:qty,note:'Chitti/Invoice'})});
       const body=await res.json();
       if(!res.ok)throw new Error(body.error||'Deduct failed');
-      r._deducted=true;succeeded.push(`${kg}kg ${r.name}`);
+      r._deducted=true;succeeded.push(`${qty}${isPcs?' pcs':'kg'} ${r.name}`);
     }catch(err){failure=err.message;break;}
   }
   return{succeeded,failure};
@@ -435,7 +454,7 @@ async function performStockDeduction(){
 async function deductStock(){
   const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
   if(btn.dataset.deducted==='true')return;
-  const hasPending=rows.some(r=>r.stockItemId&&(parseFloat(r.q)||0)>0&&!r._deducted);
+  const hasPending=rows.some(r=>r.stockItemId&&rowStockQty(r)>0&&!r._deducted);
   if(!hasPending)return;
   btn.disabled=true;
   const{succeeded,failure}=await performStockDeduction();
@@ -575,6 +594,7 @@ function reset(){
   document.getElementById('f-customer').value='';
   document.getElementById('f-oldbal').readOnly=false;document.getElementById('f-oldbal').style.background='';document.getElementById('f-oldbal').style.color='';
   document.getElementById('f-gst').checked=false;
+  document.getElementById('f-no-loading').checked=false;
   ['q-to','q-date','q-addr','q-gstin','q-subject','q-kanta','q-transport','q-unload','q-note'].forEach(function(id){document.getElementById(id).value='';});
   document.querySelectorAll('.type-btn').forEach(function(b){b.classList.remove('on');});
   document.getElementById('n2').disabled=true;

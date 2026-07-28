@@ -22,6 +22,7 @@ h3{font-size:12px;font-weight:600;color:#888;margin-bottom:.75rem;text-transform
 .btn-p:hover{filter:brightness(0.85)}
 .btn-s{background:#fff;border:1.5px solid #e2e2e2;border-radius:8px;padding:9px 18px;font-size:14px;color:#333;cursor:pointer;font-weight:500}
 .btn-s:hover{background:#f4f4f0}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px}
 .acts{display:flex;gap:8px;margin-bottom:1rem}
 .inline-form{background:#f7f7f5;border-radius:8px;padding:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem}
 .inline-form input{padding:7px 9px;border:1.5px solid #e2e2e2;border-radius:6px;font-size:13px;width:160px}
@@ -49,7 +50,7 @@ table.ltbl{width:100%;border-collapse:collapse;font-size:13px}
     <div id="entry-form-area"></div>
     <h3>Account History</h3>
     <table class="ltbl">
-      <thead><tr><th>Date</th><th>Type</th><th class="r">Amount</th><th class="r">Balance</th></tr></thead>
+      <thead><tr><th>Date</th><th>Type</th><th class="r">Amount</th><th class="r">Balance</th><th></th></tr></thead>
       <tbody id="entries-tbody"></tbody>
     </table>
     <div class="empty-note" id="empty-note" style="display:none">No entries yet.</div>
@@ -63,9 +64,13 @@ const customerId = params.get('id');
 let customer = null;
 let entries = [];
 let openForm = null; // 'old-balance' | 'cash-paid' | null
+let editingEntry = null; // { id, amount, note, label } | null
 
 function fmtRupees(v) {
   return Math.round(v).toLocaleString('en-IN');
+}
+function escHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 const REASON_LABELS = { invoice: 'Invoice', 'old-balance': 'Old Balance', 'cash-paid': 'Cash Paid', advance: 'Advance' };
 
@@ -90,6 +95,13 @@ function renderStats() {
   `;
 }
 
+// Only manually-added entries (Old Balance, Cash Paid) can be edited/deleted
+// here — invoice and advance entries stay paired with the printed invoice
+// (see ledgerStore.js findEditableEntry for the matching server-side guard).
+function isEditableEntry(e) {
+  return e.reason === 'old-balance' || e.reason === 'cash-paid';
+}
+
 function renderEntries() {
   const tbody = document.getElementById('entries-tbody');
   document.getElementById('empty-note').style.display = entries.length ? 'none' : 'block';
@@ -100,17 +112,83 @@ function renderEntries() {
       const label = REASON_LABELS[e.reason] || e.reason;
       const labelHtml = e.reason === 'invoice' && e.invoiceId ? `<a href="invoice.html?id=${e.invoiceId}">${label}</a>` : label;
       const sign = e.type === 'due' ? '+' : '-';
-      return `<tr><td>${new Date(e.at).toLocaleDateString('en-IN')}</td><td class="${e.type}">${labelHtml}</td><td class="r ${e.type}">${sign}₹${fmtRupees(e.amount)}</td><td class="r">₹${fmtRupees(running)}</td></tr>`;
+      const actions = isEditableEntry(e)
+        ? `<button class="btn-s btn-sm" onclick="startEditEntry('${e.id}')">Edit</button> <button class="btn-s btn-sm" onclick="deleteEntryPrompt('${e.id}')" style="color:#dc2626">Delete</button>`
+        : '';
+      return `<tr><td>${new Date(e.at).toLocaleDateString('en-IN')}</td><td class="${e.type}">${labelHtml}</td><td class="r ${e.type}">${sign}₹${fmtRupees(e.amount)}</td><td class="r">₹${fmtRupees(running)}</td><td>${actions}</td></tr>`;
     })
     .join('');
 }
 
 function toggleForm(kind) {
+  editingEntry = null;
   openForm = openForm === kind ? null : kind;
   renderForm();
 }
+
+function startEditEntry(id) {
+  const e = entries.find((x) => x.id === id);
+  if (!e) return;
+  openForm = null;
+  editingEntry = { id, amount: e.amount, note: e.note || '', label: REASON_LABELS[e.reason] || e.reason };
+  renderForm();
+}
+
+function cancelEditEntry() {
+  editingEntry = null;
+  renderForm();
+}
+
+async function submitEditEntry() {
+  const amount = parseFloat(document.getElementById('edit-amount').value);
+  const note = document.getElementById('edit-note').value;
+  const errEl = document.getElementById('entry-err');
+  try {
+    const res = await fetch(`${API}/entries/${editingEntry.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, note }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Could not save entry');
+    editingEntry = null;
+    renderForm();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteEntryPrompt(id) {
+  const e = entries.find((x) => x.id === id);
+  if (!e) return;
+  if (!confirm(`Delete this ${REASON_LABELS[e.reason] || e.reason} entry of ₹${fmtRupees(e.amount)}?`)) return;
+  try {
+    const res = await fetch(`${API}/entries/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Could not delete entry');
+    }
+    await loadAll();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 function renderForm() {
   const area = document.getElementById('entry-form-area');
+  if (editingEntry) {
+    area.innerHTML = `<div class="inline-form">
+      <span style="font-size:13px;color:#666;font-weight:600">Edit ${editingEntry.label}</span>
+      <input id="edit-amount" type="number" min="0" step="any" placeholder="Amount" value="${editingEntry.amount}">
+      <input id="edit-note" type="text" placeholder="Note (optional)" value="${escHtml(editingEntry.note)}">
+      <button class="btn-p" onclick="submitEditEntry()">Save</button>
+      <button class="btn-s" onclick="cancelEditEntry()">Cancel</button>
+      <span class="err" id="entry-err" style="display:none"></span>
+    </div>`;
+    return;
+  }
   if (!openForm) {
     area.innerHTML = '';
     return;
