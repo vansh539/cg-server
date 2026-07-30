@@ -2,6 +2,7 @@ const express = require('express');
 const balances = require('payment-ledger-core/ledger/balances');
 const customers = require('payment-ledger-core/ledger/customers');
 const { query } = require('payment-ledger-core/db');
+const { requirePin } = require('../adminAuth');
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.get('/customers', async (req, res) => {
   res.json(rows);
 });
 
-router.post('/customers', async (req, res) => {
+router.post('/customers', requirePin, async (req, res) => {
   try {
     const name = (req.body.name || '').trim();
     const phoneNumber = (req.body.phoneNumber || '').trim();
@@ -32,7 +33,7 @@ router.post('/customers', async (req, res) => {
   }
 });
 
-router.post('/customers/:id/opening-balance', async (req, res) => {
+router.post('/customers/:id/opening-balance', requirePin, async (req, res) => {
   try {
     const customer = await customers.findById(req.params.id);
     if (!customer) return res.status(404).json({ ok: false, error: 'Customer not found' });
