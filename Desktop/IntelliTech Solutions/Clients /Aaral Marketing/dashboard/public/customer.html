@@ -101,6 +101,10 @@
       <label>Description (optional)</label>
       <input type="text" id="oldBalanceDescription" placeholder="Opening Balance">
     </div>
+    <div class="field-group">
+      <label>Admin PIN</label>
+      <input type="password" id="oldBalancePin" inputmode="numeric" autocomplete="off">
+    </div>
     <div id="oldBalanceError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelOldBalance" type="button">Cancel</button>
@@ -158,6 +162,7 @@ function openOldBalanceModal() {
   oldBalanceAmount.value = '';
   oldBalanceDate.value = new Date().toLocaleDateString('en-CA');
   oldBalanceDescription.value = '';
+  document.getElementById('oldBalancePin').value = '';
   oldBalanceError.textContent = '';
   oldBalanceModal.classList.add('open');
   oldBalanceAmount.focus();
@@ -181,9 +186,14 @@ document.getElementById('saveOldBalance').addEventListener('click', async () => 
       amount,
       date: oldBalanceDate.value || null,
       description: oldBalanceDescription.value.trim() || null,
+      pin: document.getElementById('oldBalancePin').value,
     }),
   });
   const data = await res.json();
+  if (res.status === 401) {
+    oldBalanceError.textContent = 'Incorrect PIN.';
+    return;
+  }
   if (!data.ok) {
     oldBalanceError.textContent = data.error;
     return;
