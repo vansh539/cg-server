@@ -19,7 +19,7 @@ fi
 echo "Syncing dashboard/ whatsapp-bot/ watchdog/ ..."
 for dir in dashboard whatsapp-bot watchdog; do
   rsync -a --delete \
-    --exclude 'node_modules/' --exclude '.env' --exclude '.env.production' \
+    --exclude 'node_modules/' --exclude '.env' \
     --exclude 'logs/' --exclude 'wa-sessions/' --exclude '.wwebjs_cache/' \
     --exclude 'ruvector.db' --exclude '.swarm/' --exclude '.update-lock.json' \
     "$SRC_ROOT/$dir/" "$DEPLOY_CLONE/$dir/"
