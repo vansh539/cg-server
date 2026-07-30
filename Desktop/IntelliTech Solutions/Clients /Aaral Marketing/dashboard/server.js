@@ -80,6 +80,7 @@ app.use('/api', require('./src/routes/invoices'));
 app.use('/api', require('./src/routes/ledger'));
 app.use('/api', require('./src/routes/quotations'));
 app.use('/api', require('./src/routes/payments'));
+app.use('/api', require('./src/routes/updates'));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
