@@ -42,6 +42,12 @@ for pkg in dashboard/package.json whatsapp-bot/package.json; do
 done
 
 cd "$DEPLOY_CLONE"
+# Defensive: remove any stray local tool-cache artifacts that may have
+# landed directly in the clone root (e.g. from a command run with this
+# directory as its cwd) — these are never part of the app and must never
+# ship to a client-facing repo. The clone's own .gitignore also covers
+# this going forward, this is belt-and-suspenders.
+rm -rf .swarm ruvector.db .DS_Store
 git add -A
 if git diff --cached --quiet; then
   echo "No changes to release."
