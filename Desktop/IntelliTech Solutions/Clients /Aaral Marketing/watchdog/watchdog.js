@@ -18,6 +18,30 @@
  */
 require('dotenv').config();
 const pm2 = require('pm2');
+const path = require('path');
+const { startUpdateServer } = require('./src/updateServer');
+const { recoverInterruptedUpdate } = require('./src/updater');
+
+const REPO_ROOT = path.resolve(__dirname, '..');
+const HEALTH_URLS = {
+  'aaral-dashboard': process.env.DASHBOARD_HEALTH_URL || 'http://127.0.0.1:3400/health',
+  'aaral-bridge': process.env.BRIDGE_HEALTH_URL || 'http://127.0.0.1:5002/health',
+};
+
+function restartApps(names) {
+  return Promise.all(names.map((name) => new Promise((resolve, reject) => {
+    pm2.restart(name, (err) => (err ? reject(err) : resolve()));
+  })));
+}
+
+async function checkHealth(appName) {
+  try {
+    const res = await fetch(HEALTH_URLS[appName], { signal: AbortSignal.timeout(3000) });
+    return res.ok;
+  } catch (_) {
+    return false;
+  }
+}
 
 const HEARTBEAT_URL = process.env.HEARTBEAT_URL || 'https://api.vanshiron.com/heartbeat/aaral';
 const HEARTBEAT_INTERVAL_MIN = parseInt(process.env.HEARTBEAT_INTERVAL_MIN || '5', 10);
@@ -111,6 +135,15 @@ pm2.connect(err => {
     });
     console.log('[Watchdog] Attached to PM2 bus, watching:', WATCHED_APPS.join(', '));
   });
+
+  recoverInterruptedUpdate({ repoRoot: REPO_ROOT, restartApps, checkHealth, notifyAdmins })
+    .then(() => {
+      startUpdateServer({ restartApps, checkHealth, notifyAdmins });
+    })
+    .catch((recoveryErr) => {
+      console.error('[Watchdog] Interrupted-update recovery threw unexpectedly:', recoveryErr.message);
+      startUpdateServer({ restartApps, checkHealth, notifyAdmins });
+    });
 });
 
 setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MIN * 60 * 1000);
