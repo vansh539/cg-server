@@ -35,4 +35,20 @@ function clearLock() {
   try { fs.unlinkSync(LOCK_FILE); } catch (_) {}
 }
 
-module.exports = { LOCK_FILE, runCommand, gitAuthArgs, readLock, writeLock, clearLock };
+async function checkForUpdate({ repoRoot, run = runCommand }) {
+  await run('git', [...gitAuthArgs(), 'fetch', 'origin', 'main'], repoRoot);
+  const local = await run('git', ['rev-parse', 'HEAD'], repoRoot);
+  const remote = await run('git', ['rev-parse', 'origin/main'], repoRoot);
+  if (local === remote) {
+    return { updateAvailable: false, currentVersion: local.slice(0, 7) };
+  }
+  const commitCount = await run('git', ['rev-list', '--count', `${local}..${remote}`], repoRoot);
+  return {
+    updateAvailable: true,
+    currentVersion: local.slice(0, 7),
+    latestVersion: remote.slice(0, 7),
+    commitsBehind: Number(commitCount),
+  };
+}
+
+module.exports = { LOCK_FILE, runCommand, gitAuthArgs, readLock, writeLock, clearLock, checkForUpdate };
