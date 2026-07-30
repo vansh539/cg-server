@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <title>New Chitti — Aaral Marketing</title>
 <link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aaral Marketing">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#191048">
+<link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
 <link rel="stylesheet" href="/styles.css">
 <style>
   .form-card { padding: 1.6rem; }
@@ -378,6 +384,11 @@ document.getElementById('saveAndPrint').addEventListener('click', async () => {
   statusEl.style.color = 'var(--moss)';
   window.print();
 });
+</script>
+<script>
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
