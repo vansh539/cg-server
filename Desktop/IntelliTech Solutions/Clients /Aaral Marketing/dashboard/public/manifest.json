@@ -1,0 +1,13 @@
+{
+  "name": "Aaral Marketing",
+  "short_name": "Aaral",
+  "description": "Cement & Building Materials Ledger",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ece7dc",
+  "theme_color": "#191048",
+  "icons": [
+    { "src": "/assets/aaral-icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/assets/aaral-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
