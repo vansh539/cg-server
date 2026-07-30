@@ -58,6 +58,12 @@ if (_licenseError) {
 app.use(cors());
 app.use(express.json());
 
+// Health check for the update-orchestrator (watchdog) to poll after a
+// restart — deliberately placed before the license-redirect middleware so
+// an update's health verification isn't confused by an unrelated license
+// issue; it only answers "is the process up and serving requests."
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
 app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   next();
