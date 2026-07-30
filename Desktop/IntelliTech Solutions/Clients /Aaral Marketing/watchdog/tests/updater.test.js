@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const { checkForUpdate, applyUpdate, LOCK_FILE } = require('../src/updater');
+const { checkForUpdate, applyUpdate, LOCK_FILE, writeLock } = require('../src/updater');
 
 test.afterEach(() => { try { fs.unlinkSync(LOCK_FILE); } catch (_) {} });
 
@@ -54,4 +54,59 @@ test('applyUpdate pulls, installs, migrates, restarts, verifies health, and clea
   assert.ok(commands.some((c) => c.includes('pull origin main')));
   assert.ok(commands.some((c) => c.includes('npm run migrate')));
   assert.equal(fs.existsSync(LOCK_FILE), false);
+});
+
+test('applyUpdate rolls back to the previous commit when migration fails', async () => {
+  process.env.GITHUB_PAT = 'fake-token';
+  // migrateDirs has 2 entries (dashboard, whatsapp-bot), so the forward
+  // attempt's very first migrate call (dashboard) is call #1 — make only
+  // that one fail, so rollback's own migrate calls (#2, #3) succeed.
+  let migrateCallCount = 0;
+  const run = async (cmd, args) => {
+    if (args[0] === 'rev-parse') return 'aaa1111111';
+    if (cmd === 'npm' && args[0] === 'run' && args[1] === 'migrate') {
+      migrateCallCount += 1;
+      if (migrateCallCount === 1) throw new Error('migration failed: syntax error');
+      return '';
+    }
+    return '';
+  };
+  const restarted = [];
+  const restartApps = async (names) => { restarted.push(names); };
+  const checkHealth = async () => true;
+
+  const result = await applyUpdate({ repoRoot: '/fake/repo', run, restartApps, checkHealth, healthTimeoutMs: 200, healthPollMs: 10 });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.rolledBack, true);
+  // The forward attempt fails on its first migrate call, before it ever
+  // reaches the restart step — so restartApps is called exactly once,
+  // from inside rollback, not twice.
+  assert.equal(restarted.length, 1);
+  assert.equal(fs.existsSync(LOCK_FILE), false);
+});
+
+test('applyUpdate reports rollbackError when rollback itself fails', async () => {
+  process.env.GITHUB_PAT = 'fake-token';
+  const run = async (cmd, args) => {
+    if (args[0] === 'rev-parse') return 'aaa1111111';
+    if (cmd === 'npm' && args[0] === 'run' && args[1] === 'migrate') throw new Error('migration failed');
+    if (args[0] === 'reset') throw new Error('git reset failed: dirty working tree');
+    return '';
+  };
+  const restartApps = async () => {};
+  const checkHealth = async () => true;
+
+  const result = await applyUpdate({ repoRoot: '/fake/repo', run, restartApps, checkHealth, healthTimeoutMs: 200, healthPollMs: 10 });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.rolledBack, false);
+  assert.match(result.rollbackError, /git reset failed/);
+});
+
+test('applyUpdate rejects a second call while one is already in progress', async () => {
+  writeLock({ previousCommit: 'zzz', step: 'pulling', startedAt: new Date().toISOString() });
+  const run = async () => '';
+  const result = await applyUpdate({ repoRoot: '/fake/repo', run, restartApps: async () => {}, checkHealth: async () => true });
+  assert.deepEqual(result, { ok: false, reason: 'update-already-in-progress' });
 });

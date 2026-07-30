@@ -65,9 +65,22 @@ async function waitForHealth(watchedApps, checkHealth, timeoutMs, pollMs) {
   return false;
 }
 
-// TODO(Task 9): replace with the real rollback implementation.
-async function rollbackTo() {
-  return { ok: true };
+async function rollbackTo(commit, { repoRoot, run, npmDirs, migrateDirs, restartApps, checkHealth, watchedApps, healthTimeoutMs, healthPollMs }) {
+  try {
+    await run('git', ['reset', '--hard', commit], repoRoot);
+    for (const dir of npmDirs) {
+      await run('npm', ['install', '--omit=dev'], path.join(repoRoot, dir));
+    }
+    for (const dir of migrateDirs) {
+      await run('npm', ['run', 'migrate'], path.join(repoRoot, dir));
+    }
+    await restartApps(watchedApps);
+    const healthy = await waitForHealth(watchedApps, checkHealth, healthTimeoutMs, healthPollMs);
+    if (!healthy) return { ok: false, reason: 'apps unhealthy after rollback' };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
 }
 
 async function applyUpdate({
