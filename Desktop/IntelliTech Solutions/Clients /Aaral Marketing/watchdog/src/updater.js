@@ -51,4 +51,76 @@ async function checkForUpdate({ repoRoot, run = runCommand }) {
   };
 }
 
-module.exports = { LOCK_FILE, runCommand, gitAuthArgs, readLock, writeLock, clearLock, checkForUpdate };
+const DEFAULT_NPM_DIRS = ['dashboard', 'whatsapp-bot', 'payment-ledger-core'];
+const DEFAULT_MIGRATE_DIRS = ['dashboard', 'whatsapp-bot'];
+const DEFAULT_WATCHED_APPS = ['aaral-dashboard', 'aaral-bridge'];
+
+async function waitForHealth(watchedApps, checkHealth, timeoutMs, pollMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const results = await Promise.all(watchedApps.map(checkHealth));
+    if (results.every(Boolean)) return true;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  return false;
+}
+
+// TODO(Task 9): replace with the real rollback implementation.
+async function rollbackTo() {
+  return { ok: true };
+}
+
+async function applyUpdate({
+  repoRoot,
+  run = runCommand,
+  restartApps,
+  checkHealth,
+  npmDirs = DEFAULT_NPM_DIRS,
+  migrateDirs = DEFAULT_MIGRATE_DIRS,
+  watchedApps = DEFAULT_WATCHED_APPS,
+  healthTimeoutMs = 60000,
+  healthPollMs = 3000,
+}) {
+  if (readLock()) {
+    return { ok: false, reason: 'update-already-in-progress' };
+  }
+
+  const previousCommit = await run('git', ['rev-parse', 'HEAD'], repoRoot);
+  writeLock({ previousCommit, step: 'starting', startedAt: new Date().toISOString() });
+
+  try {
+    writeLock({ previousCommit, step: 'pulling', startedAt: new Date().toISOString() });
+    await run('git', [...gitAuthArgs(), 'pull', 'origin', 'main'], repoRoot);
+
+    writeLock({ previousCommit, step: 'installing', startedAt: new Date().toISOString() });
+    for (const dir of npmDirs) {
+      await run('npm', ['install', '--omit=dev'], path.join(repoRoot, dir));
+    }
+
+    writeLock({ previousCommit, step: 'migrating', startedAt: new Date().toISOString() });
+    for (const dir of migrateDirs) {
+      await run('npm', ['run', 'migrate'], path.join(repoRoot, dir));
+    }
+
+    writeLock({ previousCommit, step: 'restarting', startedAt: new Date().toISOString() });
+    await restartApps(watchedApps);
+
+    const healthy = await waitForHealth(watchedApps, checkHealth, healthTimeoutMs, healthPollMs);
+    if (!healthy) throw new Error('apps did not report healthy in time');
+
+    const newCommit = await run('git', ['rev-parse', 'HEAD'], repoRoot);
+    clearLock();
+    return { ok: true, previousCommit, newCommit };
+  } catch (err) {
+    const rollback = await rollbackTo(previousCommit, {
+      repoRoot, run, npmDirs, migrateDirs, restartApps, checkHealth, watchedApps, healthTimeoutMs, healthPollMs,
+    });
+    clearLock();
+    return { ok: false, reason: err.message, rolledBack: rollback.ok, rollbackError: rollback.ok ? null : rollback.reason };
+  }
+}
+
+module.exports = {
+  LOCK_FILE, runCommand, gitAuthArgs, readLock, writeLock, clearLock, checkForUpdate,
+  applyUpdate, waitForHealth, DEFAULT_NPM_DIRS, DEFAULT_MIGRATE_DIRS, DEFAULT_WATCHED_APPS,
+};
