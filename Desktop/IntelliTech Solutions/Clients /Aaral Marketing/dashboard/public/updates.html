@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Updates — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .updates-card { padding: 1.8rem; max-width: 560px; margin: 0 auto; }
+  .updates-status { font-size: 0.95rem; color: var(--ink-muted); margin: 1rem 0; }
+  .updates-status.ok { color: var(--moss); }
+  .updates-status.err { color: var(--rust); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a href="/chitti.html">New Chitti</a>
+        <a href="/payment.html">New Payment</a>
+        <a class="active" href="/updates.html">Updates</a>
+      </nav>
+    </div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
+</div>
+
+<div class="page">
+  <div class="card updates-card">
+    <h3>Software updates</h3>
+    <div id="updatesStatus" class="updates-status">Checking…</div>
+    <button class="btn-primary" id="checkBtn" type="button">Check for Updates</button>
+    <button class="btn-primary" id="applyBtn" type="button" style="display:none; margin-left:0.6rem;">Update Now</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="pinModal">
+  <div class="modal-box">
+    <h3>Admin PIN required</h3>
+    <div class="field-group">
+      <label>PIN</label>
+      <input type="password" id="pinInput" inputmode="numeric" autocomplete="off">
+    </div>
+    <div id="pinError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelPin" type="button">Cancel</button>
+      <button class="btn-primary" id="confirmPin" type="button">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const statusEl = document.getElementById('updatesStatus');
+const checkBtn = document.getElementById('checkBtn');
+const applyBtn = document.getElementById('applyBtn');
+const pinModal = document.getElementById('pinModal');
+const pinInput = document.getElementById('pinInput');
+const pinError = document.getElementById('pinError');
+let pollTimer = null;
+
+async function check() {
+  statusEl.className = 'updates-status';
+  statusEl.textContent = 'Checking…';
+  applyBtn.style.display = 'none';
+  try {
+    const res = await fetch('/api/updates/check');
+    const data = await res.json();
+    if (data.updateAvailable) {
+      statusEl.textContent = `Update available: v${data.latestVersion} (${data.commitsBehind} change${data.commitsBehind === 1 ? '' : 's'} behind current v${data.currentVersion}).`;
+      applyBtn.style.display = 'inline-block';
+    } else {
+      statusEl.className = 'updates-status ok';
+      statusEl.textContent = `Up to date (v${data.currentVersion}).`;
+    }
+  } catch (err) {
+    statusEl.className = 'updates-status err';
+    statusEl.textContent = 'Could not reach the update service.';
+  }
+}
+
+function openPinModal() {
+  pinInput.value = '';
+  pinError.textContent = '';
+  pinModal.classList.add('open');
+  pinInput.focus();
+}
+function closePinModal() { pinModal.classList.remove('open'); }
+
+checkBtn.addEventListener('click', check);
+applyBtn.addEventListener('click', openPinModal);
+document.getElementById('cancelPin').addEventListener('click', closePinModal);
+pinModal.addEventListener('click', (e) => { if (e.target === pinModal) closePinModal(); });
+
+document.getElementById('confirmPin').addEventListener('click', async () => {
+  const res = await fetch('/api/updates/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: pinInput.value }),
+  });
+  const data = await res.json();
+  if (res.status === 401) {
+    pinError.textContent = 'Incorrect PIN.';
+    return;
+  }
+  closePinModal();
+  applyBtn.style.display = 'none';
+  statusEl.className = 'updates-status';
+  statusEl.textContent = 'Update started — this can take a couple of minutes. Do not close this page.';
+  pollTimer = setInterval(poll, 3000);
+});
+
+async function poll() {
+  const res = await fetch('/api/updates/status');
+  const data = await res.json();
+  if (data.state === 'running') return;
+  clearInterval(pollTimer);
+  if (data.state === 'succeeded') {
+    statusEl.className = 'updates-status ok';
+    statusEl.textContent = `Updated successfully to v${data.result.newCommit.slice(0, 7)}.`;
+  } else if (data.state === 'failed') {
+    statusEl.className = 'updates-status err';
+    statusEl.textContent = data.result.rolledBack
+      ? `Update failed and was rolled back safely (${data.result.reason}).`
+      : `Update failed and rollback also failed (${data.result.rollbackError}) — this needs Vansh to remote in.`;
+  }
+}
+
+check();
+</script>
+</body>
+</html>
