@@ -3,6 +3,7 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync, spawn } = require('child_process');
 const cron = require('node-cron');
 const { logger } = require('../utils/logger');
@@ -342,7 +343,49 @@ const setPending = (waNumber, type, data) => {
   pendingConfirmations.set(waNumber, { type, data, expiry: Date.now() + 10 * 60 * 1000 });
 };
 
-const CHROME_EXECUTABLE = process.env.CHROME_PATH || (
+// Never assume a system-installed Chrome exists at some hardcoded path —
+// confirmed live on the Aaral office PC that a fresh Windows box has no
+// such thing, only whatever Chrome `npm install` itself downloaded via the
+// top-level puppeteer dependency. Deliberately NOT using
+// require('puppeteer').executablePath() here — confirmed live that pulling
+// in puppeteer's full CLI (which requires yargs) crashes on this Node
+// version with "require is not defined in ES module scope", an ESM/CJS
+// interop bug in yargs unrelated to anything we actually need. Scanning
+// Puppeteer's own cache directory directly gets the same real, guaranteed-
+// present browser path without that dependency. CHROME_PATH stays
+// available as an emergency override either way.
+function findPuppeteerCachedChrome() {
+  const cacheDir = process.env.PUPPETEER_CACHE_DIR || path.join(os.homedir(), '.cache', 'puppeteer');
+  const chromeDir = path.join(cacheDir, 'chrome');
+  if (!fs.existsSync(chromeDir)) return null;
+
+  const builds = fs.readdirSync(chromeDir)
+    .filter((name) => fs.statSync(path.join(chromeDir, name)).isDirectory())
+    // Prefer the newest downloaded build (dir names end in a version number,
+    // e.g. "win64-146.0.7680.31") — a machine can accumulate several across
+    // different npm installs over time.
+    .sort((a, b) => {
+      const va = a.match(/[\d.]+$/)?.[0] || '0';
+      const vb = b.match(/[\d.]+$/)?.[0] || '0';
+      return vb.localeCompare(va, undefined, { numeric: true });
+    });
+
+  const relativeExecutables = [
+    'chrome-win64/chrome.exe',
+    'chrome-linux64/chrome',
+    'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+    'chrome-mac/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+  ];
+  for (const build of builds) {
+    for (const rel of relativeExecutables) {
+      const candidate = path.join(chromeDir, build, rel);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+const CHROME_EXECUTABLE = process.env.CHROME_PATH || findPuppeteerCachedChrome() || (
   process.platform === 'win32'
     ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
     : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -380,7 +423,14 @@ const client = new Client({
   restartOnAuthFail: false,
   puppeteer: {
     executablePath: CHROME_EXECUTABLE,
-    headless: true,
+    // 'new', not true: recent Chrome builds dropped the old headless mode
+    // entirely, so the legacy boolean silently does nothing and Chrome
+    // launches a normal visible window instead — confirmed live on the
+    // Aaral office PC (a real Chrome window kept popping up even though
+    // this was already set to `true`). 'new' is the explicit, still-
+    // supported way to request headless across current Chrome/Puppeteer
+    // versions.
+    headless: 'new',
     timeout: 60000,
     // Puppeteer installs its own SIGINT/SIGTERM/SIGHUP handlers by default
     // that call process.exit() directly and synchronously — confirmed live
