@@ -133,7 +133,30 @@ async function applyUpdate({
   }
 }
 
+async function recoverInterruptedUpdate({ repoRoot, run = runCommand, restartApps, checkHealth, notifyAdmins }) {
+  const lock = readLock();
+  if (!lock) return;
+
+  const result = await rollbackTo(lock.previousCommit, {
+    repoRoot, run,
+    npmDirs: DEFAULT_NPM_DIRS, migrateDirs: DEFAULT_MIGRATE_DIRS, watchedApps: DEFAULT_WATCHED_APPS,
+    restartApps, checkHealth, healthTimeoutMs: 60000, healthPollMs: 3000,
+  });
+  clearLock();
+
+  if (result.ok) {
+    await notifyAdmins(
+      `⚠️ *Aaral update was interrupted* (likely a power loss) while updating past commit ${lock.previousCommit.slice(0, 7)}. Auto-recovered successfully.`
+    );
+  } else {
+    await notifyAdmins(
+      `🚨 *Aaral update recovery FAILED* after an interruption — needs manual attention on the office PC. Reason: ${result.reason}`
+    );
+  }
+}
+
 module.exports = {
   LOCK_FILE, runCommand, gitAuthArgs, readLock, writeLock, clearLock, checkForUpdate,
   applyUpdate, waitForHealth, DEFAULT_NPM_DIRS, DEFAULT_MIGRATE_DIRS, DEFAULT_WATCHED_APPS,
+  recoverInterruptedUpdate,
 };

@@ -110,3 +110,40 @@ test('applyUpdate rejects a second call while one is already in progress', async
   const result = await applyUpdate({ repoRoot: '/fake/repo', run, restartApps: async () => {}, checkHealth: async () => true });
   assert.deepEqual(result, { ok: false, reason: 'update-already-in-progress' });
 });
+
+const { recoverInterruptedUpdate } = require('../src/updater');
+
+test('recoverInterruptedUpdate does nothing when there is no lock file', async () => {
+  const notified = [];
+  await recoverInterruptedUpdate({
+    repoRoot: '/fake/repo', run: async () => '', restartApps: async () => {}, checkHealth: async () => true,
+    notifyAdmins: async (msg) => notified.push(msg),
+  });
+  assert.equal(notified.length, 0);
+});
+
+test('recoverInterruptedUpdate rolls back and alerts when a stale lock is found', async () => {
+  writeLock({ previousCommit: 'aaa1111111', step: 'installing', startedAt: new Date().toISOString() });
+  const notified = [];
+  const run = async () => '';
+  await recoverInterruptedUpdate({
+    repoRoot: '/fake/repo', run, restartApps: async () => {}, checkHealth: async () => true,
+    notifyAdmins: async (msg) => notified.push(msg),
+  });
+  assert.equal(fs.existsSync(LOCK_FILE), false);
+  assert.equal(notified.length, 1);
+  assert.match(notified[0], /interrupted/i);
+  assert.match(notified[0], /auto-recovered/i);
+});
+
+test('recoverInterruptedUpdate sends an urgent alert when rollback itself fails', async () => {
+  writeLock({ previousCommit: 'aaa1111111', step: 'installing', startedAt: new Date().toISOString() });
+  const notified = [];
+  const run = async (cmd, args) => { if (args[0] === 'reset') throw new Error('disk full'); return ''; };
+  await recoverInterruptedUpdate({
+    repoRoot: '/fake/repo', run, restartApps: async () => {}, checkHealth: async () => true,
+    notifyAdmins: async (msg) => notified.push(msg),
+  });
+  assert.match(notified[0], /recovery FAILED/i);
+  assert.match(notified[0], /disk full/);
+});
