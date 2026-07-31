@@ -30,7 +30,12 @@
   #selectedCustomer { margin-top: 0.5rem; font-size: 0.85rem; color: var(--ink-muted); }
 
   #itemsTable { width: 100%; border-collapse: collapse; margin-top: 0.4rem; table-layout: fixed; }
-  #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem; font-size: 0.85rem; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+  #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem; font-size: 0.85rem; text-align: left; }
+  /* Only the item-row cells risk overflowing their fixed-width column (long
+     particulars text, etc). The colspan=7 header rows (customer name, date,
+     destination) must never clip -- they already have the full table width
+     and wrap naturally, clipping there would hide real invoice data. */
+  #itemsTable tbody td, #itemsTable td.row-amount { overflow: hidden; text-overflow: ellipsis; }
   #itemsTable th { background: #eee; text-transform: uppercase; font-size: 0.72rem; }
   #itemsTable td input { border: none; width: 100%; font-family: inherit; background: transparent; padding: 0; }
   #itemsTable td input:focus { outline: none; }
