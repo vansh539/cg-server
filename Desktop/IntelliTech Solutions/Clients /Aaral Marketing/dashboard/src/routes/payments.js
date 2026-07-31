@@ -91,4 +91,21 @@ router.post('/payments/:id/void', requirePin, async (req, res) => {
   }
 });
 
+// Same invoice_id restriction as void above -- a payment tied to an invoice
+// must be removed by deleting the invoice, so paid_now/claim never drift
+// apart. Permanent, no undo.
+router.delete('/payments/:id', requirePin, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT invoice_id FROM payment_claims WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ ok: false, error: 'Payment not found' });
+    if (rows[0].invoice_id) {
+      return res.status(400).json({ ok: false, error: 'This payment is linked to an invoice — delete the invoice instead.' });
+    }
+    await query('DELETE FROM payment_claims WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;

@@ -116,6 +116,52 @@ async function findLinkedRowsOrThrow(client, invoice) {
   return { dueId: dueRows[0].id, claimId };
 }
 
+// Delete's lookup deliberately does NOT filter on voided/confirmed status
+// (unlike findLinkedRowsOrThrow above) -- deleting must work on an
+// already-voided invoice too, to let staff fully clean up a mistaken entry
+// rather than leave an inert voided row behind forever. Same pre-migration
+// refusal still applies: a paid invoice whose claim has no invoice_id link
+// can't be safely deleted either, for the same balance-corruption reason.
+async function findLinkedRowsForDelete(client, invoice) {
+  const { rows: dueRows } = await client.query('SELECT id FROM dues WHERE invoice_id = $1', [invoice.id]);
+  let claimId = null;
+  if (invoice.paid_now) {
+    const { rows: claimRows } = await client.query('SELECT id FROM payment_claims WHERE invoice_id = $1', [invoice.id]);
+    if (claimRows.length === 0) {
+      throw new Error(
+        'This invoice was marked paid before invoice linking existed, so its payment record ' +
+        'can\'t be reliably located. Deleting it isn\'t supported to avoid corrupting the balance.'
+      );
+    }
+    claimId = claimRows[0].id;
+  }
+  return { dueId: dueRows.length ? dueRows[0].id : null, claimId };
+}
+
+async function deleteInvoice(invoiceId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: invoiceRows } = await client.query('SELECT * FROM invoices WHERE id = $1 FOR UPDATE', [invoiceId]);
+    if (invoiceRows.length === 0) throw new Error('Invoice not found');
+    const invoice = invoiceRows[0];
+
+    const { dueId, claimId } = await findLinkedRowsForDelete(client, invoice);
+
+    await client.query('DELETE FROM invoice_items WHERE invoice_id = $1', [invoiceId]);
+    if (dueId) await client.query('DELETE FROM dues WHERE id = $1', [dueId]);
+    if (claimId) await client.query('DELETE FROM payment_claims WHERE id = $1', [claimId]);
+    await client.query('DELETE FROM invoices WHERE id = $1', [invoiceId]);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function voidInvoice(invoiceId, voidedBy) {
   const client = await pool.connect();
   try {
@@ -191,4 +237,4 @@ async function updateInvoice(invoiceId, { items, unloadingCharge, destination, i
   }
 }
 
-module.exports = { createInvoice, normalizeItems, voidInvoice, updateInvoice };
+module.exports = { createInvoice, normalizeItems, voidInvoice, updateInvoice, deleteInvoice };

@@ -88,7 +88,10 @@
 <div class="page">
   <div class="toolbar">
     <a class="back-link" href="/customers.html" style="margin:0;">&larr; All customers</a>
-    <button class="btn-primary" id="openOldBalance" type="button">+ Add Opening Balance</button>
+    <div style="display:flex; gap:0.6rem;">
+      <button class="btn-primary" id="openOldBalance" type="button">+ Add Opening Balance</button>
+      <button class="btn-danger" id="openDeleteCustomer" type="button" style="padding:0.6rem 1.1rem;">Delete Customer</button>
+    </div>
   </div>
 
   <div class="card">
@@ -145,6 +148,42 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="deleteModal">
+  <div class="modal-box">
+    <h3 id="deleteModalTitle">Delete Entry</h3>
+    <div class="hint" style="margin-top:-0.3rem;">This permanently removes it and adjusts the balance. It cannot be undone.</div>
+    <div class="field-group">
+      <label>Admin PIN</label>
+      <input type="password" id="deletePin" inputmode="numeric" autocomplete="off">
+    </div>
+    <div id="deleteError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelDelete" type="button">Cancel</button>
+      <button class="btn-danger" id="confirmDelete" type="button" style="padding:0.6rem 1.1rem;">Delete Permanently</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="deleteCustomerModal">
+  <div class="modal-box">
+    <h3>Delete Customer</h3>
+    <div class="hint" style="margin-top:-0.3rem;">This permanently deletes <strong id="deleteCustomerName"></strong> and every invoice, item, due, and payment ever recorded for them. There is no undo.</div>
+    <div class="field-group">
+      <label>Type the customer's name to confirm</label>
+      <input type="text" id="deleteCustomerConfirmName" autocomplete="off">
+    </div>
+    <div class="field-group">
+      <label>Admin PIN</label>
+      <input type="password" id="deleteCustomerPin" inputmode="numeric" autocomplete="off">
+    </div>
+    <div id="deleteCustomerError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelDeleteCustomer" type="button">Cancel</button>
+      <button class="btn-danger" id="confirmDeleteCustomer" type="button" style="padding:0.6rem 1.1rem;" disabled>Delete Customer Permanently</button>
+    </div>
+  </div>
+</div>
+
 <footer class="footer-credit">Powered by IntelliTech Solutions</footer>
 
 <script>
@@ -174,25 +213,37 @@ async function load() {
       ? `<a class="invoice-link" href="/invoice.html?id=${e.invoice_id}">${label}</a>`
       : (e.type === 'payment' ? `<a class="invoice-link" href="/receipt.html?id=${e.id}">${label}</a>` : label);
 
-    let actions = '';
-    if (e.voided) {
-      actions = '<span class="voided-badge">Voided</span>';
-    } else if (e.type === 'invoice' && e.invoice_id) {
-      actions = `<div class="row-actions">
-        <a href="/edit-invoice.html?id=${e.invoice_id}">Edit</a>
-        <button class="btn-danger" data-void-type="invoice" data-void-id="${e.invoice_id}">Void</button>
-      </div>`;
-    } else if (e.type === 'payment' && !e.invoice_id) {
-      actions = `<div class="row-actions">
-        <button class="btn-danger" data-void-type="payment" data-void-id="${e.id}">Void</button>
-      </div>`;
+    let actions;
+    if (e.type === 'invoice' && e.invoice_id) {
+      // Real invoice-backed row.
+      actions = e.voided
+        ? `<span class="voided-badge">Voided</span>
+           <button class="btn-danger" data-delete-type="invoice" data-delete-id="${e.invoice_id}">Delete</button>`
+        : `<a href="/edit-invoice.html?id=${e.invoice_id}">Edit</a>
+           <button class="btn-danger" data-void-type="invoice" data-void-id="${e.invoice_id}">Void</button>
+           <button class="btn-danger" data-delete-type="invoice" data-delete-id="${e.invoice_id}">Delete</button>`;
+    } else if (e.type === 'invoice' && !e.invoice_id) {
+      // Standalone due (Opening Balance) -- never voided, delete-only.
+      actions = `<button class="btn-danger" data-delete-type="due" data-delete-id="${e.id}">Delete</button>`;
+    } else if (e.type === 'payment' && e.invoice_id) {
+      // Payment tied to an invoice -- manage via the invoice, not this row.
+      actions = e.voided ? '<span class="voided-badge">Voided</span>' : '';
+    } else {
+      // Standalone payment.
+      actions = e.voided
+        ? `<span class="voided-badge">Voided</span>
+           <button class="btn-danger" data-delete-type="payment" data-delete-id="${e.id}">Delete</button>`
+        : `<button class="btn-danger" data-void-type="payment" data-void-id="${e.id}">Void</button>
+           <button class="btn-danger" data-delete-type="payment" data-delete-id="${e.id}">Delete</button>`;
     }
+    actions = `<div class="row-actions">${actions}</div>`;
 
     tr.innerHTML = `<td>${date}</td><td><span class="type-badge">${e.type}</span></td><td>${detail}</td><td class="num">${sign}₹${Number(e.amount).toFixed(2)}</td><td class="num">₹${e.runningBalance.toFixed(2)}</td><td>${actions}</td>`;
     rowsEl.appendChild(tr);
   });
   document.getElementById('customerName').textContent = customer.name;
   document.getElementById('customerPhone').textContent = customer.phone_number;
+  currentCustomerName = customer.name;
   document.getElementById('statEntries').textContent = entries.length;
   const balEl = document.getElementById('customerBalance');
   balEl.textContent = `₹${customer.balance}`;
@@ -295,6 +346,98 @@ document.getElementById('confirmVoid').addEventListener('click', async () => {
   }
   closeVoidModal();
   load();
+});
+
+const DELETE_ENDPOINTS = {
+  invoice: (id) => `/api/invoices/${id}`,
+  due: (id) => `/api/dues/${id}`,
+  payment: (id) => `/api/payments/${id}`,
+};
+
+const deleteModal = document.getElementById('deleteModal');
+const deleteError = document.getElementById('deleteError');
+const deletePin = document.getElementById('deletePin');
+let pendingDelete = null;
+
+function openDeleteModal(type, id) {
+  pendingDelete = { type, id };
+  document.getElementById('deleteModalTitle').textContent = `Delete ${type === 'invoice' ? 'Invoice' : type === 'due' ? 'Entry' : 'Payment'}`;
+  deletePin.value = '';
+  deleteError.textContent = '';
+  deleteModal.classList.add('open');
+  deletePin.focus();
+}
+function closeDeleteModal() { deleteModal.classList.remove('open'); pendingDelete = null; }
+
+document.getElementById('rows').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-delete-id]');
+  if (!btn) return;
+  openDeleteModal(btn.dataset.deleteType, btn.dataset.deleteId);
+});
+document.getElementById('cancelDelete').addEventListener('click', closeDeleteModal);
+deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) closeDeleteModal(); });
+
+document.getElementById('confirmDelete').addEventListener('click', async () => {
+  if (!pendingDelete) return;
+  const res = await fetch(DELETE_ENDPOINTS[pendingDelete.type](pendingDelete.id), {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: deletePin.value }),
+  });
+  const data = await res.json();
+  if (res.status === 401) {
+    deleteError.textContent = 'Incorrect PIN.';
+    return;
+  }
+  if (!data.ok) {
+    deleteError.textContent = data.error;
+    return;
+  }
+  closeDeleteModal();
+  load();
+});
+
+const deleteCustomerModal = document.getElementById('deleteCustomerModal');
+const deleteCustomerError = document.getElementById('deleteCustomerError');
+const deleteCustomerConfirmName = document.getElementById('deleteCustomerConfirmName');
+const confirmDeleteCustomerBtn = document.getElementById('confirmDeleteCustomer');
+let currentCustomerName = '';
+
+function openDeleteCustomerModal() {
+  document.getElementById('deleteCustomerName').textContent = currentCustomerName;
+  deleteCustomerConfirmName.value = '';
+  document.getElementById('deleteCustomerPin').value = '';
+  deleteCustomerError.textContent = '';
+  confirmDeleteCustomerBtn.disabled = true;
+  deleteCustomerModal.classList.add('open');
+  deleteCustomerConfirmName.focus();
+}
+function closeDeleteCustomerModal() { deleteCustomerModal.classList.remove('open'); }
+
+document.getElementById('openDeleteCustomer').addEventListener('click', openDeleteCustomerModal);
+document.getElementById('cancelDeleteCustomer').addEventListener('click', closeDeleteCustomerModal);
+deleteCustomerModal.addEventListener('click', (e) => { if (e.target === deleteCustomerModal) closeDeleteCustomerModal(); });
+
+deleteCustomerConfirmName.addEventListener('input', () => {
+  confirmDeleteCustomerBtn.disabled = deleteCustomerConfirmName.value.trim() !== currentCustomerName;
+});
+
+confirmDeleteCustomerBtn.addEventListener('click', async () => {
+  const res = await fetch(`/api/customers/${customerId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: document.getElementById('deleteCustomerPin').value }),
+  });
+  const data = await res.json();
+  if (res.status === 401) {
+    deleteCustomerError.textContent = 'Incorrect PIN.';
+    return;
+  }
+  if (!data.ok) {
+    deleteCustomerError.textContent = data.error;
+    return;
+  }
+  window.location.href = '/customers.html';
 });
 </script>
 <script>

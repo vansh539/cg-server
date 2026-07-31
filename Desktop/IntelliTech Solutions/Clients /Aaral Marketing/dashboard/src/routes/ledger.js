@@ -1,7 +1,7 @@
 const express = require('express');
 const balances = require('payment-ledger-core/ledger/balances');
 const customers = require('payment-ledger-core/ledger/customers');
-const { query } = require('payment-ledger-core/db');
+const { query, pool } = require('payment-ledger-core/db');
 const { requirePin } = require('../adminAuth');
 
 const router = express.Router();
@@ -111,6 +111,56 @@ router.get('/customers/:id/ledger', async (req, res) => {
   });
 
   res.json({ customer: { name: balance.name, phone_number: balance.phone_number, balance: balance.balance }, entries });
+});
+
+// Only for standalone dues (Opening Balance entries, invoice_id IS NULL) --
+// one linked to an invoice must be deleted by deleting the invoice itself,
+// same reasoning as payments.js's void/delete restriction.
+router.delete('/dues/:id', requirePin, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT invoice_id FROM dues WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ ok: false, error: 'Entry not found' });
+    if (rows[0].invoice_id) {
+      return res.status(400).json({ ok: false, error: 'This entry is linked to an invoice — delete the invoice instead.' });
+    }
+    await query('DELETE FROM dues WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// Permanent, cascading, no undo -- deliberately chosen over archive/deactivate
+// (see the discussion this was built from). Deletes every invoice, invoice
+// item, due, and payment_claim this customer ever had, then the customer
+// itself.
+router.delete('/customers/:id', requirePin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('SELECT id FROM customers WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ ok: false, error: 'Customer not found' });
+    }
+    // dues/payment_claims reference invoices via invoice_id, so both must go
+    // before invoices itself, or the FK constraint blocks the delete.
+    await client.query(
+      'DELETE FROM invoice_items WHERE invoice_id IN (SELECT id FROM invoices WHERE customer_id = $1)',
+      [req.params.id]
+    );
+    await client.query('DELETE FROM dues WHERE customer_id = $1', [req.params.id]);
+    await client.query('DELETE FROM payment_claims WHERE customer_id = $1', [req.params.id]);
+    await client.query('DELETE FROM invoices WHERE customer_id = $1', [req.params.id]);
+    await client.query('DELETE FROM customers WHERE id = $1', [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ ok: false, error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 module.exports = router;

@@ -1,5 +1,5 @@
 const express = require('express');
-const { createInvoice, normalizeItems, voidInvoice, updateInvoice } = require('../invoices');
+const { createInvoice, normalizeItems, voidInvoice, updateInvoice, deleteInvoice } = require('../invoices');
 const { notify, notifyWithPdf } = require('../notify');
 const { renderInvoicePdf } = require('../pdf');
 const customers = require('payment-ledger-core/ledger/customers');
@@ -140,6 +140,15 @@ router.put('/invoices/:id', requirePin, async (req, res) => {
 router.post('/invoices/:id/void', requirePin, async (req, res) => {
   try {
     await voidInvoice(req.params.id, 'dashboard');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/invoices/:id', requirePin, async (req, res) => {
+  try {
+    await deleteInvoice(req.params.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
