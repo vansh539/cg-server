@@ -29,12 +29,20 @@
   #customerResults div:hover { background: var(--concrete); }
   #selectedCustomer { margin-top: 0.5rem; font-size: 0.85rem; color: var(--ink-muted); }
 
-  #itemsTable { width: 100%; border-collapse: collapse; margin-top: 0.4rem; }
-  #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem; font-size: 0.85rem; text-align: left; }
+  #itemsTable { width: 100%; border-collapse: collapse; margin-top: 0.4rem; table-layout: fixed; }
+  #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem; font-size: 0.85rem; text-align: left; overflow: hidden; text-overflow: ellipsis; }
   #itemsTable th { background: #eee; text-transform: uppercase; font-size: 0.72rem; }
   #itemsTable td input { border: none; width: 100%; font-family: inherit; background: transparent; padding: 0; }
   #itemsTable td input:focus { outline: none; }
   .row-amount, .totals span { font-variant-numeric: tabular-nums; }
+
+  col.c-sl { width: 5%; }
+  col.c-particulars { width: 27%; }
+  col.c-grade { width: 12%; }
+  col.c-vch { width: 10%; }
+  col.c-qty { width: 12%; }
+  col.c-rate { width: 13%; }
+  col.c-amount { width: 21%; }
 
   button.add-row { margin-top: 0.8rem; padding: 0.5rem 1rem; font-size: 0.85rem; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; cursor: pointer; }
   button.add-row:hover { background: var(--concrete); }
@@ -47,6 +55,12 @@
   .toggle-row label { font-size: 1.05rem; cursor: pointer; }
 
   .only-print { display: none; }
+  /* tfoot is a row-GROUP, not a row -- giving it display:table-row (the
+     .only-print rule below, correct for the actual <tr>s that share this
+     class) detaches it from the table's shared column grid and it
+     collapses to its own content width instead of spanning the columns.
+     Needs its own display value. */
+  tfoot.only-print { display: none; }
 
   @media print {
     .hero, .no-print, #selectedCustomer, #status, .totals { display: none !important; }
@@ -61,6 +75,7 @@
     #itemsTable tbody td { font-weight: 600; font-size: 1.05rem; }
     #itemsTable tbody td input { font-weight: 600; font-size: 1.05rem; }
     #itemsTable .only-print { display: table-row; }
+    #itemsTable tfoot.only-print { display: table-footer-group; }
 
     #itemsTable thead tr.print-title-row th { background: #ffe600; text-align: center; font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 1.7rem; text-transform: uppercase; padding: 0.7rem; letter-spacing: 0.02em; }
     #itemsTable thead tr.print-date-row th, #itemsTable thead tr.print-destination-row th { background: #fff; text-align: left; font-weight: 500; font-size: 1.15rem; text-transform: none; padding: 0.55rem 0.8rem; }
@@ -146,6 +161,10 @@
 
     <div class="table-scroll">
       <table id="itemsTable">
+        <colgroup>
+          <col class="c-sl"><col class="c-particulars"><col class="c-grade"><col class="c-vch">
+          <col class="c-qty"><col class="c-rate"><col class="c-amount">
+        </colgroup>
         <thead>
           <tr class="only-print print-title-row"><th colspan="7" id="printCustomerName"></th></tr>
           <tr class="only-print print-date-row"><th colspan="7"><span>Date:</span> <span class="print-date-value" id="printDateValue"></span></th></tr>
@@ -176,7 +195,11 @@
       <input type="checkbox" id="sendWhatsapp" disabled><label style="margin:0;">Send invoice PDF to customer via WhatsApp</label>
     </div>
 
-    <button id="saveAndPrint" class="btn-primary no-print" type="button" style="margin-top:1.4rem;">Save &amp; Print</button>
+    <div class="no-print" style="margin-top:1.4rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
+      <button id="saveBtn" class="btn-primary" type="button">Save</button>
+      <button id="printBtn" class="btn-primary" type="button">Print</button>
+      <button id="savePdfBtn" class="btn-primary" type="button">Save as PDF</button>
+    </div>
     <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
   </div>
 </div>
@@ -346,8 +369,8 @@ searchInput.addEventListener('input', () => {
   }, 250);
 });
 
-document.getElementById('saveAndPrint').addEventListener('click', async () => {
-  const items = [...tbody.querySelectorAll('tr')]
+function collectItems() {
+  return [...tbody.querySelectorAll('tr')]
     .map((tr) => ({
       particulars: tr.querySelector('.particulars').value,
       grade: tr.querySelector('.grade').value,
@@ -356,9 +379,20 @@ document.getElementById('saveAndPrint').addEventListener('click', async () => {
       rate: tr.querySelector('.rate').value,
     }))
     .filter((item) => item.particulars.trim() || item.qty || item.rate);
+}
+
+const statusEl = document.getElementById('status');
+const saveBtn = document.getElementById('saveBtn');
+let alreadySaved = false;
+
+// Print and Save-as-PDF deliberately never call /api/invoices -- only Save
+// does. Previously a single "Save & Print" button re-saved (and re-numbered)
+// the invoice every time the shopkeeper just wanted another physical copy.
+saveBtn.addEventListener('click', async () => {
+  if (alreadySaved) return;
   const body = {
     customerId: selectedCustomerId,
-    items,
+    items: collectItems(),
     unloadingCharge: document.getElementById('unloading').value || null,
     paidNow: document.getElementById('paidNow').checked,
     sendWhatsapp: selectedCustomerId ? sendWhatsappCheckbox.checked : false,
@@ -368,7 +402,6 @@ document.getElementById('saveAndPrint').addEventListener('click', async () => {
     paperHeightMm: currentPaperSize.h,
     createdBy: 'dashboard',
   };
-  const statusEl = document.getElementById('status');
   const res = await fetch('/api/invoices', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -380,11 +413,53 @@ document.getElementById('saveAndPrint').addEventListener('click', async () => {
     statusEl.style.color = 'var(--rust)';
     return;
   }
+  alreadySaved = true;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saved';
   statusEl.textContent = data.invoiceNumber
-    ? `Saved as Invoice #${data.invoiceNumber}.`
-    : 'Chitti ready to print (walk-in sale — not stored).';
+    ? `Saved as Invoice #${data.invoiceNumber}. You can Print or Save as PDF as many times as you need.`
+    : 'Saved (walk-in sale — not stored in the ledger). You can Print or Save as PDF as many times as you need.';
   statusEl.style.color = 'var(--moss)';
+});
+
+document.getElementById('printBtn').addEventListener('click', () => {
   window.print();
+});
+
+document.getElementById('savePdfBtn').addEventListener('click', async () => {
+  const body = {
+    items: collectItems(),
+    unloadingCharge: document.getElementById('unloading').value || null,
+    invoiceDate: document.getElementById('invoiceDate').value || null,
+    destination: document.getElementById('destination').value.trim() || null,
+    paperWidthMm: currentPaperSize.w,
+    paperHeightMm: currentPaperSize.h,
+    customerName: searchInput.value.trim() || null,
+  };
+  statusEl.textContent = 'Generating PDF…';
+  statusEl.style.color = 'var(--ink-muted)';
+  const res = await fetch('/api/invoices/pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    statusEl.textContent = `Error: ${data.error || 'Could not generate PDF'}`;
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Chitti-${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  statusEl.textContent = 'PDF downloaded. Since it\'s generated at the exact paper size you picked above, printing it from your PDF viewer (instead of this page\'s Print button) is the most reliable way to get the right paper size — browsers often default their own print dialog to A4 regardless of what a page asks for.';
+  statusEl.style.color = 'var(--moss)';
 });
 </script>
 <script>

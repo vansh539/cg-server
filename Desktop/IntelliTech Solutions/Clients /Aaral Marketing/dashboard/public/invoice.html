@@ -11,6 +11,13 @@
 <meta name="theme-color" content="#191048">
 <link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
 <link rel="stylesheet" href="/styles.css">
+<style>
+  .toolbar-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.6rem; }
+  .toolbar-row .actions { display: flex; gap: 0.6rem; }
+  @media print {
+    .hero, .no-print { display: none !important; }
+  }
+</style>
 </head>
 <body>
 
@@ -59,7 +66,13 @@
 </div>
 
 <div class="page">
-  <a class="back-link" href="/" id="backLink">&larr; All customers</a>
+  <div class="toolbar-row no-print">
+    <a class="back-link" href="/" id="backLink" style="margin:0;">&larr; All customers</a>
+    <div class="actions">
+      <button class="btn-primary" id="printBtn" type="button">Print</button>
+      <button class="btn-primary" id="downloadPdfBtn" type="button">Download PDF</button>
+    </div>
+  </div>
 
   <div class="card">
     <div class="table-scroll">
@@ -118,6 +131,11 @@ async function load() {
 }
 
 load();
+
+document.getElementById('printBtn').addEventListener('click', () => window.print());
+document.getElementById('downloadPdfBtn').addEventListener('click', () => {
+  window.location.href = `/api/invoices/${invoiceId}/pdf`;
+});
 </script>
 <script>
 if ('serviceWorker' in navigator && window.isSecureContext) {

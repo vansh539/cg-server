@@ -1,5 +1,5 @@
 const express = require('express');
-const { createInvoice } = require('../invoices');
+const { createInvoice, normalizeItems } = require('../invoices');
 const { notify, notifyWithPdf } = require('../notify');
 const { renderInvoicePdf } = require('../pdf');
 const customers = require('payment-ledger-core/ledger/customers');
@@ -59,6 +59,38 @@ router.post('/invoices', async (req, res) => {
   }
 });
 
+// Stateless PDF generation for the chitti's "Save as PDF" / reprint flow --
+// deliberately never touches the DB (mirrors quotations.js's stateless PDF
+// route), so it can be called any number of times without ever creating a
+// duplicate invoice, whether or not the chitti has actually been saved yet.
+router.post('/invoices/pdf', async (req, res) => {
+  try {
+    const {
+      items, unloadingCharge, invoiceDate, destination,
+      paperWidthMm, paperHeightMm, customerName,
+    } = req.body;
+    const normalizedItems = normalizeItems(items);
+    const subtotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+    const unloading = unloadingCharge ? Number(unloadingCharge) : 0;
+    const total = subtotal + unloading;
+    const pdfItems = normalizedItems.map((item) => ({
+      s_no: item.sNo, particulars: item.particulars, grade: item.grade,
+      vch: item.vch, qty: item.qty, rate: item.rate, amount: item.amount,
+    }));
+    const pdfBuffer = await renderInvoicePdf({
+      invoice: { total, created_at: invoiceDate || null, destination: destination || null },
+      items: pdfItems,
+      customerName: customerName || '',
+      paperWidthMm, paperHeightMm,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="Chitti.pdf"');
+    res.send(pdfBuffer);
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.get('/invoices/:id', async (req, res) => {
   const { rows: invoiceRows } = await query('SELECT * FROM invoices WHERE id = $1', [req.params.id]);
   if (invoiceRows.length === 0) return res.status(404).json({ ok: false, error: 'Invoice not found' });
@@ -67,6 +99,29 @@ router.get('/invoices/:id', async (req, res) => {
     [req.params.id]
   );
   res.json({ invoice: invoiceRows[0], items: itemRows });
+});
+
+// Reprint -- regenerates the same branded PDF a customer would have gotten
+// via WhatsApp, from the invoice as it's actually stored today. Paper size
+// isn't persisted on the invoice (never was, even for the original send),
+// so this defaults to A4 same as renderInvoicePdf always has.
+router.get('/invoices/:id/pdf', async (req, res) => {
+  const { rows: invoiceRows } = await query(
+    `SELECT i.*, c.name AS customer_name FROM invoices i
+     LEFT JOIN customers c ON c.id = i.customer_id
+     WHERE i.id = $1`,
+    [req.params.id]
+  );
+  if (invoiceRows.length === 0) return res.status(404).json({ ok: false, error: 'Invoice not found' });
+  const invoice = invoiceRows[0];
+  const { rows: itemRows } = await query(
+    'SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY s_no ASC',
+    [req.params.id]
+  );
+  const pdfBuffer = await renderInvoicePdf({ invoice, items: itemRows, customerName: invoice.customer_name });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="Invoice-${invoice.invoice_number}.pdf"`);
+  res.send(pdfBuffer);
 });
 
 module.exports = router;

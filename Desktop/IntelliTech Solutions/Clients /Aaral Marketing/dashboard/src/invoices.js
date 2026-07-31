@@ -87,4 +87,4 @@ async function createInvoice({ customerId, items, unloadingCharge, paidNow, crea
   }
 }
 
-module.exports = { createInvoice };
+module.exports = { createInvoice, normalizeItems };
