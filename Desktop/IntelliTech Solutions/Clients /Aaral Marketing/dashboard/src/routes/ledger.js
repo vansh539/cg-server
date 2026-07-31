@@ -16,6 +16,35 @@ router.get('/customers', async (req, res) => {
   res.json(rows);
 });
 
+// Powers the home page's stat strip + activity feed -- a system-wide view
+// across every customer, not one account's ledger.
+router.get('/dashboard-summary', async (_req, res) => {
+  const { rows: balanceRows } = await query('SELECT balance FROM customer_balances');
+  const totalOutstanding = balanceRows.reduce((sum, r) => sum + Math.max(Number(r.balance), 0), 0);
+  const customerCount = balanceRows.length;
+
+  const { rows: invoiceCountRows } = await query(
+    `SELECT count(*) FROM invoices WHERE voided_at IS NULL AND created_at >= date_trunc('month', now())`
+  );
+  const invoicesThisMonth = Number(invoiceCountRows[0].count);
+
+  const { rows: activity } = await query(
+    `SELECT 'invoice' AS type, d.description AS label, d.amount_due AS amount, d.created_at AS occurred_at,
+            d.invoice_id, c.name AS customer_name, c.id AS customer_id
+     FROM dues d JOIN customers c ON c.id = d.customer_id
+     WHERE NOT d.voided
+     UNION ALL
+     SELECT 'payment' AS type, pc.proof_type AS label, pc.amount_claimed AS amount, pc.reported_at AS occurred_at,
+            pc.invoice_id, c.name AS customer_name, c.id AS customer_id
+     FROM payment_claims pc JOIN customers c ON c.id = pc.customer_id
+     WHERE pc.status = 'confirmed'
+     ORDER BY occurred_at DESC
+     LIMIT 8`
+  );
+
+  res.json({ totalOutstanding, customerCount, invoicesThisMonth, activity });
+});
+
 router.post('/customers', requirePin, async (req, res) => {
   try {
     const name = (req.body.name || '').trim();

@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Aaral Marketing — Customers</title>
+<title>Aaral Marketing — Home</title>
 <link rel="icon" href="/assets/aaral-logo-small.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,17 +12,86 @@
 <link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
 <link rel="stylesheet" href="/styles.css">
 <style>
-  .search-wrap { margin-bottom: 1.2rem; max-width: 420px; }
+  .section-heading {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0 0 1.2rem;
+  }
 
-  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(12,8,40,0.45); z-index: 20; align-items: center; justify-content: center; }
-  .modal-backdrop.open { display: flex; }
-  .modal-box { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.6rem; width: 100%; max-width: 360px; }
-  .modal-box h3 { margin: 0 0 1.1rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
-  .modal-box label { display: block; font-size: 0.9rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
-  .modal-box .field-group { margin-bottom: 1.1rem; }
-  .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; }
-  .btn-secondary { background: none; border: 1px solid var(--line); color: var(--ink-muted); border-radius: 999px; padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
-  .btn-secondary:hover { background: var(--concrete); }
+  /* ── Action pad stack ──────────────────────────────────────────────
+     Each tile reads as the top sheet of a real chitti pad sitting on the
+     counter -- a slight rotation, a couple of paper-edge layers peeking out
+     from underneath, and a torn/perforated top edge. Straightens and lifts
+     on hover, like picking the top sheet off the pad. */
+  .pad-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2rem 1.6rem;
+    margin-bottom: 3rem;
+  }
+  .pad-link { text-decoration: none; color: inherit; display: block; }
+  .pad {
+    position: relative;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 3px 3px 8px 8px;
+    padding: 1.5rem 1.4rem 1.3rem;
+    box-shadow: var(--shadow);
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
+  }
+  .pad::before, .pad::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 3px 3px 8px 8px;
+    z-index: -1;
+  }
+  .pad::before { transform: rotate(var(--pad-tilt, -2deg)) translateY(2px); opacity: 0.85; }
+  .pad::after { transform: rotate(calc(var(--pad-tilt, -2deg) * 2)) translateY(4px); opacity: 0.6; }
+  .pad-link:nth-child(1) .pad { --pad-tilt: -1.6deg; }
+  .pad-link:nth-child(2) .pad { --pad-tilt: 1.1deg; }
+  .pad-link:nth-child(3) .pad { --pad-tilt: -0.9deg; }
+  .pad-link:nth-child(4) .pad { --pad-tilt: 1.7deg; }
+  .pad-tear {
+    height: 6px;
+    margin: -1.5rem -1.4rem 1rem;
+    background-image: radial-gradient(circle at 6px 3px, transparent 3px, var(--line) 3.5px, var(--line) 4px, transparent 4.5px);
+    background-size: 12px 6px;
+    background-repeat: repeat-x;
+    border-bottom: 1px dashed var(--line);
+  }
+  .pad-icon { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cyan); background: var(--concrete); display: inline-block; padding: 0.2rem 0.55rem; border-radius: 4px; margin-bottom: 0.8rem; }
+  .pad-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--navy); margin: 0 0 0.35rem; }
+  .pad-desc { font-size: 0.86rem; color: var(--ink-muted); margin: 0; line-height: 1.4; }
+
+  .pad-link:hover .pad, .pad-link:focus-visible .pad {
+    transform: rotate(0deg) translateY(-5px);
+    box-shadow: 0 4px 8px rgba(20,15,5,0.06), 0 20px 34px -16px rgba(25,16,72,0.32);
+  }
+  .pad-link:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; border-radius: 8px; }
+
+  /* ── Activity feed ─────────────────────────────────────────────── */
+  .activity-list { list-style: none; margin: 0; padding: 0; }
+  .activity-row {
+    display: flex; align-items: center; gap: 0.9rem;
+    padding: 0.85rem 0; border-bottom: 1px solid var(--line);
+  }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-row a { color: inherit; text-decoration: none; font-weight: 600; }
+  .activity-row a:hover { color: var(--cyan); }
+  .activity-when { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--ink-muted); width: 68px; flex-shrink: 0; }
+  .activity-body { flex: 1; min-width: 0; }
+  .activity-detail { font-size: 0.7rem; color: var(--ink-muted); text-transform: capitalize; }
+  .activity-amount { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pad { transition: none; }
+    .pad-link:hover .pad, .pad-link:focus-visible .pad { transform: none; }
+  }
 </style>
 </head>
 <body>
@@ -38,7 +107,8 @@
         </div>
       </div>
       <nav class="hero-nav">
-        <a class="active" href="/">Customers</a>
+        <a class="active" href="/">Home</a>
+        <a href="/customers.html">Customers</a>
         <a href="/quotation.html">New Quotation</a>
         <a href="/chitti.html">New Chitti</a>
         <a href="/payment.html">New Payment</a>
@@ -46,21 +116,21 @@
       </nav>
     </div>
     <div class="hero-heading">
-      <div class="eyebrow">Ledger overview</div>
-      <h2>Who owes what, at a glance.</h2>
+      <div class="eyebrow" id="todayLabel">Today</div>
+      <h2 id="greeting">Good day. Here's where the yard stands.</h2>
     </div>
     <div class="stat-row">
       <div class="stat-tile">
-        <div class="label">Customers</div>
-        <div class="value" id="statCount">—</div>
-      </div>
-      <div class="stat-tile">
         <div class="label">Outstanding</div>
-        <div class="value rust" id="statOwed">—</div>
+        <div class="value rust" id="statOutstanding">—</div>
       </div>
       <div class="stat-tile">
-        <div class="label">In credit</div>
-        <div class="value moss" id="statCredit">—</div>
+        <div class="label">Customers</div>
+        <div class="value" id="statCustomers">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Chittis this month</div>
+        <div class="value" id="statInvoices">—</div>
       </div>
     </div>
   </div>
@@ -72,136 +142,103 @@
 </div>
 
 <div class="page">
-  <div class="toolbar">
-    <h3>All customers</h3>
-    <button class="btn-primary" id="openAddCustomer" type="button">+ Add Customer</button>
+  <h3 class="section-heading">What do you need to do?</h3>
+  <div class="pad-grid">
+    <a class="pad-link" href="/chitti.html">
+      <div class="pad">
+        <div class="pad-tear"></div>
+        <span class="pad-icon">Sale</span>
+        <h4 class="pad-title">New Chitti</h4>
+        <p class="pad-desc">Write up a sale and print it.</p>
+      </div>
+    </a>
+    <a class="pad-link" href="/quotation.html">
+      <div class="pad">
+        <div class="pad-tear"></div>
+        <span class="pad-icon">Quote</span>
+        <h4 class="pad-title">New Quotation</h4>
+        <p class="pad-desc">Quote a price — nothing goes in the ledger.</p>
+      </div>
+    </a>
+    <a class="pad-link" href="/payment.html">
+      <div class="pad">
+        <div class="pad-tear"></div>
+        <span class="pad-icon">Payment</span>
+        <h4 class="pad-title">New Payment</h4>
+        <p class="pad-desc">Record a payment against an account.</p>
+      </div>
+    </a>
+    <a class="pad-link" href="/customers.html">
+      <div class="pad">
+        <div class="pad-tear"></div>
+        <span class="pad-icon">Ledger</span>
+        <h4 class="pad-title">Customers</h4>
+        <p class="pad-desc">Look up an account or balance.</p>
+      </div>
+    </a>
   </div>
 
-  <div class="search-wrap">
-    <input type="text" id="search" placeholder="Search by name or phone…">
-  </div>
-
-  <div class="card">
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Name</th><th>Phone</th><th class="num">Balance</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-    <div id="emptyState" class="empty-state" style="display:none;">No customers found.</div>
-  </div>
-</div>
-
-<div class="modal-backdrop" id="addCustomerModal">
-  <div class="modal-box">
-    <h3>Add Customer</h3>
-    <div class="field-group">
-      <label>Name</label>
-      <input type="text" id="newCustomerName" autocomplete="off">
-    </div>
-    <div class="field-group">
-      <label>Phone number</label>
-      <input type="text" id="newCustomerPhone" placeholder="10-digit WhatsApp number" autocomplete="off">
-    </div>
-    <div class="field-group">
-      <label>Admin PIN</label>
-      <input type="password" id="newCustomerPin" inputmode="numeric" autocomplete="off">
-    </div>
-    <div id="addCustomerError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
-    <div class="modal-actions">
-      <button class="btn-secondary" id="cancelAddCustomer" type="button">Cancel</button>
-      <button class="btn-primary" id="saveAddCustomer" type="button">Save</button>
-    </div>
+  <h3 class="section-heading">Recent activity</h3>
+  <div class="card" style="padding: 0.5rem 1.4rem;">
+    <ul class="activity-list" id="activityList">
+      <li class="activity-row"><div class="activity-body" style="color:var(--ink-muted);">Loading…</div></li>
+    </ul>
   </div>
 </div>
 
 <footer class="footer-credit">Powered by IntelliTech Solutions</footer>
 
 <script>
-const rowsEl = document.getElementById('rows');
-const emptyEl = document.getElementById('emptyState');
-
-function balanceClass(balance) {
-  if (Number(balance) > 0) return 'owes';
-  if (Number(balance) < 0) return 'credit';
-  return 'settled';
-}
+const hour = new Date().getHours();
+const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+document.getElementById('greeting').textContent = `${timeGreeting}. Here's where the yard stands.`;
+document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
 function fmt(n) {
   return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.abs(n));
 }
 
-async function load(term) {
-  const url = term ? `/api/customers?q=${encodeURIComponent(term)}` : '/api/customers';
-  const res = await fetch(url);
-  const customers = await res.json();
-  rowsEl.innerHTML = '';
-  emptyEl.style.display = customers.length ? 'none' : 'block';
-
-  let owed = 0, credit = 0;
-  customers.forEach((c) => {
-    const bal = Number(c.balance);
-    if (bal > 0) owed += bal; else credit += -bal;
-    const tr = document.createElement('tr');
-    tr.className = 'clickable';
-    tr.innerHTML = `<td>${c.name}</td><td>${c.phone_number}</td><td class="num"><span class="balance-pill ${balanceClass(c.balance)}">₹${c.balance}</span></td>`;
-    tr.addEventListener('click', () => { window.location.href = `/customer.html?id=${c.customer_id}`; });
-    rowsEl.appendChild(tr);
-  });
-
-  if (!term) {
-    document.getElementById('statCount').textContent = customers.length;
-    document.getElementById('statOwed').textContent = `₹${fmt(owed)}`;
-    document.getElementById('statCredit').textContent = `₹${fmt(credit)}`;
-  }
+function timeAgo(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
-document.getElementById('search').addEventListener('input', (e) => load(e.target.value.trim()));
-load();
+const METHOD_LABELS = { cash: 'Cash', gpay: 'GPay', bank_transfer: 'Bank Transfer', screenshot: 'Screenshot', utr_text: 'UTR' };
 
-const modal = document.getElementById('addCustomerModal');
-const nameInput = document.getElementById('newCustomerName');
-const phoneInput = document.getElementById('newCustomerPhone');
-const errorEl = document.getElementById('addCustomerError');
-
-function openModal() {
-  nameInput.value = '';
-  phoneInput.value = '';
-  document.getElementById('newCustomerPin').value = '';
-  errorEl.textContent = '';
-  modal.classList.add('open');
-  nameInput.focus();
-}
-function closeModal() { modal.classList.remove('open'); }
-
-document.getElementById('openAddCustomer').addEventListener('click', openModal);
-document.getElementById('cancelAddCustomer').addEventListener('click', closeModal);
-modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-document.getElementById('saveAddCustomer').addEventListener('click', async () => {
-  const name = nameInput.value.trim();
-  const phoneNumber = phoneInput.value.trim();
-  const pin = document.getElementById('newCustomerPin').value;
-  if (!name || !phoneNumber) {
-    errorEl.textContent = 'Name and phone number are both required.';
-    return;
-  }
-  const res = await fetch('/api/customers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, phoneNumber, pin }),
-  });
+async function load() {
+  const res = await fetch('/api/dashboard-summary');
   const data = await res.json();
-  if (res.status === 401) {
-    errorEl.textContent = 'Incorrect PIN.';
+
+  document.getElementById('statOutstanding').textContent = `₹${fmt(data.totalOutstanding)}`;
+  document.getElementById('statCustomers').textContent = data.customerCount;
+  document.getElementById('statInvoices').textContent = data.invoicesThisMonth;
+
+  const listEl = document.getElementById('activityList');
+  if (data.activity.length === 0) {
+    listEl.innerHTML = '<li class="activity-row"><div class="activity-body" style="color:var(--ink-muted);">Nothing recorded yet.</div></li>';
     return;
   }
-  if (!data.ok) {
-    errorEl.textContent = data.error;
-    return;
-  }
-  window.location.href = `/customer.html?id=${data.customerId}`;
-});
+  listEl.innerHTML = data.activity.map((e) => {
+    const sign = e.type === 'invoice' ? '+' : '-';
+    const color = e.type === 'invoice' ? 'var(--rust)' : 'var(--moss)';
+    const label = e.type === 'payment' ? (METHOD_LABELS[e.label] || e.label) : e.label.replace(/\b\w/g, (c) => c.toUpperCase());
+    return `<li class="activity-row">
+      <div class="activity-when">${timeAgo(e.occurred_at)}</div>
+      <div class="activity-body">
+        <a href="/customer.html?id=${e.customer_id}">${e.customer_name}</a>
+        <div class="activity-detail">${e.type} · ${label}</div>
+      </div>
+      <div class="activity-amount" style="color:${color};">${sign}₹${fmt(Number(e.amount))}</div>
+    </li>`;
+  }).join('');
+}
+load();
 </script>
 <script>
 if ('serviceWorker' in navigator && window.isSecureContext) {
