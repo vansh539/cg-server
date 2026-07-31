@@ -1,10 +1,5 @@
 const puppeteer = require('puppeteer-core');
-
-const CHROME_EXECUTABLE = process.env.CHROME_PATH || (
-  process.platform === 'win32'
-    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-    : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-);
+const { CHROME_EXECUTABLE } = require('./chromeExecutable');
 
 const DEFAULT_PAPER_MM = { w: 210, h: 297 };
 

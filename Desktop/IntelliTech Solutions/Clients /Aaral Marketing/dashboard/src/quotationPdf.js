@@ -1,12 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
-
-const CHROME_EXECUTABLE = process.env.CHROME_PATH || (
-  process.platform === 'win32'
-    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-    : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-);
+const { CHROME_EXECUTABLE } = require('./chromeExecutable');
 
 const LOGO_PATH = path.join(__dirname, '..', 'public', 'assets', 'aaral-logo-pdf.jpg');
 const LOGO_DATA_URI = `data:image/jpeg;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}`;
