@@ -1,10 +1,11 @@
 const express = require('express');
-const { createInvoice, normalizeItems } = require('../invoices');
+const { createInvoice, normalizeItems, voidInvoice, updateInvoice } = require('../invoices');
 const { notify, notifyWithPdf } = require('../notify');
 const { renderInvoicePdf } = require('../pdf');
 const customers = require('payment-ledger-core/ledger/customers');
 const balances = require('payment-ledger-core/ledger/balances');
 const { query } = require('payment-ledger-core/db');
+const { requirePin } = require('../adminAuth');
 
 const router = express.Router();
 
@@ -122,6 +123,27 @@ router.get('/invoices/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="Invoice-${invoice.invoice_number}.pdf"`);
   res.send(pdfBuffer);
+});
+
+router.put('/invoices/:id', requirePin, async (req, res) => {
+  try {
+    const { items, unloadingCharge, destination, invoiceDate } = req.body;
+    const result = await updateInvoice(
+      req.params.id, { items, unloadingCharge, destination, invoiceDate }, 'dashboard'
+    );
+    res.json({ ok: true, invoice: result.invoice });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/invoices/:id/void', requirePin, async (req, res) => {
+  try {
+    await voidInvoice(req.params.id, 'dashboard');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;

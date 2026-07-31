@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Edit Invoice — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aaral Marketing">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#191048">
+<link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .form-card { padding: 1.6rem; }
+  .form-card label { display: block; font-size: 0.95rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
+  .field-group { margin-bottom: 1.1rem; max-width: 260px; }
+
+  #itemsTable { width: 100%; border-collapse: collapse; margin-top: 0.4rem; table-layout: fixed; }
+  #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem; font-size: 0.85rem; text-align: left; overflow: hidden; }
+  #itemsTable th { background: #eee; text-transform: uppercase; font-size: 0.72rem; }
+  #itemsTable td input { border: none; width: 100%; font-family: inherit; background: transparent; padding: 0; }
+  #itemsTable td input:focus { outline: none; }
+  .row-amount, .totals span { font-variant-numeric: tabular-nums; }
+
+  col.c-sl { width: 5%; } col.c-particulars { width: 27%; } col.c-grade { width: 12%; }
+  col.c-vch { width: 10%; } col.c-qty { width: 12%; } col.c-rate { width: 13%; } col.c-amount { width: 21%; }
+
+  button.add-row { margin-top: 0.8rem; padding: 0.5rem 1rem; font-size: 0.85rem; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; cursor: pointer; }
+  button.add-row:hover { background: var(--concrete); }
+  button.remove-row { padding: 0.2rem 0.55rem; font-size: 0.75rem; border: 1px solid var(--rust); color: var(--rust); background: var(--rust-bg); border-radius: 6px; cursor: pointer; }
+
+  .totals { margin-top: 1.2rem; text-align: right; font-size: 1rem; }
+  .totals .grand { font-weight: 700; font-size: 1.25rem; border-top: 2px solid #000; padding-top: 0.5rem; margin-top: 0.4rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand-mark">
+        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+        <div class="brand-text">
+          <h1>Aaral Marketing</h1>
+          <p>Cement &amp; Building Materials Ledger</p>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="/">Customers</a>
+        <a href="/quotation.html">New Quotation</a>
+        <a href="/chitti.html">New Chitti</a>
+        <a href="/payment.html">New Payment</a>
+        <a href="/updates.html">Updates</a>
+      </nav>
+    </div>
+    <div class="hero-heading">
+      <div class="eyebrow">Sales voucher</div>
+      <h2 id="pageTitle">Edit Invoice</h2>
+    </div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
+    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
+    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
+  </svg>
+</div>
+
+<div class="page">
+  <a class="back-link" href="/" id="backLink">&larr; Back to ledger</a>
+
+  <div class="card form-card">
+    <div class="field-group">
+      <label>Destination</label>
+      <input type="text" id="destination" placeholder="e.g. site / delivery location" autocomplete="off">
+    </div>
+
+    <table id="itemsTable">
+      <colgroup>
+        <col class="c-sl"><col class="c-particulars"><col class="c-grade"><col class="c-vch">
+        <col class="c-qty"><col class="c-rate"><col class="c-amount">
+      </colgroup>
+      <thead>
+        <tr><th>Sl</th><th>Particulars</th><th>Grade</th><th>Vch</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button id="addRow" class="add-row" type="button">+ Add line</button>
+
+    <div class="totals">
+      <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
+      <div>
+        <label style="display:inline;">Unloading charges: ₹</label>
+        <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
+      </div>
+      <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
+    </div>
+
+    <div class="field-group" style="margin-top:1.2rem;">
+      <label>Admin PIN</label>
+      <input type="password" id="pin" inputmode="numeric" autocomplete="off">
+    </div>
+
+    <button id="saveBtn" class="btn-primary" type="button">Save Changes</button>
+    <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
+  </div>
+</div>
+
+<footer class="footer-credit">Powered by IntelliTech Solutions</footer>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const invoiceId = params.get('id');
+const tbody = document.querySelector('#itemsTable tbody');
+const statusEl = document.getElementById('status');
+
+function addRow(item) {
+  const tr = document.createElement('tr');
+  const sNo = tbody.children.length + 1;
+  tr.innerHTML = `
+    <td class="sl-cell">${sNo}</td>
+    <td><input class="particulars" value="${item ? (item.particulars || '').replace(/"/g, '&quot;') : ''}"></td>
+    <td><input class="grade" value="${item ? (item.grade || '').replace(/"/g, '&quot;') : ''}"></td>
+    <td><input class="vch" value="${item ? (item.vch || '').replace(/"/g, '&quot;') : ''}"></td>
+    <td><input class="qty" type="number" min="0" step="0.01" value="${item ? Number(item.qty) : ''}"></td>
+    <td><input class="rate" type="number" min="0" step="0.01" value="${item ? Number(item.rate) : ''}"></td>
+    <td class="row-amount">${item ? formatMoney(Number(item.amount)) : '0.00'}</td>
+    <td><button class="remove-row" type="button">&times;</button></td>`;
+  tbody.appendChild(tr);
+  tr.querySelectorAll('.qty, .rate').forEach((el) => el.addEventListener('input', recalc));
+  tr.querySelector('.remove-row').addEventListener('click', () => { tr.remove(); renumber(); recalc(); });
+}
+
+function renumber() {
+  [...tbody.querySelectorAll('tr')].forEach((tr, i) => { tr.querySelector('.sl-cell').textContent = i + 1; });
+}
+
+function formatMoney(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
+function recalc() {
+  let subtotal = 0;
+  tbody.querySelectorAll('tr').forEach((tr) => {
+    const qty = Number(tr.querySelector('.qty').value) || 0;
+    const rate = Number(tr.querySelector('.rate').value) || 0;
+    const amount = qty * rate;
+    tr.querySelector('.row-amount').textContent = formatMoney(amount);
+    subtotal += amount;
+  });
+  const unloading = Number(document.getElementById('unloading').value) || 0;
+  document.getElementById('subtotal').textContent = formatMoney(subtotal);
+  document.getElementById('grandTotal').textContent = formatMoney(subtotal + unloading);
+}
+
+document.getElementById('addRow').addEventListener('click', () => { addRow(null); recalc(); });
+document.getElementById('unloading').addEventListener('input', recalc);
+
+async function load() {
+  const res = await fetch(`/api/invoices/${invoiceId}`);
+  if (!res.ok) {
+    statusEl.textContent = 'Invoice not found.';
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  const { invoice, items } = await res.json();
+  if (invoice.voided_at) {
+    statusEl.textContent = 'This invoice is voided and cannot be edited.';
+    statusEl.style.color = 'var(--rust)';
+    document.getElementById('saveBtn').disabled = true;
+  }
+  document.getElementById('pageTitle').textContent = `Edit Invoice #${invoice.invoice_number}`;
+  document.getElementById('destination').value = invoice.destination || '';
+  document.getElementById('unloading').value = invoice.unloading_charge || '';
+  if (invoice.customer_id) document.getElementById('backLink').href = `/customer.html?id=${invoice.customer_id}`;
+  items.forEach((item) => addRow(item));
+  recalc();
+}
+load();
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const items = [...tbody.querySelectorAll('tr')]
+    .map((tr) => ({
+      particulars: tr.querySelector('.particulars').value,
+      grade: tr.querySelector('.grade').value,
+      vch: tr.querySelector('.vch').value,
+      qty: tr.querySelector('.qty').value,
+      rate: tr.querySelector('.rate').value,
+    }))
+    .filter((item) => item.particulars.trim() || item.qty || item.rate);
+  const body = {
+    items,
+    unloadingCharge: document.getElementById('unloading').value || null,
+    destination: document.getElementById('destination').value.trim() || null,
+    invoiceDate: null,
+    pin: document.getElementById('pin').value,
+  };
+  const res = await fetch(`/api/invoices/${invoiceId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (res.status === 401) {
+    statusEl.textContent = 'Incorrect PIN.';
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  if (!data.ok) {
+    statusEl.textContent = `Error: ${data.error}`;
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  statusEl.textContent = 'Saved. Redirecting…';
+  statusEl.style.color = 'var(--moss)';
+  setTimeout(() => {
+    window.location.href = data.invoice.customer_id ? `/customer.html?id=${data.invoice.customer_id}` : '/';
+  }, 600);
+});
+</script>
+<script>
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

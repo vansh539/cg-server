@@ -5,6 +5,7 @@ const { notify, notifyWithPdf } = require('../notify');
 const customers = require('payment-ledger-core/ledger/customers');
 const balances = require('payment-ledger-core/ledger/balances');
 const { query } = require('payment-ledger-core/db');
+const { requirePin } = require('../adminAuth');
 
 const router = express.Router();
 
@@ -66,6 +67,28 @@ router.get('/payments/:id', async (req, res) => {
   const payment = rows[0];
   const balance = await balances.getBalanceByCustomerId(payment.customer_id);
   res.json({ payment, balance: balance ? balance.balance : null });
+});
+
+// Only for standalone manual payments -- one linked to an invoice (via
+// invoice_id, set when paidNow is checked at invoice creation) must be
+// voided by voiding the invoice itself, so the invoice's paid_now flag and
+// its claim never fall out of sync with each other.
+router.post('/payments/:id/void', requirePin, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM payment_claims WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ ok: false, error: 'Payment not found' });
+    const payment = rows[0];
+    if (payment.invoice_id) {
+      return res.status(400).json({ ok: false, error: 'This payment is linked to an invoice — void the invoice instead.' });
+    }
+    if (payment.status !== 'confirmed') {
+      return res.status(400).json({ ok: false, error: `Payment is already ${payment.status}, not confirmed.` });
+    }
+    await query(`UPDATE payment_claims SET status = 'voided' WHERE id = $1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;

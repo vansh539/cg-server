@@ -64,22 +64,20 @@ router.get('/customers/:id/ledger', async (req, res) => {
 
   const { rows } = await query(
     `SELECT 'invoice' AS type, d.id, d.description AS label, d.amount_due AS amount, d.created_at AS occurred_at,
-            i.id AS invoice_id
+            d.invoice_id, d.voided
      FROM dues d
-     LEFT JOIN invoices i ON i.customer_id = d.customer_id
-       AND i.invoice_number = NULLIF(substring(d.description FROM 'Invoice #(\\d+)'), '')::int
      WHERE d.customer_id = $1
      UNION ALL
      SELECT 'payment' AS type, id, proof_type AS label, amount_claimed AS amount, reported_at AS occurred_at,
-            NULL AS invoice_id
-     FROM payment_claims WHERE customer_id = $1 AND status = 'confirmed'
+            invoice_id, (status = 'voided') AS voided
+     FROM payment_claims WHERE customer_id = $1 AND status IN ('confirmed', 'voided')
      ORDER BY occurred_at ASC`,
     [req.params.id]
   );
 
   let running = 0;
   const entries = rows.map((row) => {
-    running += row.type === 'invoice' ? Number(row.amount) : -Number(row.amount);
+    if (!row.voided) running += row.type === 'invoice' ? Number(row.amount) : -Number(row.amount);
     return { ...row, runningBalance: running };
   });
 

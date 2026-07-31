@@ -32,6 +32,14 @@
   .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; }
   .btn-secondary { background: none; border: 1px solid var(--line); color: var(--ink-muted); border-radius: 999px; padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
   .btn-secondary:hover { background: var(--concrete); }
+  .btn-danger { background: var(--rust-bg); border: 1px solid var(--rust); color: var(--rust); border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+  .btn-danger:hover { background: var(--rust); color: #fff; }
+  .row-actions { display: flex; gap: 0.5rem; align-items: center; white-space: nowrap; }
+  .row-actions a { color: var(--navy); font-weight: 600; font-size: 0.78rem; text-decoration: none; }
+  .row-actions a:hover { text-decoration: underline; }
+  .voided-badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); background: var(--concrete); padding: 0.2rem 0.55rem; border-radius: 6px; }
+  tr.voided td { opacity: 0.55; }
+  tr.voided td.num { text-decoration: line-through; }
 </style>
 </head>
 <body>
@@ -85,7 +93,7 @@
   <div class="card">
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+        <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Amount</th><th class="num">Balance</th><th>Actions</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -120,6 +128,22 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="voidModal">
+  <div class="modal-box">
+    <h3 id="voidModalTitle">Void Entry</h3>
+    <div class="hint" style="margin-top:-0.3rem;">This keeps it visible in the history but removes it from the balance. It can't be undone from here.</div>
+    <div class="field-group">
+      <label>Admin PIN</label>
+      <input type="password" id="voidPin" inputmode="numeric" autocomplete="off">
+    </div>
+    <div id="voidError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelVoid" type="button">Cancel</button>
+      <button class="btn-danger" id="confirmVoid" type="button" style="padding:0.6rem 1.1rem;">Void</button>
+    </div>
+  </div>
+</div>
+
 <footer class="footer-credit">Powered by IntelliTech Solutions</footer>
 
 <script>
@@ -141,14 +165,29 @@ async function load() {
   rowsEl.innerHTML = '';
   entries.forEach((e) => {
     const tr = document.createElement('tr');
-    tr.className = e.type;
+    tr.className = e.type + (e.voided ? ' voided' : '');
     const date = new Date(e.occurred_at).toLocaleDateString();
     const sign = e.type === 'invoice' ? '+' : '-';
     const label = e.type === 'payment' ? (METHOD_LABELS[e.label] || e.label) : e.label.replace(/\b\w/g, (c) => c.toUpperCase());
     const detail = e.invoice_id
       ? `<a class="invoice-link" href="/invoice.html?id=${e.invoice_id}">${label}</a>`
       : (e.type === 'payment' ? `<a class="invoice-link" href="/receipt.html?id=${e.id}">${label}</a>` : label);
-    tr.innerHTML = `<td>${date}</td><td><span class="type-badge">${e.type}</span></td><td>${detail}</td><td class="num">${sign}₹${Number(e.amount).toFixed(2)}</td><td class="num">₹${e.runningBalance.toFixed(2)}</td>`;
+
+    let actions = '';
+    if (e.voided) {
+      actions = '<span class="voided-badge">Voided</span>';
+    } else if (e.type === 'invoice' && e.invoice_id) {
+      actions = `<div class="row-actions">
+        <a href="/edit-invoice.html?id=${e.invoice_id}">Edit</a>
+        <button class="btn-danger" data-void-type="invoice" data-void-id="${e.invoice_id}">Void</button>
+      </div>`;
+    } else if (e.type === 'payment' && !e.invoice_id) {
+      actions = `<div class="row-actions">
+        <button class="btn-danger" data-void-type="payment" data-void-id="${e.id}">Void</button>
+      </div>`;
+    }
+
+    tr.innerHTML = `<td>${date}</td><td><span class="type-badge">${e.type}</span></td><td>${detail}</td><td class="num">${sign}₹${Number(e.amount).toFixed(2)}</td><td class="num">₹${e.runningBalance.toFixed(2)}</td><td>${actions}</td>`;
     rowsEl.appendChild(tr);
   });
   document.getElementById('customerName').textContent = customer.name;
@@ -208,6 +247,52 @@ document.getElementById('saveOldBalance').addEventListener('click', async () => 
     return;
   }
   closeOldBalanceModal();
+  load();
+});
+
+const voidModal = document.getElementById('voidModal');
+const voidError = document.getElementById('voidError');
+const voidPin = document.getElementById('voidPin');
+let pendingVoid = null;
+
+function openVoidModal(type, id) {
+  pendingVoid = { type, id };
+  document.getElementById('voidModalTitle').textContent = type === 'invoice' ? 'Void Invoice' : 'Void Payment';
+  voidPin.value = '';
+  voidError.textContent = '';
+  voidModal.classList.add('open');
+  voidPin.focus();
+}
+function closeVoidModal() { voidModal.classList.remove('open'); pendingVoid = null; }
+
+document.getElementById('rows').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-void-id]');
+  if (!btn) return;
+  openVoidModal(btn.dataset.voidType, btn.dataset.voidId);
+});
+document.getElementById('cancelVoid').addEventListener('click', closeVoidModal);
+voidModal.addEventListener('click', (e) => { if (e.target === voidModal) closeVoidModal(); });
+
+document.getElementById('confirmVoid').addEventListener('click', async () => {
+  if (!pendingVoid) return;
+  const url = pendingVoid.type === 'invoice'
+    ? `/api/invoices/${pendingVoid.id}/void`
+    : `/api/payments/${pendingVoid.id}/void`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: voidPin.value }),
+  });
+  const data = await res.json();
+  if (res.status === 401) {
+    voidError.textContent = 'Incorrect PIN.';
+    return;
+  }
+  if (!data.ok) {
+    voidError.textContent = data.error;
+    return;
+  }
+  closeVoidModal();
   load();
 });
 </script>
