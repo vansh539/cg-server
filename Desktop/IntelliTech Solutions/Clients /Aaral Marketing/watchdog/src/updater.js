@@ -18,7 +18,14 @@ const NPM_CMD = process.platform === 'win32'
 
 function runCommand(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { cwd, windowsHide: true, timeout: 5 * 60 * 1000 }, (err, stdout, stderr) => {
+    // shell:true is required on Windows to execFile a .cmd (npm.cmd) at all
+    // -- Node hardened child_process against CVE-2024-27980 by refusing to
+    // spawn .bat/.cmd files directly, even by absolute path, without it.
+    // Safe here: every arg passed through this codebase is an internally
+    // constructed literal (git subcommands, commit hashes, 'install'/
+    // '--omit=dev'/'run'/'migrate'), never unsanitized external input.
+    const opts = { cwd, windowsHide: true, timeout: 5 * 60 * 1000, shell: process.platform === 'win32' };
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
       if (err) return reject(new Error(`${cmd} ${args.join(' ')} failed: ${stderr || err.message}`));
       resolve(stdout.trim());
     });
