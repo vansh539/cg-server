@@ -219,10 +219,23 @@ async function loadDay() {
   const key = dateKey(currentDate);
   document.getElementById('period-label').textContent = key;
   document.getElementById('bs-date-display').textContent = fmtHeaderDate(currentDate);
-  document.getElementById('save-note').textContent = '';
-  const res = await fetch(`${API}/${key}`);
-  current = await res.json();
-  renderAll();
+  const note = document.getElementById('save-note');
+  note.textContent = '';
+  try {
+    const res = await fetch(`${API}/${key}`);
+    const body = await res.json();
+    // Previously this never checked res.ok — on failure (e.g. a corrupted
+    // balance-sheet.json, exactly what took the shop PC down once already)
+    // `body` is an {error} object, not a real day, and renderAll() would
+    // throw trying to .map() a missing cashIn/bankIn/etc array — leaving a
+    // blank, unexplained page with the failure only visible in devtools.
+    if (!res.ok) throw new Error(body.error || 'Could not load this day');
+    current = body;
+    renderAll();
+  } catch (err) {
+    note.style.color = '#dc2626';
+    note.textContent = `Could not load ${key}: ${err.message}`;
+  }
 }
 
 async function saveDay() {

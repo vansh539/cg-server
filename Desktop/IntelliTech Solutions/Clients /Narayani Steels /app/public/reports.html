@@ -64,6 +64,7 @@ table.rtbl{width:100%;border-collapse:collapse;font-size:12.5px}
     </div>
     <button class="today-btn" onclick="jumpToToday()">Jump to today</button>
     <div class="summary-grid" id="summary-grid"></div>
+    <div class="empty-note" id="report-err" style="display:none;color:#dc2626"></div>
   </div>
 
   <div class="card">
@@ -222,12 +223,22 @@ function renderSummary(rows) {
 }
 
 async function loadReport() {
-  const res = await fetch(`${API}/report?type=${periodType}&date=${encodeURIComponent(anchorDate.toISOString())}`);
-  if (!res.ok) return;
-  const report = await res.json();
-  updatePeriodLabel(report.periodStart, report.periodEnd);
-  renderRows(report.rows);
-  renderSummary(report.rows);
+  const errEl = document.getElementById('report-err');
+  try {
+    const res = await fetch(`${API}/report?type=${periodType}&date=${encodeURIComponent(anchorDate.toISOString())}`);
+    const report = await res.json();
+    if (!res.ok) throw new Error(report.error || 'Could not load report');
+    errEl.style.display = 'none';
+    updatePeriodLabel(report.periodStart, report.periodEnd);
+    renderRows(report.rows);
+    renderSummary(report.rows);
+  } catch (err) {
+    // Previously a failed fetch silently left whatever was on screen before
+    // (stale data from a different period, or blank on first load) with no
+    // indication anything had gone wrong.
+    errEl.textContent = `Could not load this report: ${err.message}`;
+    errEl.style.display = 'block';
+  }
 }
 
 async function init() {

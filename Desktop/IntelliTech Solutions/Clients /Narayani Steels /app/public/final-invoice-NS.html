@@ -111,6 +111,7 @@ input[type=number]{-moz-appearance:textfield}
         <div class="fg"><label>Lorry No.</label><input id="f-lorry" type="text" placeholder="TS08AB1234"></div>
       </div>
     </div>
+    <div id="module-warn-banner" style="display:none;background:#fef2f2;border:1.5px solid #fecaca;color:#991b1b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600"></div>
     <div class="card"><h3>Items</h3>
       <table class="itbl"><thead><tr><th style="width:78px">Qty (kg)</th><th>Particulars</th><th style="width:50px">Pcs.</th><th style="width:82px">Rate</th><th style="width:90px;text-align:right">Amount</th><th style="width:28px"></th></tr></thead><tbody id="tbody"></tbody></table>
       <div style="font-size:11px;color:#888;margin:-6px 0 10px">Leave Qty (kg) blank and fill Pcs + Rate for items sold by piece (no kg stock kept) — amount = Pcs × Rate.</div>
@@ -231,13 +232,23 @@ function go(n){
 function addRow(){rows.push({q:'',name:'',p:'',r:'',stockItemId:null,_deducted:false});renderRows();}
 function renderRows(){
   const tb=document.getElementById('tbody');tb.innerHTML='';
-  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td><input type="text" list="stock-items-datalist" value="${row.name}" placeholder="Item" oninput="upd(${i},'name',this.value);matchStockItem(${i},this.value)"></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});recalc();
+  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td style="position:relative"><input type="text" list="stock-items-datalist" value="${row.name}" placeholder="Item" style="padding-right:20px" oninput="upd(${i},'name',this.value);matchStockItem(${i},this.value)"><span id="stockbadge-${i}" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:12px;pointer-events:none"></span></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});rows.forEach((row,i)=>updateStockBadge(i));recalc();
 }
 let stockCategories=[],stockItems=[];
 function stockDisplayName(item){const cat=stockCategories.find(c=>c.id===item.categoryId);const base=cat?`${item.name} (${cat.name})`:item.name;return item.unit==='pcs'?`${base} — sold by piece`:base;}
+let stockLoadFailed=false,ledgerLoadFailed=false;
+function updateModuleWarnBanner(){
+  const banner=document.getElementById('module-warn-banner');
+  const msgs=[];
+  if(stockLoadFailed)msgs.push('Stock module failed to load — items will NOT be linked to stock or deducted this session. Reload the page to retry.');
+  if(ledgerLoadFailed)msgs.push('Ledger module failed to load — customer linking/Finalize & Send unavailable this session. Reload the page to retry.');
+  banner.style.display=msgs.length?'block':'none';
+  banner.textContent=msgs.length?'⚠ '+msgs.join(' ⚠ '):'';
+}
 async function loadStockDatalist(){
   try{
     const [catsRes,itemsRes]=await Promise.all([fetch('/api/stock/categories'),fetch('/api/stock/items')]);
+    if(!catsRes.ok||!itemsRes.ok)throw new Error('Stock API returned an error');
     stockCategories=await catsRes.json();
     // Both kg and pcs stock items are offered here. Loading Charges/GST base
     // are still computed from the kg total only (see rowAmount/recalc) — a
@@ -245,30 +256,66 @@ async function loadStockDatalist(){
     // contributes 0 to that kg total, same as any manually-typed pcs-only row.
     stockItems=await itemsRes.json();
     document.getElementById('stock-items-datalist').innerHTML=stockItems.map(it=>`<option value="${stockDisplayName(it)}">`).join('');
-  }catch(err){/* stock module optional; billing works without it */}
+    stockLoadFailed=false;
+  }catch(err){
+    // Previously this failed with zero indication anywhere — every item row
+    // would just show unmatched (now ⚠, before this session's fix nothing
+    // at all) with no way for the operator to tell "stock is down today" vs
+    // "these specific items aren't in stock." A whole-module failure gets
+    // its own banner instead of looking like 100% of items are unstocked.
+    stockLoadFailed=true;
+  }
+  updateModuleWarnBanner();
 }
 function matchStockItem(i,value){
   const trimmed=value.trim().toLowerCase();
-  const match=stockItems.find(it=>stockDisplayName(it).toLowerCase()===trimmed);
+  let match=stockItems.find(it=>stockDisplayName(it).toLowerCase()===trimmed);
+  // Fallback: if the operator typed/left the bare item name (no "(Category)"
+  // suffix — e.g. they didn't click the datalist suggestion), still link it
+  // to stock as long as that bare name is unambiguous across all items. This
+  // is what silently broke stock deduction before: a row that visibly named
+  // a real item but didn't hit the exact "Name (Category)" string just never
+  // got a stockItemId, so it was quietly excluded from performStockDeduction
+  // with nothing on screen indicating it — a 5-item Chitti could deduct only
+  // 3 with no error or warning shown.
+  if(!match){
+    const byBareName=stockItems.filter(it=>it.name.trim().toLowerCase()===trimmed);
+    if(byBareName.length===1)match=byBareName[0];
+  }
   rows[i].stockItemId=match?match.id:null;
   // Datalist options are shown as "Name (Category)" so the operator can tell
   // items with the same name apart while picking — but the category suffix
-  // shouldn't leak into what gets printed on the Chitti. On an exact match,
+  // shouldn't leak into what gets printed on the Chitti. On any match,
   // collapse the row's stored/displayed name back down to the bare item name.
   if(match){
     rows[i].name=match.name;
     const inp=document.getElementById('tbody').children[i]?.children[1]?.querySelector('input');
     if(inp)inp.value=match.name;
   }
+  updateStockBadge(i);
+}
+function updateStockBadge(i){
+  const badge=document.getElementById('stockbadge-'+i);
+  if(!badge)return;
+  const row=rows[i];
+  const hasQty=(parseFloat(row.q)||0)>0||(parseFloat(row.p)||0)>0;
+  if(!row.name.trim()||!hasQty){badge.textContent='';badge.title='';}
+  else if(row.stockItemId){badge.textContent='🔗';badge.title='Linked to stock — will be deducted';}
+  else{badge.textContent='⚠';badge.title='Not linked to a stock item — will NOT be deducted from stock. Pick the item from the dropdown suggestions to link it.';}
 }
 let ledgerCustomers=[];
 async function loadLedgerCustomers(){
   try{
     const res=await fetch('/api/ledger/customers');
+    if(!res.ok)throw new Error('Ledger API returned an error');
     ledgerCustomers=await res.json();
     const sel=document.getElementById('f-customer');
     sel.innerHTML='<option value="">— Walk-in, not tracked —</option>'+ledgerCustomers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  }catch(err){/* ledger module optional; billing works without it */}
+    ledgerLoadFailed=false;
+  }catch(err){
+    ledgerLoadFailed=true;
+  }
+  updateModuleWarnBanner();
 }
 async function onCustomerPick(){
   const id=document.getElementById('f-customer').value;
@@ -281,10 +328,22 @@ async function onCustomerPick(){
   try{
     const res=await fetch(`/api/ledger/customers/${id}`);
     const cust=await res.json();
+    if(!res.ok||typeof cust.balance!=='number')throw new Error(cust.error||'Could not load this customer\'s balance');
     oldbalEl.value=cust.balance;
     oldbalEl.readOnly=true;oldbalEl.style.background='#f0f0f0';oldbalEl.style.color='#666';
     recalc();
-  }catch(err){/* ignore — leave old balance as whatever was last typed */}
+  }catch(err){
+    // Previously this silently left whatever was in the field — if it still
+    // held a PRIOR customer's old balance (or a deleted customer's stale
+    // selection), that wrong number could get printed on this customer's
+    // invoice with nothing indicating the fetch had failed. Now it clears
+    // the field and locks it, so a stale/wrong balance can never be printed
+    // — the operator has to notice the field is empty and retry instead.
+    oldbalEl.value='';
+    oldbalEl.readOnly=true;oldbalEl.style.background='#fef2f2';oldbalEl.style.color='#991b1b';
+    oldbalEl.title=`Could not load old balance: ${err.message}. Re-select the customer to retry.`;
+    recalc();
+  }
 }
 // A row is billed as Pcs x Rate only when all three hold: no Qty(kg) was
 // entered, Pcs was entered, and Rate was entered — e.g. one-off items the
@@ -297,7 +356,7 @@ function rowStockQty(row){
   return item&&item.unit==='pcs'?(parseFloat(row.p)||0):(parseFloat(row.q)||0);
 }
 function calcAmt(row){const a=rowAmount(row);return a>0?''+Math.round(a).toLocaleString('en-IN'):'—';}
-function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);recalc();}
+function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);if(f==='q'||f==='p')updateStockBadge(i);recalc();}
 function delRow(i){rows.splice(i,1);if(!rows.length)rows.push({q:'',name:'',p:'',r:''});renderRows();}
 function gc(id){return parseFloat(document.getElementById(id).value)||0;}
 function fmt(v){return''+Math.round(v).toLocaleString('en-IN');}
@@ -356,6 +415,7 @@ function setLedgerNote(kind,text){
   note.style.display='block';
   note.textContent=text;
   if(kind==='ok'){note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';}
+  else if(kind==='warn'){note.style.background='#fffbeb';note.style.borderColor='#fde68a';note.style.color='#92400e';}
   else{note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';}
 }
 async function recordInvoice(){
@@ -402,16 +462,18 @@ async function recordInvoice(){
   btn.textContent='📦 Updating stock…';
   const stockHasPending=rows.some(r=>r.stockItemId&&rowStockQty(r)>0&&!r._deducted);
   const stock=stockHasPending?await performStockDeduction():{succeeded:[],failure:null};
-  const stockNote=stock.failure
+  const unmatched=unmatchedItemNames();
+  const stockNote=(stock.failure
     ? ` Stock deduction failed: ${stock.failure}.`
-    : (stock.succeeded.length?` Stock deducted: ${stock.succeeded.join('; ')}.`:'');
+    : (stock.succeeded.length?` Stock deducted: ${stock.succeeded.join('; ')}.`:''))
+    +(unmatched.length?` NOT deducted (no stock match): ${unmatched.join('; ')}.`:'');
   btn.textContent='📱 Sending…';
   try{
     const res=await fetch(`/api/ledger/invoices/${recordedInvoiceId}/send-whatsapp`,{method:'POST'});
     const body=await res.json();
     if(!res.ok)throw new Error(body.error||'Send failed');
     btn.textContent='✓ Recorded & Sent';
-    setLedgerNote('ok',`Recorded${invoiceNo?` as Invoice #${invoiceNo}`:''}${customerName?` for ${customerName}`:''} and sent via WhatsApp.${stockNote}`);
+    setLedgerNote(unmatched.length?'warn':'ok',`Recorded${invoiceNo?` as Invoice #${invoiceNo}`:''}${customerName?` for ${customerName}`:''} and sent via WhatsApp.${stockNote}`);
   }catch(err){
     btn.disabled=false;
     btn.textContent='🔄 Retry Send';
@@ -432,6 +494,13 @@ function updateDeductButton(){
   }else{
     btn.style.display='none';
   }
+}
+function unmatchedItemNames(){
+  // Rows that have a real name + quantity entered but never got linked to a
+  // stock item — these are silently excluded from performStockDeduction, so
+  // surface them explicitly wherever deduction results are reported instead
+  // of letting "Deducted: X, Y" quietly imply everything was deducted.
+  return rows.filter(r=>r.name.trim()&&!r.stockItemId&&((parseFloat(r.q)||0)>0||(parseFloat(r.p)||0)>0)).map(r=>r.name);
 }
 async function performStockDeduction(){
   const pending=rows.filter(r=>r.stockItemId&&rowStockQty(r)>0&&!r._deducted);
@@ -458,11 +527,17 @@ async function deductStock(){
   if(!hasPending)return;
   btn.disabled=true;
   const{succeeded,failure}=await performStockDeduction();
+  const unmatched=unmatchedItemNames();
+  const unmatchedNote=unmatched.length?` NOT deducted (no stock match — pick from the item dropdown to link): ${unmatched.join('; ')}.`:'';
   note.style.display='block';
   if(failure){
     btn.disabled=false;
     note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';
-    note.textContent=`Error: ${failure}.${succeeded.length?` Already deducted: ${succeeded.join('; ')}.`:''} Click again to retry the rest.`;
+    note.textContent=`Error: ${failure}.${succeeded.length?` Already deducted: ${succeeded.join('; ')}.`:''} Click again to retry the rest.${unmatchedNote}`;
+  }else if(unmatched.length){
+    btn.dataset.deducted='true';btn.textContent='✓ Stock Deducted';
+    note.style.background='#fffbeb';note.style.borderColor='#fde68a';note.style.color='#92400e';
+    note.textContent=`Deducted: ${succeeded.join('; ')||'none'}.${unmatchedNote}`;
   }else{
     btn.dataset.deducted='true';btn.textContent='✓ Stock Deducted';
     note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';
