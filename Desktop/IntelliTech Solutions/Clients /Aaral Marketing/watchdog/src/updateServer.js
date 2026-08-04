@@ -40,6 +40,8 @@ function startUpdateServer({ restartApps, checkHealth, notifyAdmins }) {
           currentStatus = { state: result.ok ? 'succeeded' : 'failed', finishedAt: new Date().toISOString(), result };
           if (result.ok) {
             notifyAdmins(`✅ *Aaral updated* to commit ${result.newCommit.slice(0, 7)}.`);
+          } else if (result.notStarted) {
+            notifyAdmins(`⚠️ *Aaral update could not start* (${result.reason}) — nothing was changed, site is unaffected.`);
           } else if (result.rolledBack) {
             notifyAdmins(`⚠️ *Aaral update failed* (${result.reason}) — rolled back to the previous version successfully.`);
           } else {

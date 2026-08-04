@@ -104,6 +104,23 @@ test('applyUpdate reports rollbackError when rollback itself fails', async () =>
   assert.match(result.rollbackError, /git reset failed/);
 });
 
+test('applyUpdate reports notStarted when it fails before touching the repo', async () => {
+  process.env.GITHUB_PAT = 'fake-token';
+  const run = async (cmd, args) => {
+    if (args[0] === 'rev-parse') throw new Error('git: command not found');
+    return '';
+  };
+  const restartApps = async () => { throw new Error('should never be called'); };
+  const checkHealth = async () => true;
+
+  const result = await applyUpdate({ repoRoot: '/fake/repo', run, restartApps, checkHealth, healthTimeoutMs: 200, healthPollMs: 10 });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.notStarted, true);
+  assert.equal(result.rolledBack, true);
+  assert.match(result.reason, /git: command not found/);
+});
+
 test('applyUpdate rejects a second call while one is already in progress', async () => {
   writeLock({ previousCommit: 'zzz', step: 'pulling', startedAt: new Date().toISOString() });
   const run = async () => '';

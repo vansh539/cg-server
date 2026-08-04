@@ -98,8 +98,14 @@ async function applyUpdate({
     return { ok: false, reason: 'update-already-in-progress' };
   }
 
-  const previousCommit = await run('git', ['rev-parse', 'HEAD'], repoRoot);
-  writeLock({ previousCommit, step: 'starting', startedAt: new Date().toISOString() });
+  let previousCommit;
+  try {
+    previousCommit = await run('git', ['rev-parse', 'HEAD'], repoRoot);
+    writeLock({ previousCommit, step: 'starting', startedAt: new Date().toISOString() });
+  } catch (err) {
+    // Nothing was touched yet, so there's nothing to roll back -- the site is unaffected.
+    return { ok: false, reason: err.message, rolledBack: true, notStarted: true };
+  }
 
   try {
     writeLock({ previousCommit, step: 'pulling', startedAt: new Date().toISOString() });
