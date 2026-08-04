@@ -5,6 +5,17 @@ const { execFile } = require('child_process');
 
 const LOCK_FILE = path.join(__dirname, '..', '.update-lock.json');
 
+// A long-running Windows service (this watchdog runs as one, under SYSTEM)
+// can end up with a stale/incomplete PATH regardless of what's actually
+// registered machine-wide -- confirmed live: `npm` resolved fine for an
+// interactive user but ENOENT'd here. Every Node install ships npm.cmd in
+// the same directory as node.exe, so deriving it from process.execPath
+// sidesteps PATH lookup for npm entirely, on any account, permanently.
+// git isn't included here because it hasn't shown this failure mode.
+const NPM_CMD = process.platform === 'win32'
+  ? path.join(path.dirname(process.execPath), 'npm.cmd')
+  : 'npm';
+
 function runCommand(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, { cwd, windowsHide: true, timeout: 5 * 60 * 1000 }, (err, stdout, stderr) => {
@@ -69,10 +80,10 @@ async function rollbackTo(commit, { repoRoot, run, npmDirs, migrateDirs, restart
   try {
     await run('git', ['reset', '--hard', commit], repoRoot);
     for (const dir of npmDirs) {
-      await run('npm', ['install', '--omit=dev'], path.join(repoRoot, dir));
+      await run(NPM_CMD, ['install', '--omit=dev'], path.join(repoRoot, dir));
     }
     for (const dir of migrateDirs) {
-      await run('npm', ['run', 'migrate'], path.join(repoRoot, dir));
+      await run(NPM_CMD, ['run', 'migrate'], path.join(repoRoot, dir));
     }
     await restartApps(watchedApps);
     const healthy = await waitForHealth(watchedApps, checkHealth, healthTimeoutMs, healthPollMs);
@@ -113,12 +124,12 @@ async function applyUpdate({
 
     writeLock({ previousCommit, step: 'installing', startedAt: new Date().toISOString() });
     for (const dir of npmDirs) {
-      await run('npm', ['install', '--omit=dev'], path.join(repoRoot, dir));
+      await run(NPM_CMD, ['install', '--omit=dev'], path.join(repoRoot, dir));
     }
 
     writeLock({ previousCommit, step: 'migrating', startedAt: new Date().toISOString() });
     for (const dir of migrateDirs) {
-      await run('npm', ['run', 'migrate'], path.join(repoRoot, dir));
+      await run(NPM_CMD, ['run', 'migrate'], path.join(repoRoot, dir));
     }
 
     writeLock({ previousCommit, step: 'restarting', startedAt: new Date().toISOString() });
