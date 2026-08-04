@@ -5,31 +5,28 @@ const { execFile } = require('child_process');
 
 const LOCK_FILE = path.join(__dirname, '..', '.update-lock.json');
 
-// A long-running Windows service (this watchdog runs as one, under SYSTEM)
-// can end up with a stale/incomplete PATH regardless of what's actually
-// registered machine-wide -- confirmed live: `npm` resolved fine for an
-// interactive user but ENOENT'd here. Every Node install ships npm.cmd in
-// the same directory as node.exe, so deriving it from process.execPath
-// sidesteps PATH lookup for npm entirely, on any account, permanently.
-// git isn't included here because it hasn't shown this failure mode.
-const NPM_CMD = process.platform === 'win32'
-  ? path.join(path.dirname(process.execPath), 'npm.cmd')
-  : 'npm';
-
 function runCommand(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
-    // shell:true is required on Windows to execFile a .cmd (npm.cmd) at all
-    // -- Node hardened child_process against CVE-2024-27980 by refusing to
-    // spawn .bat/.cmd files directly, even by absolute path, without it.
-    // Safe here: every arg passed through this codebase is an internally
-    // constructed literal (git subcommands, commit hashes, 'install'/
-    // '--omit=dev'/'run'/'migrate'), never unsanitized external input.
-    const opts = { cwd, windowsHide: true, timeout: 5 * 60 * 1000, shell: process.platform === 'win32' };
-    execFile(cmd, args, opts, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, windowsHide: true, timeout: 5 * 60 * 1000 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(`${cmd} ${args.join(' ')} failed: ${stderr || err.message}`));
       resolve(stdout.trim());
     });
   });
+}
+
+// Two prior attempts at this both failed on Windows: resolving npm via PATH
+// (stale/incomplete PATH for the SYSTEM-context service), then spawning
+// npm.cmd directly (Node blocks bare .cmd execFile post-CVE-2024-27980, and
+// shell:true's automatic quoting breaks on "C:\Program Files\..."'s space).
+// Going straight through node.exe -- the exact binary already running this
+// code, via process.execPath -- to npm's actual JS entry point sidesteps
+// PATH, .cmd spawning, and shell quoting all at once: node.exe is a normal
+// executable taking a plain .js path as an argument, nothing more exotic
+// than that.
+function npmInvocation(args) {
+  if (process.platform !== 'win32') return { cmd: 'npm', args };
+  const npmCliJs = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  return { cmd: process.execPath, args: [npmCliJs, ...args] };
 }
 
 function gitAuthArgs() {
@@ -87,10 +84,12 @@ async function rollbackTo(commit, { repoRoot, run, npmDirs, migrateDirs, restart
   try {
     await run('git', ['reset', '--hard', commit], repoRoot);
     for (const dir of npmDirs) {
-      await run(NPM_CMD, ['install', '--omit=dev'], path.join(repoRoot, dir));
+      const install = npmInvocation(['install', '--omit=dev']);
+      await run(install.cmd, install.args, path.join(repoRoot, dir));
     }
     for (const dir of migrateDirs) {
-      await run(NPM_CMD, ['run', 'migrate'], path.join(repoRoot, dir));
+      const migrate = npmInvocation(['run', 'migrate']);
+      await run(migrate.cmd, migrate.args, path.join(repoRoot, dir));
     }
     await restartApps(watchedApps);
     const healthy = await waitForHealth(watchedApps, checkHealth, healthTimeoutMs, healthPollMs);
@@ -131,12 +130,14 @@ async function applyUpdate({
 
     writeLock({ previousCommit, step: 'installing', startedAt: new Date().toISOString() });
     for (const dir of npmDirs) {
-      await run(NPM_CMD, ['install', '--omit=dev'], path.join(repoRoot, dir));
+      const install = npmInvocation(['install', '--omit=dev']);
+      await run(install.cmd, install.args, path.join(repoRoot, dir));
     }
 
     writeLock({ previousCommit, step: 'migrating', startedAt: new Date().toISOString() });
     for (const dir of migrateDirs) {
-      await run(NPM_CMD, ['run', 'migrate'], path.join(repoRoot, dir));
+      const migrate = npmInvocation(['run', 'migrate']);
+      await run(migrate.cmd, migrate.args, path.join(repoRoot, dir));
     }
 
     writeLock({ previousCommit, step: 'restarting', startedAt: new Date().toISOString() });
