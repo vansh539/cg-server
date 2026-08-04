@@ -108,7 +108,14 @@ async function applyUpdate({
   npmDirs = DEFAULT_NPM_DIRS,
   migrateDirs = DEFAULT_MIGRATE_DIRS,
   watchedApps = DEFAULT_WATCHED_APPS,
-  healthTimeoutMs = 60000,
+  // aaral-bridge's own /health endpoint doesn't come up until WhatsApp Web
+  // fully connects, which has taken up to ~3 minutes on this machine (its
+  // own internal startup watchdog gives it that long before self-killing
+  // for PM2 to retry) -- 60s here was declaring it unhealthy and rolling
+  // back a restart that just needed more time, confirmed live. Comfortably
+  // clears that 3-minute ceiling; aaral-dashboard boots in seconds
+  // regardless, so this only adds wait time in the slow-bridge case.
+  healthTimeoutMs = 210000,
   healthPollMs = 3000,
 }) {
   if (readLock()) {
@@ -165,7 +172,7 @@ async function recoverInterruptedUpdate({ repoRoot, run = runCommand, restartApp
   const result = await rollbackTo(lock.previousCommit, {
     repoRoot, run,
     npmDirs: DEFAULT_NPM_DIRS, migrateDirs: DEFAULT_MIGRATE_DIRS, watchedApps: DEFAULT_WATCHED_APPS,
-    restartApps, checkHealth, healthTimeoutMs: 60000, healthPollMs: 3000,
+    restartApps, checkHealth, healthTimeoutMs: 210000, healthPollMs: 3000,
   });
   clearLock();
 
