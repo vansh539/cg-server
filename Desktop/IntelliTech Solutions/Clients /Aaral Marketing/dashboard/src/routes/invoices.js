@@ -12,8 +12,8 @@ const router = express.Router();
 router.post('/invoices', async (req, res) => {
   try {
     const {
-      customerId, items, unloadingCharge, paidNow, createdBy, sendWhatsapp,
-      invoiceDate, destination, paperWidthMm, paperHeightMm,
+      customerId, items, unloadingCharge, paidNow, createdBy,
+      invoiceDate, destination,
     } = req.body;
     const result = await createInvoice({ customerId, items, unloadingCharge, paidNow, createdBy, invoiceDate, destination });
 
@@ -29,22 +29,13 @@ router.post('/invoices', async (req, res) => {
         ? `Payment of ₹${result.invoice.total} received from ${customer.name}. ${balanceLine}`
         : `Invoice #${result.invoice.invoice_number} (₹${result.invoice.total}) issued to ${customer.name}. ${balanceLine}`;
 
-      if (sendWhatsapp) {
-        const pdfItems = result.items.map((item) => ({
-          s_no: item.sNo, particulars: item.particulars, grade: item.grade,
-          vch: item.vch, qty: item.qty, rate: item.rate, amount: item.amount,
-        }));
-        renderInvoicePdf({
-          invoice: result.invoice, items: pdfItems, customerName: customer.name,
-          paperWidthMm, paperHeightMm,
-        })
-          .then((pdfBuffer) => notifyWithPdf(
-            customer.phone_number, customerMsg, pdfBuffer, `Invoice-${result.invoice.invoice_number}.pdf`
-          ))
-          .catch((err) => console.error('[Invoices] Failed to generate/send invoice PDF:', err.message));
-      } else {
-        notify(customer.phone_number, customerMsg);
-      }
+      // The PDF itself is sent on demand via the dashboard's "Send PDF on
+      // WhatsApp" button (POST /invoices/:id/send-whatsapp) instead of
+      // automatically here -- that used to be a checkbox on this same
+      // request, but a fire-and-forget PDF render+send with failures only
+      // logged server-side meant staff had no way to tell it hadn't
+      // actually gone through.
+      notify(customer.phone_number, customerMsg);
       const { rows: admins } = await query('SELECT phone_number FROM admins WHERE active = true');
       for (const admin of admins) notify(admin.phone_number, adminMsg);
     }
@@ -123,6 +114,50 @@ router.get('/invoices/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="Invoice-${invoice.invoice_number}.pdf"`);
   res.send(pdfBuffer);
+});
+
+// Explicit, on-demand send -- triggered by the dashboard's "Send PDF on
+// WhatsApp" button rather than bundled into invoice creation, specifically
+// so a failure (bot offline, PDF render error, etc) is reported back to
+// whoever clicked the button instead of only ever reaching a server log.
+router.post('/invoices/:id/send-whatsapp', async (req, res) => {
+  try {
+    const { paperWidthMm, paperHeightMm } = req.body;
+    const { rows: invoiceRows } = await query(
+      `SELECT i.*, c.name AS customer_name, c.phone_number AS customer_phone FROM invoices i
+       LEFT JOIN customers c ON c.id = i.customer_id
+       WHERE i.id = $1`,
+      [req.params.id]
+    );
+    if (invoiceRows.length === 0) return res.status(404).json({ ok: false, error: 'Invoice not found' });
+    const invoice = invoiceRows[0];
+    if (!invoice.customer_id) {
+      return res.status(400).json({ ok: false, error: 'This invoice has no customer on file (walk-in sale) -- nothing to send it to.' });
+    }
+
+    const { rows: itemRows } = await query(
+      'SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY s_no ASC',
+      [req.params.id]
+    );
+    const balance = await balances.getBalanceByCustomerId(invoice.customer_id);
+    const balanceLine = balance ? ` Balance: ₹${balance.balance}` : '';
+    const message = invoice.paid_now
+      ? `Payment of ₹${invoice.total} received, thank you!${balanceLine}`
+      : `Invoice #${invoice.invoice_number} for ₹${invoice.total}.${balanceLine}`;
+
+    const pdfBuffer = await renderInvoicePdf({
+      invoice, items: itemRows, customerName: invoice.customer_name, paperWidthMm, paperHeightMm,
+    });
+    const sent = await notifyWithPdf(
+      invoice.customer_phone, message, pdfBuffer, `Invoice-${invoice.invoice_number}.pdf`
+    );
+    if (!sent) {
+      return res.status(502).json({ ok: false, error: 'The WhatsApp bot did not confirm delivery -- it may be offline or the number may be invalid.' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 router.put('/invoices/:id', requirePin, async (req, res) => {

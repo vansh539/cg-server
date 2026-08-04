@@ -197,14 +197,12 @@
     <div class="toggle-row no-print">
       <input type="checkbox" id="paidNow" checked><label style="margin:0;">Paid now</label>
     </div>
-    <div class="toggle-row no-print">
-      <input type="checkbox" id="sendWhatsapp" disabled><label style="margin:0;">Send invoice PDF to customer via WhatsApp</label>
-    </div>
 
     <div class="no-print" style="margin-top:1.4rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
       <button id="saveBtn" class="btn-primary" type="button">Save</button>
       <button id="printBtn" class="btn-primary" type="button">Print</button>
       <button id="savePdfBtn" class="btn-primary" type="button">Save as PDF</button>
+      <button id="sendWhatsappBtn" class="btn-primary" type="button" disabled title="Save the slip for a selected customer first">Send PDF to Customer on WhatsApp</button>
     </div>
     <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
   </div>
@@ -344,13 +342,21 @@ updatePageSize();
 const searchInput = document.getElementById('customerSearch');
 const resultsBox = document.getElementById('customerResults');
 let searchTimer = null;
-const sendWhatsappCheckbox = document.getElementById('sendWhatsapp');
+const sendWhatsappBtn = document.getElementById('sendWhatsappBtn');
+let savedInvoiceId = null;
+
+function updateSendWhatsappBtn() {
+  sendWhatsappBtn.disabled = !(selectedCustomerId && savedInvoiceId);
+  sendWhatsappBtn.title = savedInvoiceId
+    ? ''
+    : 'Save the slip for a selected customer first';
+}
 
 searchInput.addEventListener('input', () => {
   clearTimeout(searchTimer);
   selectedCustomerId = null;
-  sendWhatsappCheckbox.checked = false;
-  sendWhatsappCheckbox.disabled = true;
+  savedInvoiceId = null;
+  updateSendWhatsappBtn();
   updatePrintCustomerName();
   const term = searchInput.value.trim();
   if (!term) { resultsBox.style.display = 'none'; return; }
@@ -366,7 +372,7 @@ searchInput.addEventListener('input', () => {
         document.getElementById('selectedCustomer').textContent = `Selected: ${c.name} (₹${c.balance} balance)`;
         resultsBox.style.display = 'none';
         searchInput.value = c.name;
-        sendWhatsappCheckbox.disabled = false;
+        updateSendWhatsappBtn();
         updatePrintCustomerName();
       });
       resultsBox.appendChild(div);
@@ -401,7 +407,6 @@ saveBtn.addEventListener('click', async () => {
     items: collectItems(),
     unloadingCharge: document.getElementById('unloading').value || null,
     paidNow: document.getElementById('paidNow').checked,
-    sendWhatsapp: selectedCustomerId ? sendWhatsappCheckbox.checked : false,
     invoiceDate: document.getElementById('invoiceDate').value || null,
     destination: document.getElementById('destination').value.trim() || null,
     paperWidthMm: currentPaperSize.w,
@@ -422,9 +427,32 @@ saveBtn.addEventListener('click', async () => {
   alreadySaved = true;
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saved';
+  savedInvoiceId = data.invoiceId;
+  updateSendWhatsappBtn();
   statusEl.textContent = data.invoiceNumber
     ? `Saved as Invoice #${data.invoiceNumber}. You can Print or Save as PDF as many times as you need.`
     : 'Saved (walk-in sale — not stored in the ledger). You can Print or Save as PDF as many times as you need.';
+  statusEl.style.color = 'var(--moss)';
+});
+
+sendWhatsappBtn.addEventListener('click', async () => {
+  if (!savedInvoiceId) return;
+  sendWhatsappBtn.disabled = true;
+  statusEl.textContent = 'Sending PDF on WhatsApp…';
+  statusEl.style.color = 'var(--ink-muted)';
+  const res = await fetch(`/api/invoices/${savedInvoiceId}/send-whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paperWidthMm: currentPaperSize.w, paperHeightMm: currentPaperSize.h }),
+  });
+  const data = await res.json().catch(() => ({ ok: false, error: 'Unexpected response from server' }));
+  if (!data.ok) {
+    statusEl.textContent = `Could not send on WhatsApp: ${data.error}`;
+    statusEl.style.color = 'var(--rust)';
+    sendWhatsappBtn.disabled = false;
+    return;
+  }
+  statusEl.textContent = 'Sent to the customer on WhatsApp.';
   statusEl.style.color = 'var(--moss)';
 });
 
