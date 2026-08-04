@@ -1,7 +1,7 @@
 {
   "name": "aaral-marketing-dashboard",
   "version": "1.0.0",
-  "description": "Chitti/invoice creation and customer ledger dashboard for Aaral Marketing",
+  "description": "Slip/invoice creation and customer ledger dashboard for Aaral Marketing",
   "private": true,
   "main": "server.js",
   "scripts": {

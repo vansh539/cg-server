@@ -60,10 +60,10 @@ router.post('/invoices', async (req, res) => {
   }
 });
 
-// Stateless PDF generation for the chitti's "Save as PDF" / reprint flow --
+// Stateless PDF generation for the slip's "Save as PDF" / reprint flow --
 // deliberately never touches the DB (mirrors quotations.js's stateless PDF
 // route), so it can be called any number of times without ever creating a
-// duplicate invoice, whether or not the chitti has actually been saved yet.
+// duplicate invoice, whether or not the slip has actually been saved yet.
 router.post('/invoices/pdf', async (req, res) => {
   try {
     const {
@@ -85,7 +85,7 @@ router.post('/invoices/pdf', async (req, res) => {
       paperWidthMm, paperHeightMm,
     });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="Chitti.pdf"');
+    res.setHeader('Content-Disposition', 'attachment; filename="Slip.pdf"');
     res.send(pdfBuffer);
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

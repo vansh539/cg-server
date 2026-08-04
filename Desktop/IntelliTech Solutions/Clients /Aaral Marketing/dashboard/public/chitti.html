@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>New Chitti — Aaral Marketing</title>
+<title>New Slip — Aaral Marketing</title>
 <link rel="icon" href="/assets/aaral-logo-small.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -109,14 +109,14 @@
         <a href="/">Home</a>
         <a href="/customers.html">Customers</a>
         <a href="/quotation.html">New Quotation</a>
-        <a class="active" href="/chitti.html">New Chitti</a>
+        <a class="active" href="/chitti.html">New Slip</a>
         <a href="/payment.html">New Payment</a>
         <a href="/updates.html">Updates</a>
       </nav>
     </div>
     <div class="hero-heading">
       <div class="eyebrow">Sales voucher</div>
-      <h2>New Chitti</h2>
+      <h2>New Slip</h2>
     </div>
   </div>
   <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
@@ -459,7 +459,7 @@ document.getElementById('savePdfBtn').addEventListener('click', async () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Chitti-${new Date().toISOString().slice(0, 10)}.pdf`;
+  a.download = `Slip-${new Date().toISOString().slice(0, 10)}.pdf`;
   document.body.appendChild(a);
   a.click();
   a.remove();
