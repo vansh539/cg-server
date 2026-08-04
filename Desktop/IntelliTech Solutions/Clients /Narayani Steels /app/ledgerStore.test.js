@@ -191,7 +191,7 @@ test('deleteEntry removes a manual entry and recomputes balance; unknown id thro
   assert.throws(() => store.deleteEntry('le_ghost'), /Ledger entry not found/);
 });
 
-test('updateEntry and deleteEntry reject invoice and advance entries — those stay paired with the printed invoice', () => {
+test('updateEntry rejects invoice and advance entries — editing them would desync the printed invoice', () => {
   const store = createStore(tempFile());
   const cust = store.addCustomer({ name: 'Invoice Co', phone: '1112223336' });
   store.createInvoice({
@@ -204,5 +204,83 @@ test('updateEntry and deleteEntry reject invoice and advance entries — those s
   assert.equal(advanceEntry.reason, 'advance');
 
   assert.throws(() => store.updateEntry(invoiceEntry.id, { amount: 999 }), /Only manually-added entries/);
-  assert.throws(() => store.deleteEntry(advanceEntry.id), /Only manually-added entries/);
+  assert.throws(() => store.updateEntry(advanceEntry.id, { amount: 999 }), /Only manually-added entries/);
+});
+
+test('deleteEntry on an invoice entry voids the whole invoice: itself, its paired advance entry, and the invoice record', () => {
+  const store = createStore(tempFile());
+  const cust = store.addCustomer({ name: 'Void Co', phone: '1112223337' });
+  const invoice = store.createInvoice({
+    customerId: cust.id,
+    items: [{ q: '10', name: 'Rod', p: '1', r: '5' }],
+    sub: 50, lab: 0, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 20,
+  });
+  const [invoiceEntry] = store.listEntries(cust.id);
+  assert.equal(store.getCustomer(cust.id).balance, 30);
+
+  store.deleteEntry(invoiceEntry.id);
+
+  assert.equal(store.listEntries(cust.id).length, 0);
+  assert.equal(store.getCustomer(cust.id).balance, 0);
+  assert.throws(() => store.getInvoice(invoice.id), /Invoice not found/);
+});
+
+test('deleteEntry on a standalone advance entry removes only that entry, leaving the invoice and its due entry intact', () => {
+  const store = createStore(tempFile());
+  const cust = store.addCustomer({ name: 'Partial Void Co', phone: '1112223338' });
+  const invoice = store.createInvoice({
+    customerId: cust.id,
+    items: [{ q: '10', name: 'Rod', p: '1', r: '5' }],
+    sub: 50, lab: 0, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 20,
+  });
+  const [invoiceEntry, advanceEntry] = store.listEntries(cust.id);
+
+  store.deleteEntry(advanceEntry.id);
+
+  const remaining = store.listEntries(cust.id);
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].id, invoiceEntry.id);
+  assert.equal(store.getCustomer(cust.id).balance, 50); // advance no longer offsets the due amount
+  assert.equal(store.getInvoice(invoice.id).id, invoice.id); // invoice record untouched
+});
+
+test('deleteCustomer cascades to their invoices and entries; unknown id throws', () => {
+  const store = createStore(tempFile());
+  const cust = store.addCustomer({ name: 'Delete Me', phone: '1112223339' });
+  store.addOldBalance(cust.id, 500);
+  const invoice = store.createInvoice({
+    customerId: cust.id,
+    items: [{ q: '10', name: 'Rod', p: '1', r: '5' }],
+    sub: 50, lab: 0, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 0,
+  });
+
+  store.deleteCustomer(cust.id);
+
+  assert.throws(() => store.getCustomer(cust.id), /Customer not found/);
+  assert.throws(() => store.getInvoice(invoice.id), /Invoice not found/);
+  assert.ok(!store.listCustomers().some((c) => c.id === cust.id));
+  assert.throws(() => store.deleteCustomer('cust_ghost'), /Customer not found/);
+});
+
+test('resetAll wipes every customer, invoice, and ledger entry, and resets invoice numbering', () => {
+  const store = createStore(tempFile());
+  const custA = store.addCustomer({ name: 'Reset A', phone: '1112223340' });
+  store.addCustomer({ name: 'Reset B', phone: '1112223341' });
+  store.addOldBalance(custA.id, 1000);
+  store.createInvoice({
+    customerId: custA.id,
+    items: [{ q: '10', name: 'Rod', p: '1', r: '5' }],
+    sub: 50, lab: 0, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 0,
+  });
+
+  store.resetAll();
+
+  assert.deepEqual(store.listCustomers(), []);
+  const newCust = store.addCustomer({ name: 'Post Reset', phone: '1112223342' });
+  const newInvoice = store.createInvoice({
+    customerId: newCust.id,
+    items: [{ q: '1', name: 'Rod', p: '', r: '10' }],
+    sub: 10, lab: 0, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 0,
+  });
+  assert.equal(newInvoice.invoiceNo, 1); // counter restarted, not carried over
 });

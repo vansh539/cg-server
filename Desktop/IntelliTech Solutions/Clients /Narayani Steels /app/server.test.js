@@ -236,6 +236,18 @@ test('POST /api/ledger/customers/:id/old-balance and /cash-paid update the ledge
   }
 });
 
+test('pdfRowAmount bills piece-rate rows (no qty) as Pcs x Rate, matching the client-side rowAmount()', () => {
+  // Regression test: pdfTableRows previously computed q*rt only, so a
+  // piece-billed item (q blank, p+r filled) showed a blank/₹0 Amount on the
+  // actual WhatsApp invoice PDF sent to customers, even though the invoice
+  // total (computed separately from the client's own `sub`) was correct.
+  assert.equal(app.pdfRowAmount({ q: '', p: '20', r: '52' }), 1040);
+  assert.equal(app.pdfRowAmount({ q: '0', p: '20', r: '52' }), 1040);
+  assert.equal(app.pdfRowAmount({ q: '500', p: '', r: '52' }), 26000);
+  assert.equal(app.pdfRowAmount({ q: '', p: '', r: '52' }), 0);
+  assert.ok(app.pdfTableRows([{ q: '', name: 'Covering Block', p: '20', r: '52' }]).includes('1,040'));
+});
+
 test('GET /api/ledger/invoices/:id returns the snapshot with customerName; 404 for unknown', async () => {
   const server = await listen();
   try {
@@ -255,6 +267,112 @@ test('GET /api/ledger/invoices/:id returns the snapshot with customerName; 404 f
 
     const missing = await fetch(`${baseUrl(server)}/api/ledger/invoices/inv_ghost`);
     assert.equal(missing.status, 404);
+  } finally {
+    await close(server);
+  }
+});
+
+async function deleteReq(server, urlPath, body) {
+  return fetch(`${baseUrl(server)}${urlPath}`, {
+    method: 'DELETE',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+test('DELETE /api/ledger/entries/:id on an invoice entry voids the whole invoice (entry + advance + invoice record)', async () => {
+  const server = await listen();
+  try {
+    const cust = await (await postJson(server, '/api/ledger/customers', { name: 'Void Test Co', phone: '9001112223' })).json();
+    const invoice = await (
+      await postJson(server, '/api/ledger/invoices', {
+        customerId: cust.id, date: '01/08/2026', mobile: '9001112223', lorry: 'TS01AB0001',
+        items: [{ q: '100', name: 'Angle', p: '', r: '50' }],
+        sub: 5000, lab: 40, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 1000,
+      })
+    ).json();
+
+    let entries = await (await fetch(`${baseUrl(server)}/api/ledger/customers/${cust.id}/entries`)).json();
+    assert.equal(entries.length, 2); // invoice (due) + advance
+    const invoiceEntry = entries.find((e) => e.reason === 'invoice');
+
+    const delRes = await deleteReq(server, `/api/ledger/entries/${invoiceEntry.id}`);
+    assert.equal(delRes.status, 204);
+
+    entries = await (await fetch(`${baseUrl(server)}/api/ledger/customers/${cust.id}/entries`)).json();
+    assert.equal(entries.length, 0); // both the invoice entry and its paired advance entry are gone
+
+    const custAfter = await (await fetch(`${baseUrl(server)}/api/ledger/customers/${cust.id}`)).json();
+    assert.equal(custAfter.balance, 0);
+
+    const invoiceAfter = await fetch(`${baseUrl(server)}/api/ledger/invoices/${invoice.id}`);
+    assert.equal(invoiceAfter.status, 404); // invoice record itself is gone too, nothing left dangling
+  } finally {
+    await close(server);
+  }
+});
+
+test('DELETE /api/ledger/customers/:id cascades to their invoices and entries; unknown customer is 404', async () => {
+  const server = await listen();
+  try {
+    const cust = await (await postJson(server, '/api/ledger/customers', { name: 'Delete Me Co', phone: '9002223334' })).json();
+    await postJson(server, `/api/ledger/customers/${cust.id}/old-balance`, { amount: 500 });
+    const invoice = await (
+      await postJson(server, '/api/ledger/invoices', {
+        customerId: cust.id, date: '01/08/2026', mobile: '9002223334', lorry: 'TS01AB0002',
+        items: [{ q: '10', name: 'Rod', p: '', r: '50' }], sub: 500, lab: 4, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 0,
+      })
+    ).json();
+
+    const delRes = await deleteReq(server, `/api/ledger/customers/${cust.id}`);
+    assert.equal(delRes.status, 204);
+
+    const custAfter = await fetch(`${baseUrl(server)}/api/ledger/customers/${cust.id}`);
+    assert.equal(custAfter.status, 404);
+    const invoiceAfter = await fetch(`${baseUrl(server)}/api/ledger/invoices/${invoice.id}`);
+    assert.equal(invoiceAfter.status, 404);
+    const listAfter = await (await fetch(`${baseUrl(server)}/api/ledger/customers`)).json();
+    assert.ok(!listAfter.some((c) => c.id === cust.id));
+
+    const missing = await deleteReq(server, '/api/ledger/customers/cust_ghost');
+    assert.equal(missing.status, 404);
+  } finally {
+    await close(server);
+  }
+});
+
+test('DELETE /api/ledger/reset requires the exact confirmation phrase and then wipes everything', async () => {
+  const server = await listen();
+  try {
+    const cust = await (await postJson(server, '/api/ledger/customers', { name: 'Reset Test Co', phone: '9003334445' })).json();
+    await postJson(server, `/api/ledger/customers/${cust.id}/old-balance`, { amount: 1000 });
+
+    const noConfirm = await deleteReq(server, '/api/ledger/reset');
+    assert.equal(noConfirm.status, 400);
+    const wrongConfirm = await deleteReq(server, '/api/ledger/reset', { confirm: 'delete all ledger data' });
+    assert.equal(wrongConfirm.status, 400);
+
+    // Nothing was touched by the two rejected attempts (checked by presence,
+    // not array length — this test file shares one ledger.json across tests
+    // run in the same process, so other tests' customers are already in it).
+    let list = await (await fetch(`${baseUrl(server)}/api/ledger/customers`)).json();
+    assert.ok(list.some((c) => c.id === cust.id));
+
+    const ok = await deleteReq(server, '/api/ledger/reset', { confirm: 'DELETE ALL LEDGER DATA' });
+    assert.equal(ok.status, 204);
+
+    list = await (await fetch(`${baseUrl(server)}/api/ledger/customers`)).json();
+    assert.equal(list.length, 0);
+
+    // Invoice numbering restarts after a reset.
+    const newCust = await (await postJson(server, '/api/ledger/customers', { name: 'Post Reset Co', phone: '9004445556' })).json();
+    const newInvoice = await (
+      await postJson(server, '/api/ledger/invoices', {
+        customerId: newCust.id, date: '01/08/2026', mobile: '9004445556', lorry: 'TS01AB0003',
+        items: [{ q: '1', name: 'Rod', p: '', r: '10' }], sub: 10, lab: 0, weigh: 0, freight: 0, unload: 0, gst: 0, others: 0, advance: 0,
+      })
+    ).json();
+    assert.equal(newInvoice.invoiceNo, 1);
   } finally {
     await close(server);
   }

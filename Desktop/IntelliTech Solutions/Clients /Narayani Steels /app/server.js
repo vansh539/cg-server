@@ -250,6 +250,40 @@ app.get('/api/ledger/customers/:id', (req, res) => {
   }
 });
 
+// Cascades to every invoice/ledger entry for this customer — see
+// ledgerStore.deleteCustomer for exactly what is and isn't touched (stock is
+// never reversed). A single confirm() in the UI is the guard here, matching
+// how every other scoped delete in this app (stock item, ledger entry)
+// already works — the nuclear "wipe everything" reset below gets a stronger
+// guard since its blast radius is every customer at once, not one.
+app.delete('/api/ledger/customers/:id', (req, res) => {
+  try {
+    ledgerStore.deleteCustomer(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
+// Wipes every customer, invoice, and ledger entry, and resets invoice
+// numbering. Requires the exact confirmation phrase in the request body —
+// deliberately not just the DELETE verb — so this can't be triggered by a
+// stray click, a retried request, or a script iterating over routes; the UI
+// additionally requires the operator to type the same phrase before this
+// call is ever made, and a native confirm() on top of that.
+const LEDGER_RESET_PHRASE = 'DELETE ALL LEDGER DATA';
+app.delete('/api/ledger/reset', (req, res) => {
+  try {
+    if (!req.body || req.body.confirm !== LEDGER_RESET_PHRASE) {
+      return res.status(400).json({ error: `Confirmation phrase required: send { "confirm": "${LEDGER_RESET_PHRASE}" }` });
+    }
+    ledgerStore.resetAll();
+    res.status(204).end();
+  } catch (err) {
+    sendLedgerError(res, err);
+  }
+});
+
 app.get('/api/ledger/customers/:id/entries', (req, res) => {
   try {
     res.json(ledgerStore.listEntries(req.params.id));
@@ -396,10 +430,21 @@ function pdfColgroup() {
 function pdfThead() {
   return `<thead><tr><th>Qty.</th><th>Particulars</th><th>Pcs.</th><th>Rate</th><th>Amount</th></tr></thead>`;
 }
+// Mirrors the client's rowAmount() in final-invoice-NS.html: a row with no
+// Qty(kg) but a Pcs+Rate is billed as Pcs x Rate (piece-rate billing), not
+// Qty x Rate. This function previously only computed q*rt, so any
+// piece-billed item showed a blank Amount on the actual WhatsApp PDF sent
+// to the customer — the grand total (computed server-side from the
+// client's own sub) was still correct, but the line item looked broken.
+function pdfRowAmount(r) {
+  const q = parseFloat(r.q) || 0, p = parseFloat(r.p) || 0, rt = parseFloat(r.r) || 0;
+  if (q <= 0 && p > 0 && rt > 0) return p * rt;
+  return q * rt;
+}
 function pdfTableRows(items) {
   return items
     .map((r) => {
-      const q = parseFloat(r.q) || 0, rt = parseFloat(r.r) || 0, a = q * rt;
+      const rt = parseFloat(r.r) || 0, a = pdfRowAmount(r);
       return `<tr><td class="c">${r.q || ''}</td><td class="lbl">${r.name || ''}</td><td class="c">${r.p || ''}</td><td class="r">${rt ? '' + rt : ''}</td><td class="r">${a > 0 ? pdfFmt(a) : ''}</td></tr>`;
     })
     .join('');
@@ -643,3 +688,5 @@ if (require.main === module) {
 }
 
 module.exports = app;
+module.exports.pdfRowAmount = pdfRowAmount;
+module.exports.pdfTableRows = pdfTableRows;

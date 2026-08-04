@@ -39,7 +39,10 @@ table.ltbl{width:100%;border-collapse:collapse;font-size:13px}
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="ledger.html">← Back to Ledger</a>
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <a class="back-link" href="ledger.html">← Back to Ledger</a>
+    <button class="btn-s btn-sm" onclick="deleteCustomerPrompt()" style="color:#dc2626;border-color:#fecaca">🗑 Delete Customer</button>
+  </div>
   <div class="stats" id="stats"></div>
 
   <div class="card">
@@ -95,13 +98,20 @@ function renderStats() {
   `;
 }
 
-// Only manually-added entries (Old Balance, Cash Paid) can be edited/deleted
-// here — invoice and advance entries stay paired with the printed invoice
-// (see ledgerStore.js findEditableEntry for the matching server-side guard).
+// Only manually-added entries (Old Balance, Cash Paid) can be EDITED here —
+// invoice and advance entries stay paired with the printed invoice, so
+// changing an amount in place would desync from what was already printed/
+// WhatsApped (see ledgerStore.js findEditableEntry for the matching
+// server-side guard). DELETE is broader — see isDeletableEntry below.
 function isEditableEntry(e) {
   return e.reason === 'old-balance' || e.reason === 'cash-paid';
 }
-
+// Every entry can now be deleted, including invoice/advance ones — that's
+// the only way to fully void a mistaken invoice. deleteEntryPrompt() below
+// shows a stronger warning for invoice entries specifically, since deleting
+// one cascades to the paired advance entry and the invoice record itself
+// (see ledgerStore.js deleteEntry), and does NOT reverse any stock already
+// deducted for it.
 function renderEntries() {
   const tbody = document.getElementById('entries-tbody');
   document.getElementById('empty-note').style.display = entries.length ? 'none' : 'block';
@@ -112,9 +122,8 @@ function renderEntries() {
       const label = REASON_LABELS[e.reason] || e.reason;
       const labelHtml = e.reason === 'invoice' && e.invoiceId ? `<a href="invoice.html?id=${e.invoiceId}">${label}</a>` : label;
       const sign = e.type === 'due' ? '+' : '-';
-      const actions = isEditableEntry(e)
-        ? `<button class="btn-s btn-sm" onclick="startEditEntry('${e.id}')">Edit</button> <button class="btn-s btn-sm" onclick="deleteEntryPrompt('${e.id}')" style="color:#dc2626">Delete</button>`
-        : '';
+      const editBtn = isEditableEntry(e) ? `<button class="btn-s btn-sm" onclick="startEditEntry('${e.id}')">Edit</button> ` : '';
+      const actions = `${editBtn}<button class="btn-s btn-sm" onclick="deleteEntryPrompt('${e.id}')" style="color:#dc2626">Delete</button>`;
       return `<tr><td>${new Date(e.at).toLocaleDateString('en-IN')}</td><td class="${e.type}">${labelHtml}</td><td class="r ${e.type}">${sign}₹${fmtRupees(e.amount)}</td><td class="r">₹${fmtRupees(running)}</td><td>${actions}</td></tr>`;
     })
     .join('');
@@ -163,7 +172,14 @@ async function submitEditEntry() {
 async function deleteEntryPrompt(id) {
   const e = entries.find((x) => x.id === id);
   if (!e) return;
-  if (!confirm(`Delete this ${REASON_LABELS[e.reason] || e.reason} entry of ₹${fmtRupees(e.amount)}?`)) return;
+  const label = REASON_LABELS[e.reason] || e.reason;
+  // Deleting an invoice entry cascades to the paired advance entry and the
+  // invoice record itself (ledgerStore.js deleteEntry) — the confirm text
+  // says so up front rather than the operator discovering it after the fact.
+  const msg = e.reason === 'invoice'
+    ? `Delete Invoice entry of ₹${fmtRupees(e.amount)}? This permanently voids the whole invoice — the invoice record, this due entry, and any linked advance payment will all be removed. Stock already deducted for it will NOT be restored automatically (use the Stock page to correct inventory if needed). This cannot be undone.`
+    : `Delete this ${label} entry of ₹${fmtRupees(e.amount)}? This cannot be undone.`;
+  if (!confirm(msg)) return;
   try {
     const res = await fetch(`${API}/entries/${id}`, { method: 'DELETE' });
     if (!res.ok) {
@@ -171,6 +187,27 @@ async function deleteEntryPrompt(id) {
       throw new Error(body.error || 'Could not delete entry');
     }
     await loadAll();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function deleteCustomerPrompt() {
+  if (!customer) return;
+  const msg = `Permanently delete "${customer.name}"? This removes their entire account history — every invoice, payment, and old-balance entry — and cannot be undone. Stock already deducted for their invoices will NOT be restored automatically.\n\nType the customer's name to confirm: ${customer.name}`;
+  const typed = prompt(msg);
+  if (typed === null) return;
+  if (typed.trim() !== customer.name) {
+    alert('Name did not match — customer was not deleted.');
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/customers/${customerId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Could not delete customer');
+    }
+    location.href = 'ledger.html';
   } catch (err) {
     alert(err.message);
   }
