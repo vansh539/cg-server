@@ -148,9 +148,33 @@ function sumRows(rows) {
       sold: acc.sold + r.sold,
       adjustments: acc.adjustments + r.adjustments,
       closing: acc.closing + r.closing,
+      openingPcs: acc.openingPcs + (r.openingPcs || 0),
+      stockInPcs: acc.stockInPcs + (r.stockInPcs || 0),
+      soldPcs: acc.soldPcs + (r.soldPcs || 0),
+      adjustmentsPcs: acc.adjustmentsPcs + (r.adjustmentsPcs || 0),
+      closingPcs: acc.closingPcs + (r.closingPcs || 0),
+      hasDual: acc.hasDual || !!r.dualTrack,
     }),
-    { opening: 0, stockIn: 0, sold: 0, adjustments: 0, closing: 0 }
+    { opening: 0, stockIn: 0, sold: 0, adjustments: 0, closing: 0, openingPcs: 0, stockInPcs: 0, soldPcs: 0, adjustmentsPcs: 0, closingPcs: 0, hasDual: false }
   );
+}
+
+// Renders a quantity cell as the plain kg/count number for a normal row or
+// category, or as "X pcs / Y" when pieces are tracked independently (a
+// single dual-track item, or a category subtotal containing at least one).
+// `kgFmt` formats the kg side exactly like the caller already did for that
+// column (fmtQty(), which already appends its own "kg"/"pcs" suffix, for
+// opening/closing; signed()/a sold-formatter, which are unit-less, for the
+// movement columns). `pcsFmt` formats the pcs side with NO unit baked in
+// (this function appends " pcs" itself) — it defaults to `kgFmt` for the
+// movement columns since those formatters are already unit-less and safe to
+// reuse verbatim; opening/closing pass an explicit plain-number formatter
+// instead, since kgFmt there is fmtQty() and already carries a unit suffix
+// that must not be reused for the pcs side.
+function combinedCell(kgVal, pcsVal, isDual, kgFmt, pcsFmt) {
+  if (!isDual) return kgFmt(kgVal);
+  const fmtPcs = pcsFmt || kgFmt;
+  return `${fmtPcs(pcsVal)} pcs / ${kgFmt(kgVal)}`;
 }
 
 function toggleCat(catId) {
@@ -180,22 +204,25 @@ function renderRows(rows) {
     const items = byCat[catId];
     const totals = sumRows(items);
     const collapsed = collapsedCats.has(catId);
+    const soldFmt = (v) => (v ? '-' + Math.round(v * 100) / 100 : 0);
+    const plainNum = (v) => Math.round((v || 0) * 100) / 100;
     html += `<tr class="cat-row${collapsed ? ' collapsed' : ''}" onclick="toggleCat('${catId}')">
       <td>${catName(catId)}</td>
-      <td>${fmtQty(totals.opening, items[0].unit)}</td>
-      <td class="in">${signed(totals.stockIn)}</td>
-      <td class="sold">${totals.sold ? '-' + Math.round(totals.sold * 100) / 100 : 0}</td>
-      <td class="${totals.adjustments < 0 ? 'adj-neg' : ''}">${signed(totals.adjustments)}</td>
-      <td>${fmtQty(totals.closing, items[0].unit)}</td>
+      <td>${combinedCell(totals.opening, totals.openingPcs, totals.hasDual, (v) => fmtQty(v, items[0].unit), plainNum)}</td>
+      <td class="in">${combinedCell(totals.stockIn, totals.stockInPcs, totals.hasDual, signed)}</td>
+      <td class="sold">${combinedCell(totals.sold, totals.soldPcs, totals.hasDual, soldFmt)}</td>
+      <td class="${totals.adjustments < 0 ? 'adj-neg' : ''}">${combinedCell(totals.adjustments, totals.adjustmentsPcs, totals.hasDual, signed)}</td>
+      <td>${combinedCell(totals.closing, totals.closingPcs, totals.hasDual, (v) => fmtQty(v, items[0].unit), plainNum)}</td>
     </tr>`;
     items.forEach((r) => {
+      const rSoldFmt = (v) => (v ? '-' + Math.round(v * 100) / 100 : 0);
       html += `<tr class="item-row${collapsed ? ' hidden' : ''}">
         <td style="padding-left:16px">${r.name}</td>
-        <td>${fmtQty(r.opening, r.unit)}</td>
-        <td class="in">${signed(r.stockIn)}</td>
-        <td class="sold">${r.sold ? '-' + Math.round(r.sold * 100) / 100 : 0}</td>
-        <td class="${r.adjustments < 0 ? 'adj-neg' : ''}">${signed(r.adjustments)}</td>
-        <td>${fmtQty(r.closing, r.unit)}</td>
+        <td>${combinedCell(r.opening, r.openingPcs, r.dualTrack, (v) => fmtQty(v, r.unit), plainNum)}</td>
+        <td class="in">${combinedCell(r.stockIn, r.stockInPcs, r.dualTrack, signed)}</td>
+        <td class="sold">${combinedCell(r.sold, r.soldPcs, r.dualTrack, rSoldFmt)}</td>
+        <td class="${r.adjustments < 0 ? 'adj-neg' : ''}">${combinedCell(r.adjustments, r.adjustmentsPcs, r.dualTrack, signed)}</td>
+        <td>${combinedCell(r.closing, r.closingPcs, r.dualTrack, (v) => fmtQty(v, r.unit), plainNum)}</td>
       </tr>`;
     });
   });
