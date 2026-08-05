@@ -36,6 +36,8 @@ table.stbl{width:100%;border-collapse:collapse;font-size:13px}
 .stbl td{padding:8px 5px;vertical-align:middle;border-bottom:1px solid #f0f0f0}
 .stbl td.r{text-align:right}
 .stbl td.neg{color:#dc2626;font-weight:700}
+.stbl tr.zero-row{opacity:.45}
+.stbl tr.stock-divider td{padding:0;border-top:2px dashed #ddd;border-bottom:none;height:1px}
 .stbl .actions{display:flex;gap:6px;flex-wrap:wrap}
 .inline-form{background:#f7f7f5;border-radius:8px;padding:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .inline-form input{padding:7px 9px;border:1.5px solid #e2e2e2;border-radius:6px;font-size:13px;width:140px}
@@ -199,6 +201,21 @@ function catName(categoryId) {
   return categories.find((c) => c.id === categoryId)?.name || '';
 }
 
+function isZeroStock(item) {
+  if (item.dualTrack) return item.currentStockKg === 0 && item.stockPcs === 0;
+  return item.currentStockKg === 0;
+}
+
+function renderItemRow(item, searching, zero) {
+  const stockLabel = `${fmtKg(item.currentStockKg)} ${item.unit === 'pcs' && !item.dualTrack ? 'pcs' : 'kg'}`;
+  const nameCell = searching ? `${item.name} <span style="color:#999;font-size:11px">(${catName(item.categoryId)})</span>` : item.name;
+  const rows = [
+    `<tr class="${zero ? 'zero-row' : ''}"><td>${nameCell}</td><td>${item.unit === 'pcs' || item.dualTrack ? '—' : (item.weightPerPieceKg ?? '—')}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${stockLabel}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','edit')">Edit</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button><button class="btn-s btn-sm" onclick="deleteItemPrompt('${item.id}')" style="color:#dc2626">Delete</button></td></tr>`,
+  ];
+  if (openRow && openRow.itemId === item.id) rows.push(renderExpandedRow(item));
+  return rows.join('');
+}
+
 function renderItems() {
   const heading = document.getElementById('items-heading');
   const searching = searchQuery.length > 0;
@@ -214,17 +231,18 @@ function renderItems() {
   const tbody = document.getElementById('items-tbody');
   document.getElementById('empty-note').style.display = visibleItems.length ? 'none' : 'block';
   document.getElementById('empty-note').textContent = searching ? 'No items match your search.' : 'No items in this category yet.';
-  tbody.innerHTML = visibleItems
-    .map((item) => {
-      const stockLabel = `${fmtKg(item.currentStockKg)} ${item.unit === 'pcs' && !item.dualTrack ? 'pcs' : 'kg'}`;
-      const nameCell = searching ? `${item.name} <span style="color:#999;font-size:11px">(${catName(item.categoryId)})</span>` : item.name;
-      const rows = [
-        `<tr><td>${nameCell}</td><td>${item.unit === 'pcs' ? '—' : (item.weightPerPieceKg ?? '—')}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${stockLabel}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','edit')">Edit</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button><button class="btn-s btn-sm" onclick="deleteItemPrompt('${item.id}')" style="color:#dc2626">Delete</button></td></tr>`,
-      ];
-      if (openRow && openRow.itemId === item.id) rows.push(renderExpandedRow(item));
-      return rows.join('');
-    })
-    .join('');
+
+  // Stable partition: items with any stock left first (original order kept),
+  // then a divider, then zero-stock items (also original order kept) — no
+  // alphabetizing, negative (over-deducted) stock stays in the top group
+  // since it needs attention, not burial at the bottom.
+  const inStock = visibleItems.filter((i) => !isZeroStock(i));
+  const outStock = visibleItems.filter(isZeroStock);
+
+  let html = inStock.map((item) => renderItemRow(item, searching, false)).join('');
+  if (inStock.length && outStock.length) html += `<tr class="stock-divider"><td colspan="5"></td></tr>`;
+  html += outStock.map((item) => renderItemRow(item, searching, true)).join('');
+  tbody.innerHTML = html;
 }
 
 // Items with unit:'kg' AND a set weightPerPieceKg (e.g. Binding Wire with
