@@ -301,9 +301,13 @@ function updateStockBadge(i){
   if(!badge)return;
   const row=rows[i];
   const hasQty=(parseFloat(row.q)||0)>0||(parseFloat(row.p)||0)>0;
-  if(!row.name.trim()||!hasQty){badge.textContent='';badge.title='';}
-  else if(row.stockItemId){badge.textContent='🔗';badge.title='Linked to stock — will be deducted';}
-  else{badge.textContent='⚠';badge.title='Not linked to a stock item — will NOT be deducted from stock. Pick the item from the dropdown suggestions to link it.';}
+  if(!row.name.trim()||!hasQty){badge.textContent='';badge.title='';return;}
+  if(!row.stockItemId){badge.textContent='⚠';badge.title='Not linked to a stock item — will NOT be deducted from stock. Pick the item from the dropdown suggestions to link it.';return;}
+  const item=stockItems.find(it=>it.id===row.stockItemId);
+  if(item&&item.dualTrack&&!rowDeductable(row)){
+    badge.textContent='⚠';badge.title='This item tracks both Pieces and Kg — fill in both Qty(kg) and Pcs before it can be deducted.';return;
+  }
+  badge.textContent='🔗';badge.title='Linked to stock — will be deducted';
 }
 let ledgerCustomers=[];
 async function loadLedgerCustomers(){
@@ -497,27 +501,55 @@ function updateDeductButton(){
     btn.style.display='none';
   }
 }
+function rowDeductable(row){
+  if(!row.stockItemId)return false;
+  const item=stockItems.find(it=>it.id===row.stockItemId);
+  if(!item)return false;
+  if(item.dualTrack)return(parseFloat(row.q)||0)>0&&(parseFloat(row.p)||0)>0;
+  return rowStockQty(row)>0;
+}
 function unmatchedItemNames(){
-  // Rows that have a real name + quantity entered but never got linked to a
-  // stock item — these are silently excluded from performStockDeduction, so
-  // surface them explicitly wherever deduction results are reported instead
-  // of letting "Deducted: X, Y" quietly imply everything was deducted.
-  return rows.filter(r=>r.name.trim()&&!r.stockItemId&&((parseFloat(r.q)||0)>0||(parseFloat(r.p)||0)>0)).map(r=>r.name);
+  // Rows that have a real name + quantity entered but either never got
+  // linked to a stock item, or ARE linked to a dual-track item missing one
+  // of its two required fields — both cases are silently excluded from
+  // performStockDeduction, so surface them explicitly wherever deduction
+  // results are reported instead of letting "Deducted: X, Y" quietly imply
+  // everything was deducted.
+  return rows.filter(r=>{
+    if(!r.name.trim())return false;
+    const hasAny=(parseFloat(r.q)||0)>0||(parseFloat(r.p)||0)>0;
+    if(!hasAny)return false;
+    if(!r.stockItemId)return true;
+    const item=stockItems.find(it=>it.id===r.stockItemId);
+    return item&&item.dualTrack&&!rowDeductable(r);
+  }).map(r=>{
+    const item=r.stockItemId&&stockItems.find(it=>it.id===r.stockItemId);
+    return item&&item.dualTrack?`${r.name} (needs both Qty(kg) and Pcs)`:r.name;
+  });
 }
 async function performStockDeduction(){
-  const pending=rows.filter(r=>r.stockItemId&&rowStockQty(r)>0&&!r._deducted);
+  const pending=rows.filter(r=>rowDeductable(r)&&!r._deducted);
   const succeeded=[];let failure=null;
   for(const r of pending){
     const item=stockItems.find(it=>it.id===r.stockItemId);
     const isPcs=item&&item.unit==='pcs';
-    const qty=rowStockQty(r);
-    try{
+    const body={note:'Chitti/Invoice'};
+    let label;
+    if(item.dualTrack){
+      body.kg=parseFloat(r.q)||0;body.pcs=parseFloat(r.p)||0;
+      label=`${body.pcs} pcs / ${body.kg}kg ${r.name}`;
+    }else{
       // The stock API's kg field is a generic tracked-quantity field — for
       // pcs items it holds piece count, same convention as stockStore.js.
-      const res=await fetch(`/api/stock/items/${r.stockItemId}/deduct`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kg:qty,note:'Chitti/Invoice'})});
-      const body=await res.json();
-      if(!res.ok)throw new Error(body.error||'Deduct failed');
-      r._deducted=true;succeeded.push(`${qty}${isPcs?' pcs':'kg'} ${r.name}`);
+      const qty=rowStockQty(r);
+      body.kg=qty;
+      label=`${qty}${isPcs?' pcs':'kg'} ${r.name}`;
+    }
+    try{
+      const res=await fetch(`/api/stock/items/${r.stockItemId}/deduct`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const resBody=await res.json();
+      if(!res.ok)throw new Error(resBody.error||'Deduct failed');
+      r._deducted=true;succeeded.push(label);
     }catch(err){failure=err.message;break;}
   }
   return{succeeded,failure};
@@ -525,7 +557,7 @@ async function performStockDeduction(){
 async function deductStock(){
   const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
   if(btn.dataset.deducted==='true')return;
-  const hasPending=rows.some(r=>r.stockItemId&&rowStockQty(r)>0&&!r._deducted);
+  const hasPending=rows.some(r=>rowDeductable(r)&&!r._deducted);
   if(!hasPending)return;
   btn.disabled=true;
   const{succeeded,failure}=await performStockDeduction();
