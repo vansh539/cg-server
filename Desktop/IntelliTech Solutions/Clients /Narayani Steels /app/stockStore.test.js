@@ -420,3 +420,50 @@ test('getReport omits pcs columns for a non-dualTrack item', () => {
   assert.equal(row.dualTrack, false);
   assert.equal('closingPcs' in row, false);
 });
+
+// Reproduces a real production incident: on Windows, renaming a .tmp file
+// over the live stock.json can transiently fail with EPERM/EBUSY if another
+// process (antivirus, Windows Search Indexer, a backup/sync agent) has a
+// momentary open handle on the destination — this never happens on POSIX,
+// where rename() is atomic regardless of other open handles. A client saw
+// exactly this mid-way through deducting several Chitti line items: the
+// first two succeeded, the third's save() hit the transient lock and threw,
+// stopping the sequential deduction loop with the rest undeducted.
+test('save() retries past a transient Windows EPERM/EBUSY on rename instead of failing the whole operation', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const realRename = fs.renameSync;
+  let calls = 0;
+  fs.renameSync = (...args) => {
+    calls++;
+    if (calls <= 2) {
+      const err = new Error('EPERM: operation not permitted, rename');
+      err.code = 'EPERM';
+      throw err;
+    }
+    return realRename(...args);
+  };
+  try {
+    const item = store.addItem({ categoryId: cats[0].id, name: 'Retry Test Item', unit: 'kg', initialStockKg: 100 });
+    assert.equal(item.currentStockKg, 100);
+    assert.ok(calls >= 3); // failed twice, succeeded on the 3rd attempt
+  } finally {
+    fs.renameSync = realRename;
+  }
+});
+
+test('save() gives up and throws after exhausting retries on a persistent rename failure', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const realRename = fs.renameSync;
+  fs.renameSync = () => {
+    const err = new Error('EPERM: operation not permitted, rename');
+    err.code = 'EPERM';
+    throw err;
+  };
+  try {
+    assert.throws(() => store.addItem({ categoryId: cats[0].id, name: 'Persistent Fail Item', unit: 'kg' }), /EPERM/);
+  } finally {
+    fs.renameSync = realRename;
+  }
+});

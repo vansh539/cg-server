@@ -55,10 +55,35 @@ function createStore(filePath) {
     }
   }
 
+  function sleepSync(ms) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  }
+
+  // Windows can transiently EPERM/EBUSY a rename-over-an-existing-file if
+  // another process (antivirus real-time scan, Windows Search Indexer, a
+  // backup/sync agent) has a momentary open handle on the destination at
+  // that exact instant — this never happens on POSIX, where rename() is
+  // atomic regardless of other open handles. A client hit exactly this
+  // mid-way through a multi-item Chitti stock deduction: the first two
+  // items saved fine, the third's save() hit the transient lock and threw,
+  // stopping the sequential deduction loop with the rest silently
+  // undeducted (surfaced as a confusing EPERM error to the operator).
+  // Retrying with a short backoff clears it almost always, since the lock
+  // is externally-held for milliseconds, not indefinitely.
   function save() {
     const tmp = `${filePath}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-    fs.renameSync(tmp, filePath);
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+        fs.renameSync(tmp, filePath);
+        return;
+      } catch (err) {
+        const transient = err.code === 'EPERM' || err.code === 'EBUSY';
+        if (!transient || attempt === maxAttempts) throw err;
+        sleepSync(50 * attempt);
+      }
+    }
   }
 
   function ensureLoaded() {
