@@ -98,6 +98,13 @@ table.stbl{width:100%;border-collapse:collapse;font-size:13px}
       <div class="fg"><label id="new-item-stock-label">Initial Stock (kg)</label><input id="new-item-stock" type="number" min="0" step="any" placeholder="0" oninput="updateNewItemPreview()"></div>
     </div>
     <div class="pieces-preview" id="new-item-preview">Pieces: —</div>
+    <div class="fg" style="flex-direction:row;align-items:center;gap:7px">
+      <input id="new-item-dualtrack" type="checkbox" style="width:16px;height:16px" onchange="onNewItemDualTrackChange()">
+      <label for="new-item-dualtrack" style="margin:0">Track Pieces + Kg together (both required at Stock In)</label>
+    </div>
+    <div class="grid2" id="new-item-dualpcs-fg" style="display:none">
+      <div class="fg"><label>Initial Stock — Pieces</label><input id="new-item-stock-pcs" type="number" min="0" step="1" placeholder="0"></div>
+    </div>
     <div class="err" id="item-err" style="display:none"></div>
     <button class="btn-p" onclick="saveNewItem()">+ Add Item</button>
   </div>
@@ -209,7 +216,7 @@ function renderItems() {
   document.getElementById('empty-note').textContent = searching ? 'No items match your search.' : 'No items in this category yet.';
   tbody.innerHTML = visibleItems
     .map((item) => {
-      const stockLabel = `${fmtKg(item.currentStockKg)} ${item.unit === 'pcs' ? 'pcs' : 'kg'}`;
+      const stockLabel = `${fmtKg(item.currentStockKg)} ${item.unit === 'pcs' && !item.dualTrack ? 'pcs' : 'kg'}`;
       const nameCell = searching ? `${item.name} <span style="color:#999;font-size:11px">(${catName(item.categoryId)})</span>` : item.name;
       const rows = [
         `<tr><td>${nameCell}</td><td>${item.unit === 'pcs' ? '—' : (item.weightPerPieceKg ?? '—')}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${stockLabel}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','edit')">Edit</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button><button class="btn-s btn-sm" onclick="deleteItemPrompt('${item.id}')" style="color:#dc2626">Delete</button></td></tr>`,
@@ -239,6 +246,15 @@ function rowInputToStockValue(item) {
 function renderExpandedRow(item) {
   const unitLabel = item.unit === 'pcs' ? 'pcs' : 'kg';
   if (openRow.mode === 'stock-in') {
+    if (item.dualTrack) {
+      return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+        <input id="row-input-kg" type="number" min="0" step="any" placeholder="Kg received">
+        <input id="row-input-pcs" type="number" min="0" step="1" placeholder="Pieces received">
+        <button class="btn-p btn-sm" onclick="submitStockIn('${item.id}')">Save</button>
+        <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+        <span class="err" id="row-err" style="display:none"></span>
+      </div></td></tr>`;
+    }
     return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
       <input id="row-input" type="number" min="0" step="any" placeholder="${item.unit === 'pcs' ? 'Pieces received' : 'Kg received'}">
       ${rowUnitToggle(item)}
@@ -248,6 +264,15 @@ function renderExpandedRow(item) {
     </div></td></tr>`;
   }
   if (openRow.mode === 'adjust') {
+    if (item.dualTrack) {
+      return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+        <input id="row-input-kg" type="number" step="any" placeholder="New true total (kg)" value="${fmtKg(item.currentStockKg)}">
+        <input id="row-input-pcs" type="number" step="1" placeholder="New true total (pcs)" value="${item.stockPcs}">
+        <button class="btn-p btn-sm" onclick="submitAdjust('${item.id}')">Save</button>
+        <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+        <span class="err" id="row-err" style="display:none"></span>
+      </div></td></tr>`;
+    }
     return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
       <input id="row-input" type="number" step="any" placeholder="New true total (${unitLabel})" value="${fmtKg(item.currentStockKg)}">
       ${rowUnitToggle(item)}
@@ -257,12 +282,13 @@ function renderExpandedRow(item) {
     </div></td></tr>`;
   }
   if (openRow.mode === 'edit') {
-    const weightField = item.unit === 'kg'
+    const weightField = item.unit === 'kg' && !item.dualTrack
       ? `<input id="edit-weight" type="number" min="0" step="any" placeholder="Weight/Piece (kg, optional)" value="${item.weightPerPieceKg ?? ''}">`
       : '';
     return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
       <input id="edit-name" type="text" placeholder="Item name" value="${item.name}">
       ${weightField}
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px"><input id="edit-dualtrack" type="checkbox" ${item.dualTrack ? 'checked' : ''}> Track Pieces + Kg together</label>
       <button class="btn-p btn-sm" onclick="submitEdit('${item.id}')">Save</button>
       <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
       <span class="err" id="row-err" style="display:none"></span>
@@ -301,13 +327,15 @@ async function loadHistory(itemId) {
 
 async function submitStockIn(itemId) {
   const item = items.find((i) => i.id === itemId);
-  const kg = rowInputToStockValue(item);
   const errEl = document.getElementById('row-err');
+  const payload = item.dualTrack
+    ? { kg: parseFloat(document.getElementById('row-input-kg').value), pcs: parseFloat(document.getElementById('row-input-pcs').value) }
+    : { kg: rowInputToStockValue(item) };
   try {
     const res = await fetch(`${API}/items/${itemId}/stock-in`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kg }),
+      body: JSON.stringify(payload),
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || 'Could not save');
@@ -321,13 +349,15 @@ async function submitStockIn(itemId) {
 
 async function submitAdjust(itemId) {
   const item = items.find((i) => i.id === itemId);
-  const newTotalKg = rowInputToStockValue(item);
   const errEl = document.getElementById('row-err');
+  const payload = item.dualTrack
+    ? { newTotalKg: parseFloat(document.getElementById('row-input-kg').value), newTotalPcs: parseFloat(document.getElementById('row-input-pcs').value) }
+    : { newTotalKg: rowInputToStockValue(item) };
   try {
     const res = await fetch(`${API}/items/${itemId}/adjust`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newTotalKg }),
+      body: JSON.stringify(payload),
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || 'Could not save');
@@ -343,12 +373,14 @@ async function submitEdit(itemId) {
   const item = items.find((i) => i.id === itemId);
   const name = document.getElementById('edit-name').value;
   const weightEl = document.getElementById('edit-weight');
+  const dualTrackEl = document.getElementById('edit-dualtrack');
   const errEl = document.getElementById('row-err');
   const body = { name };
   if (weightEl) {
     const raw = weightEl.value;
     body.weightPerPieceKg = raw === '' ? null : parseFloat(raw);
   }
+  if (dualTrackEl) body.dualTrack = dualTrackEl.checked;
   try {
     const res = await fetch(`${API}/items/${itemId}`, {
       method: 'PATCH',
@@ -400,25 +432,35 @@ function updateNewItemPreview() {
   document.getElementById('new-item-preview').textContent = `Pieces: ${pieces ?? '—'}`;
 }
 
+function onNewItemDualTrackChange() {
+  const on = document.getElementById('new-item-dualtrack').checked;
+  document.getElementById('new-item-dualpcs-fg').style.display = on ? 'grid' : 'none';
+}
+
 async function saveNewItem() {
   const categoryId = document.getElementById('new-item-cat').value;
   const name = document.getElementById('new-item-name').value;
   const weightRaw = document.getElementById('new-item-weight').value;
   const weightPerPieceKg = newItemUnit === 'pcs' || weightRaw === '' ? null : parseFloat(weightRaw);
   const initialStockKg = parseFloat(document.getElementById('new-item-stock').value) || 0;
+  const dualTrack = document.getElementById('new-item-dualtrack').checked;
+  const initialStockPcs = dualTrack ? (parseFloat(document.getElementById('new-item-stock-pcs').value) || 0) : 0;
   const errEl = document.getElementById('item-err');
   errEl.style.display = 'none';
   try {
     const res = await fetch(`${API}/items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoryId, name, unit: newItemUnit, weightPerPieceKg, initialStockKg }),
+      body: JSON.stringify({ categoryId, name, unit: newItemUnit, weightPerPieceKg, initialStockKg, dualTrack, initialStockPcs }),
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || 'Could not save item');
     document.getElementById('new-item-name').value = '';
     document.getElementById('new-item-weight').value = '';
     document.getElementById('new-item-stock').value = '';
+    document.getElementById('new-item-stock-pcs').value = '';
+    document.getElementById('new-item-dualtrack').checked = false;
+    onNewItemDualTrackChange();
     updateNewItemPreview();
     await loadAll();
   } catch (err) {
