@@ -161,6 +161,43 @@ test('a corrupted stock.json disables only /api/stock/* (500), not the rest of t
   }
 });
 
+test('dualTrack stock item: stock-in/deduct/adjust require both kg and pcs; report exposes pcs columns', async () => {
+  const server = await listen();
+  try {
+    const cats = await (await fetch(`${baseUrl(server)}/api/stock/categories`)).json();
+    const item = await (await postJson(server, '/api/stock/items', {
+      categoryId: cats[0].id, name: 'Dual Test Item', unit: 'kg', dualTrack: true, initialStockKg: 0, initialStockPcs: 0,
+    })).json();
+    assert.equal(item.dualTrack, true);
+
+    const badStockIn = await postJson(server, `/api/stock/items/${item.id}/stock-in`, { kg: 100 }); // pcs missing
+    assert.equal(badStockIn.status, 400);
+
+    const stockIn = await postJson(server, `/api/stock/items/${item.id}/stock-in`, { kg: 100, pcs: 40 });
+    assert.equal(stockIn.status, 200);
+    assert.equal((await stockIn.json()).stockPcs, 40);
+
+    const deduct = await postJson(server, `/api/stock/items/${item.id}/deduct`, { kg: 10, pcs: 4, note: 'Chitti/Invoice' });
+    assert.equal(deduct.status, 200);
+    const deducted = await deduct.json();
+    assert.equal(deducted.currentStockKg, 90);
+    assert.equal(deducted.stockPcs, 36);
+
+    const adjust = await postJson(server, `/api/stock/items/${item.id}/adjust`, { newTotalKg: 80, newTotalPcs: 30 });
+    assert.equal(adjust.status, 200);
+    const adjusted = await adjust.json();
+    assert.equal(adjusted.currentStockKg, 80);
+    assert.equal(adjusted.stockPcs, 30);
+
+    const report = await (await fetch(`${baseUrl(server)}/api/stock/report?type=monthly`)).json();
+    const row = report.rows.find((r) => r.itemId === item.id);
+    assert.equal(row.dualTrack, true);
+    assert.ok('closingPcs' in row);
+  } finally {
+    await close(server);
+  }
+});
+
 test('GET /api/ledger/customers starts empty', async () => {
   const server = await listen();
   try {

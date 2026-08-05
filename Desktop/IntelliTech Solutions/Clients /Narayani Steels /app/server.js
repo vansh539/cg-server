@@ -189,7 +189,7 @@ app.delete('/api/stock/items/:id', (req, res) => {
 
 app.post('/api/stock/items/:id/stock-in', (req, res) => {
   try {
-    res.json(stockStore.stockIn(req.params.id, req.body && req.body.kg, req.body && req.body.note));
+    res.json(stockStore.stockIn(req.params.id, req.body && req.body.kg, req.body && req.body.pcs, req.body && req.body.note));
   } catch (err) {
     sendStockError(res, err);
   }
@@ -197,7 +197,7 @@ app.post('/api/stock/items/:id/stock-in', (req, res) => {
 
 app.post('/api/stock/items/:id/adjust', (req, res) => {
   try {
-    res.json(stockStore.adjust(req.params.id, req.body && req.body.newTotalKg, req.body && req.body.note));
+    res.json(stockStore.adjust(req.params.id, req.body && req.body.newTotalKg, req.body && req.body.newTotalPcs, req.body && req.body.note));
   } catch (err) {
     sendStockError(res, err);
   }
@@ -205,7 +205,7 @@ app.post('/api/stock/items/:id/adjust', (req, res) => {
 
 app.post('/api/stock/items/:id/deduct', (req, res) => {
   try {
-    res.json(stockStore.deduct(req.params.id, req.body && req.body.kg, req.body && req.body.note));
+    res.json(stockStore.deduct(req.params.id, req.body && req.body.kg, req.body && req.body.pcs, req.body && req.body.note));
   } catch (err) {
     sendStockError(res, err);
   }
