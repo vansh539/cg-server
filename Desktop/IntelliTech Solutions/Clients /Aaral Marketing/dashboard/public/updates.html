@@ -143,9 +143,13 @@ async function poll() {
     statusEl.textContent = `Updated successfully to v${data.result.newCommit.slice(0, 7)}.`;
   } else if (data.state === 'failed') {
     statusEl.className = 'updates-status err';
-    statusEl.textContent = data.result.rolledBack
-      ? `Update failed and was rolled back safely (${data.result.reason}).`
-      : `Update failed and rollback also failed (${data.result.rollbackError}) — this needs Vansh to remote in.`;
+    if (data.result.notStarted) {
+      statusEl.textContent = `Update could not start (${data.result.reason}) — nothing was changed, the site is unaffected.`;
+    } else if (data.result.rolledBack) {
+      statusEl.textContent = `Update failed and was rolled back safely (${data.result.reason}).`;
+    } else {
+      statusEl.textContent = `Update failed and rollback also failed (${data.result.rollbackError || data.result.reason || 'unknown error'}) — this needs Vansh to remote in.`;
+    }
   }
 }
 

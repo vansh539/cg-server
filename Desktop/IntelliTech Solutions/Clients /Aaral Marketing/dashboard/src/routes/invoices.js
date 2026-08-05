@@ -84,7 +84,12 @@ router.post('/invoices/pdf', async (req, res) => {
 });
 
 router.get('/invoices/:id', async (req, res) => {
-  const { rows: invoiceRows } = await query('SELECT * FROM invoices WHERE id = $1', [req.params.id]);
+  const { rows: invoiceRows } = await query(
+    `SELECT i.*, c.name AS customer_name FROM invoices i
+     LEFT JOIN customers c ON c.id = i.customer_id
+     WHERE i.id = $1`,
+    [req.params.id]
+  );
   if (invoiceRows.length === 0) return res.status(404).json({ ok: false, error: 'Invoice not found' });
   const { rows: itemRows } = await query(
     'SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY s_no ASC',

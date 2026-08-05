@@ -14,8 +14,37 @@
 <style>
   .toolbar-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.6rem; }
   .toolbar-row .actions { display: flex; gap: 0.6rem; }
+
+  #itemsTable { table-layout: fixed; }
+  col.c-sl { width: 5%; }
+  col.c-particulars { width: 27%; }
+  col.c-grade { width: 12%; }
+  col.c-vch { width: 10%; }
+  col.c-qty { width: 12%; }
+  col.c-rate { width: 13%; }
+  col.c-amount { width: 21%; }
+
+  .only-print { display: none; }
+
   @media print {
     .hero, .no-print { display: none !important; }
+    body { background: #fff; }
+    body::before { display: none; }
+    .page { padding: 0; max-width: none; margin: 0; }
+    .card { background: none; box-shadow: none; border: none; border-radius: 0; padding: 0; }
+
+    #itemsTable { border-collapse: collapse; border: 2px solid #000; }
+    #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem 0.65rem; font-size: 1.05rem; }
+    #itemsTable thead tr.col-headers th { text-transform: none; font-weight: 700; background: #fff; font-size: 0.95rem; }
+    #itemsTable tbody td { font-weight: 600; font-size: 1.05rem; }
+    #itemsTable .only-print { display: table-row; }
+
+    #itemsTable thead tr.print-title-row th { background: #ffe600; text-align: center; font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 1.7rem; text-transform: uppercase; padding: 0.7rem; letter-spacing: 0.02em; }
+    #itemsTable thead tr.print-date-row th, #itemsTable thead tr.print-destination-row th { background: #fff; text-align: left; font-weight: 500; font-size: 1.15rem; text-transform: none; padding: 0.55rem 0.8rem; }
+    #itemsTable thead tr.print-date-row .print-date-value, #itemsTable thead tr.print-destination-row .print-date-value { font-weight: 800; font-size: 1.25rem; float: right; }
+
+    #itemsTable tr.total-row td { font-weight: 800; font-size: 1.35rem; border-top: 2px solid #000; }
+    .footer-total-label { text-align: right; }
   }
 </style>
 </head>
@@ -77,15 +106,24 @@
 
   <div class="card">
     <div class="table-scroll">
-      <table>
-        <thead><tr><th>S No.</th><th>Particulars</th><th>Grade</th><th>Vch</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+      <table id="itemsTable">
+        <colgroup>
+          <col class="c-sl"><col class="c-particulars"><col class="c-grade"><col class="c-vch">
+          <col class="c-qty"><col class="c-rate"><col class="c-amount">
+        </colgroup>
+        <thead>
+          <tr class="only-print print-title-row"><th colspan="7" id="printCustomerName"></th></tr>
+          <tr class="only-print print-date-row"><th colspan="7"><span>Date:</span> <span class="print-date-value" id="printDateValue"></span></th></tr>
+          <tr class="only-print print-destination-row" id="printDestinationRow"><th colspan="7"><span>Destination:</span> <span class="print-date-value" id="printDestinationValue"></span></th></tr>
+          <tr class="col-headers"><th>S No.</th><th>Particulars</th><th>Grade</th><th>Vch</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+        </thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
   </div>
 </div>
 
-<footer class="footer-credit">Powered by IntelliTech Solutions</footer>
+<footer class="footer-credit no-print">Powered by IntelliTech Solutions</footer>
 
 <script>
 const params = new URLSearchParams(window.location.search);
@@ -109,6 +147,15 @@ async function load() {
     document.getElementById('invoiceDestination').textContent = invoice.destination;
   }
 
+  const createdDate = new Date(invoice.created_at);
+  const printDate = [createdDate.getDate(), createdDate.getMonth() + 1, createdDate.getFullYear()]
+    .map((n, i) => (i < 2 ? String(n).padStart(2, '0') : n)).join('-');
+
+  document.getElementById('printCustomerName').textContent = invoice.customer_name || 'WALK-IN / CASH SALE';
+  document.getElementById('printDateValue').textContent = printDate;
+  document.getElementById('printDestinationValue').textContent = invoice.destination || '';
+  document.getElementById('printDestinationRow').style.display = invoice.destination ? '' : 'none';
+
   if (invoice.customer_id) {
     document.getElementById('backLink').href = `/customer.html?id=${invoice.customer_id}`;
     document.getElementById('backLink').innerHTML = '&larr; Back to ledger';
@@ -127,7 +174,8 @@ async function load() {
     rowsEl.appendChild(tr);
   }
   const totalTr = document.createElement('tr');
-  totalTr.innerHTML = `<td></td><td colspan="4" style="font-weight:700;">Total</td><td></td><td class="num" style="font-weight:700;font-size:1.1rem;">₹${Number(invoice.total).toFixed(2)}</td>`;
+  totalTr.className = 'total-row';
+  totalTr.innerHTML = `<td></td><td colspan="4" class="footer-total-label" style="font-weight:700;">Total</td><td></td><td class="num" style="font-weight:700;font-size:1.1rem;">₹${Number(invoice.total).toFixed(2)}</td>`;
   rowsEl.appendChild(totalTr);
 }
 
