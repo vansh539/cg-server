@@ -200,7 +200,7 @@ function stopOcrServiceSync() {
 function chromeCleanup() {
   const sessionDir = path.resolve(SESSION_DIR, 'session');
   if (process.platform === 'win32') {
-    try { execSync('taskkill /F /IM chrome.exe /T 2>nul', { stdio: 'ignore', shell: true }); } catch (_) {}
+    try { execSync('taskkill /F /IM chrome.exe /T 2>nul', { stdio: 'ignore', shell: true, timeout: 10000 }); } catch (_) {}
     try {
       if (fs.existsSync(sessionDir)) {
         for (const f of fs.readdirSync(sessionDir)) {
@@ -399,9 +399,29 @@ const CHROME_EXECUTABLE = process.env.CHROME_PATH || findPuppeteerCachedChrome()
 // of a "connects fine but window.Store never gets injected, no messages
 // ever received" failure where the real Chrome was 149 but the UA claimed
 // 124. Falls back to a hardcoded recent version if detection fails.
+//
+// Runs synchronously at module load, before the startup watchdog is armed
+// or client.initialize() is even called — confirmed live (Aaral office PC,
+// 05-Aug) that this was the actual cause of several 10+ minute total
+// process freezes with zero log output and no self-recovery: the old
+// implementation always shelled out to `chrome.exe --version`, and
+// execSync has no default timeout. On a machine where real Chrome launches
+// are already intermittently slow/hung (see the GPU/sandbox warnings
+// throughout this file's logs), that one unbounded subprocess call could
+// block Node's entire single thread indefinitely — before the 3-minute
+// startup watchdog even exists, so nothing could ever time it out.
+// Fixed two ways: (1) prefer parsing the version straight out of the
+// cached build's own folder name (e.g. ".../chrome/win64-146.0.7680.31/...")
+// — exact, instant, and spawns no subprocess at all, so it cannot hang;
+// (2) if that's not available (e.g. CHROME_PATH points at a system install
+// outside the version-numbered cache layout), fall back to the same
+// execSync detection but with an explicit timeout so a hung launch fails
+// fast into the existing fallback-UA path instead of freezing forever.
 function detectChromeVersion() {
+  const pathMatch = CHROME_EXECUTABLE.match(/-(\d+\.\d+\.\d+\.\d+)[\\/]/);
+  if (pathMatch) return pathMatch[1];
   try {
-    const output = execSync(`"${CHROME_EXECUTABLE}" --version`).toString();
+    const output = execSync(`"${CHROME_EXECUTABLE}" --version`, { timeout: 10000 }).toString();
     const match = output.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)/);
     return match ? match[0] : '124.0.0.0';
   } catch (e) {
