@@ -67,7 +67,7 @@ test('deleteInvoice works on an already-voided invoice (full cleanup)', async ()
   assert.equal(claimRows.length, 0);
 });
 
-test('deleteInvoice refuses a paid invoice whose claim has no invoice_id link (pre-migration data)', async () => {
+test('deleteInvoice resolves an orphaned pre-migration claim via customer+amount+timestamp match', async () => {
   const customer = await customers.createCustomer({ name: 'Legacy Traders', phoneNumber: '9812345673' });
   const result = await createInvoice({
     customerId: customer.id,
@@ -76,10 +76,55 @@ test('deleteInvoice refuses a paid invoice whose claim has no invoice_id link (p
   });
   await pool.query('UPDATE payment_claims SET invoice_id = NULL WHERE id = $1', [result.claimId]);
 
+  await deleteInvoice(result.invoice.id);
+
+  const { rows: invoiceRows } = await pool.query('SELECT * FROM invoices WHERE id = $1', [result.invoice.id]);
+  assert.equal(invoiceRows.length, 0);
+  const { rows: claimRows } = await pool.query('SELECT * FROM payment_claims WHERE id = $1', [result.claimId]);
+  assert.equal(claimRows.length, 0, 'the uniquely-matched orphaned claim should be deleted too');
+  const balance = await balances.getBalanceByCustomerId(customer.id);
+  assert.equal(Number(balance.balance), 0);
+});
+
+test('deleteInvoice still refuses a pre-migration paid invoice when the orphaned-claim match is ambiguous', async () => {
+  const customer = await customers.createCustomer({ name: 'Ambiguous Traders', phoneNumber: '9812345674' });
+  const result = await createInvoice({
+    customerId: customer.id,
+    items: [{ particulars: 'OPC Cement', grade: '43', vch: '1', qty: 10, rate: 350 }],
+    unloadingCharge: null, paidNow: true, createdBy: '9999900000',
+  });
+  await pool.query('UPDATE payment_claims SET invoice_id = NULL WHERE id = $1', [result.claimId]);
+  // A second unlinked confirmed claim with the identical customer/amount/timestamp
+  // makes the match ambiguous -- the heuristic must refuse rather than guess.
+  await pool.query(
+    `INSERT INTO payment_claims (customer_id, amount_claimed, proof_type, status, reported_at, reviewed_at)
+     SELECT customer_id, amount_claimed, proof_type, status, reported_at, reviewed_at
+     FROM payment_claims WHERE id = $1`,
+    [result.claimId]
+  );
+
   await assert.rejects(() => deleteInvoice(result.invoice.id), /can't be reliably located/);
 
   const { rows: invoiceRows } = await pool.query('SELECT * FROM invoices WHERE id = $1', [result.invoice.id]);
   assert.equal(invoiceRows.length, 1, 'nothing should have been deleted by the failed attempt');
+});
+
+test('deleteInvoice on a legacy paid invoice with no customer_id skips the claim check entirely', async () => {
+  const { rows: invRows } = await pool.query(
+    `INSERT INTO invoices (customer_id, paid_now, subtotal, total, created_by)
+     VALUES (NULL, true, 500, 500, 'legacy-import') RETURNING *`
+  );
+  const invoice = invRows[0];
+  await pool.query(
+    `INSERT INTO invoice_items (invoice_id, s_no, particulars, qty, rate, amount)
+     VALUES ($1, 1, 'Legacy walk-in item', 1, 500, 500)`,
+    [invoice.id]
+  );
+
+  await deleteInvoice(invoice.id);
+
+  const { rows: invoiceRows } = await pool.query('SELECT * FROM invoices WHERE id = $1', [invoice.id]);
+  assert.equal(invoiceRows.length, 0);
 });
 
 test('deleting a customer cascades to all their invoices, items, dues, and payments', async () => {

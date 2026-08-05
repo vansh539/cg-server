@@ -5,16 +5,17 @@ const { renderInvoicePdf } = require('../pdf');
 const customers = require('payment-ledger-core/ledger/customers');
 const balances = require('payment-ledger-core/ledger/balances');
 const { query } = require('payment-ledger-core/db');
-const { requirePin } = require('../adminAuth');
+const { requireAdmin } = require('../sessionAuth');
 
 const router = express.Router();
 
 router.post('/invoices', async (req, res) => {
   try {
     const {
-      customerId, items, unloadingCharge, paidNow, createdBy,
+      customerId, items, unloadingCharge, paidNow,
       invoiceDate, destination,
     } = req.body;
+    const createdBy = req.session.user.username;
     const result = await createInvoice({ customerId, items, unloadingCharge, paidNow, createdBy, invoiceDate, destination });
 
     if (customerId) {
@@ -165,11 +166,11 @@ router.post('/invoices/:id/send-whatsapp', async (req, res) => {
   }
 });
 
-router.put('/invoices/:id', requirePin, async (req, res) => {
+router.put('/invoices/:id', async (req, res) => {
   try {
     const { items, unloadingCharge, destination, invoiceDate } = req.body;
     const result = await updateInvoice(
-      req.params.id, { items, unloadingCharge, destination, invoiceDate }, 'dashboard'
+      req.params.id, { items, unloadingCharge, destination, invoiceDate }, req.session.user.username
     );
     res.json({ ok: true, invoice: result.invoice });
   } catch (err) {
@@ -177,16 +178,16 @@ router.put('/invoices/:id', requirePin, async (req, res) => {
   }
 });
 
-router.post('/invoices/:id/void', requirePin, async (req, res) => {
+router.post('/invoices/:id/void', async (req, res) => {
   try {
-    await voidInvoice(req.params.id, 'dashboard');
+    await voidInvoice(req.params.id, req.session.user.username);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
 });
 
-router.delete('/invoices/:id', requirePin, async (req, res) => {
+router.delete('/invoices/:id', requireAdmin, async (req, res) => {
   try {
     await deleteInvoice(req.params.id);
     res.json({ ok: true });

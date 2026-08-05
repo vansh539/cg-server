@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sign in — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aaral Marketing">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#191048">
+<link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  body { display: flex; align-items: center; justify-content: center; background: linear-gradient(155deg, var(--navy) 0%, var(--navy-deep) 100%); }
+  .login-wrap { position: relative; z-index: 1; width: 100%; max-width: 380px; padding: 1.5rem; }
+  .login-brand { display: flex; align-items: center; gap: 0.9rem; justify-content: center; margin-bottom: 1.8rem; }
+  .login-brand img { height: 48px; width: auto; filter: brightness(0) invert(1); opacity: 0.96; }
+  .login-brand h1 { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; font-weight: 700; color: #fff; margin: 0; letter-spacing: -0.01em; }
+  .login-brand p { margin: 2px 0 0; font-size: 0.72rem; color: var(--cyan-soft); letter-spacing: 0.08em; text-transform: uppercase; }
+  .login-card { background: var(--paper); border-radius: var(--radius); box-shadow: 0 20px 60px -20px rgba(0,0,0,0.5); padding: 1.8rem; }
+  .login-card h2 { font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem; color: var(--navy); margin: 0 0 1.3rem; }
+  .field-group { margin-bottom: 1.1rem; }
+  .field-group label { display: block; font-size: 0.85rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
+  .field-group input { width: 100%; padding: 0.75rem 1rem; font-size: 0.95rem; font-family: inherit; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); outline: none; }
+  .field-group input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.18); }
+  #loginBtn { width: 100%; justify-content: center; padding: 0.8rem; font-size: 0.9rem; margin-top: 0.4rem; }
+  #loginError { color: var(--rust); font-size: 0.85rem; margin-bottom: 0.6rem; min-height: 1.1em; }
+  .login-hint { text-align: center; font-size: 0.78rem; color: rgba(255,255,255,0.5); margin-top: 1.4rem; }
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-brand">
+    <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
+    <div>
+      <h1>Aaral Marketing</h1>
+      <p>Ledger Dashboard</p>
+    </div>
+  </div>
+
+  <div class="login-card">
+    <h2>Sign in</h2>
+    <div class="field-group">
+      <label>Username</label>
+      <input type="text" id="username" autocomplete="username" autocapitalize="off">
+    </div>
+    <div class="field-group">
+      <label>Password</label>
+      <input type="password" id="password" autocomplete="current-password">
+    </div>
+    <div id="loginError"></div>
+    <button class="btn-primary" id="loginBtn" type="button">Sign in</button>
+  </div>
+
+  <div class="login-hint">Forgotten your password? Ask an admin to reset it from Users.</div>
+</div>
+
+<script>
+const usernameEl = document.getElementById('username');
+const passwordEl = document.getElementById('password');
+const errorEl = document.getElementById('loginError');
+const loginBtn = document.getElementById('loginBtn');
+
+async function attemptLogin() {
+  const username = usernameEl.value.trim();
+  const password = passwordEl.value;
+  if (!username || !password) {
+    errorEl.textContent = 'Enter both a username and password.';
+    return;
+  }
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Signing in…';
+  errorEl.textContent = '';
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json().catch(() => ({ ok: false, error: 'Unexpected response from server' }));
+  loginBtn.disabled = false;
+  loginBtn.textContent = 'Sign in';
+  if (!data.ok) {
+    errorEl.textContent = data.error || 'Could not sign in.';
+    return;
+  }
+  const params = new URLSearchParams(window.location.search);
+  window.location.href = params.get('next') || '/';
+}
+
+loginBtn.addEventListener('click', attemptLogin);
+[usernameEl, passwordEl].forEach((el) => el.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') attemptLogin();
+}));
+usernameEl.focus();
+</script>
+</body>
+</html>

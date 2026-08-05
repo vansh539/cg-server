@@ -26,6 +26,7 @@
 </style>
 </head>
 <body>
+<script src="/auth-nav.js"></script>
 
 <div class="hero">
   <div class="hero-inner">
@@ -43,7 +44,8 @@
         <a href="/quotation.html">New Quotation</a>
         <a href="/chitti.html">New Slip</a>
         <a href="/payment.html">New Payment</a>
-        <a href="/updates.html">Updates</a>
+        <a href="/updates.html" data-admin-only>Updates</a>
+        <a href="/users.html" data-admin-only>Users</a>
       </nav>
     </div>
     <div class="hero-heading">
@@ -103,10 +105,6 @@
     <div class="field-group">
       <label>Phone number</label>
       <input type="text" id="newCustomerPhone" placeholder="10-digit WhatsApp number" autocomplete="off">
-    </div>
-    <div class="field-group">
-      <label>Admin PIN</label>
-      <input type="password" id="newCustomerPin" inputmode="numeric" autocomplete="off">
     </div>
     <div id="addCustomerError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
@@ -168,7 +166,6 @@ const errorEl = document.getElementById('addCustomerError');
 function openModal() {
   nameInput.value = '';
   phoneInput.value = '';
-  document.getElementById('newCustomerPin').value = '';
   errorEl.textContent = '';
   modal.classList.add('open');
   nameInput.focus();
@@ -182,7 +179,6 @@ modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); }
 document.getElementById('saveAddCustomer').addEventListener('click', async () => {
   const name = nameInput.value.trim();
   const phoneNumber = phoneInput.value.trim();
-  const pin = document.getElementById('newCustomerPin').value;
   if (!name || !phoneNumber) {
     errorEl.textContent = 'Name and phone number are both required.';
     return;
@@ -190,13 +186,9 @@ document.getElementById('saveAddCustomer').addEventListener('click', async () =>
   const res = await fetch('/api/customers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, phoneNumber, pin }),
+    body: JSON.stringify({ name, phoneNumber }),
   });
   const data = await res.json();
-  if (res.status === 401) {
-    errorEl.textContent = 'Incorrect PIN.';
-    return;
-  }
   if (!data.ok) {
     errorEl.textContent = data.error;
     return;

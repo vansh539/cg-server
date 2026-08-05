@@ -43,6 +43,7 @@
 </style>
 </head>
 <body>
+<script src="/auth-nav.js"></script>
 
 <div class="hero">
   <div class="hero-inner">
@@ -60,7 +61,8 @@
         <a href="/quotation.html">New Quotation</a>
         <a href="/chitti.html">New Slip</a>
         <a href="/payment.html">New Payment</a>
-        <a href="/updates.html">Updates</a>
+        <a href="/updates.html" data-admin-only>Updates</a>
+        <a href="/users.html" data-admin-only>Users</a>
       </nav>
     </div>
     <div class="hero-heading">
@@ -90,7 +92,7 @@
     <a class="back-link" href="/customers.html" style="margin:0;">&larr; All customers</a>
     <div style="display:flex; gap:0.6rem;">
       <button class="btn-primary" id="openOldBalance" type="button">+ Add Opening Balance</button>
-      <button class="btn-danger" id="openDeleteCustomer" type="button" style="padding:0.6rem 1.1rem;">Delete Customer</button>
+      <button class="btn-danger" id="openDeleteCustomer" type="button" style="padding:0.6rem 1.1rem;" data-admin-only>Delete Customer</button>
     </div>
   </div>
 
@@ -120,10 +122,6 @@
       <label>Description (optional)</label>
       <input type="text" id="oldBalanceDescription" placeholder="Opening Balance">
     </div>
-    <div class="field-group">
-      <label>Admin PIN</label>
-      <input type="password" id="oldBalancePin" inputmode="numeric" autocomplete="off">
-    </div>
     <div id="oldBalanceError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelOldBalance" type="button">Cancel</button>
@@ -136,10 +134,6 @@
   <div class="modal-box">
     <h3 id="voidModalTitle">Void Entry</h3>
     <div class="hint" style="margin-top:-0.3rem;">This keeps it visible in the history but removes it from the balance. It can't be undone from here.</div>
-    <div class="field-group">
-      <label>Admin PIN</label>
-      <input type="password" id="voidPin" inputmode="numeric" autocomplete="off">
-    </div>
     <div id="voidError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelVoid" type="button">Cancel</button>
@@ -152,10 +146,6 @@
   <div class="modal-box">
     <h3 id="deleteModalTitle">Delete Entry</h3>
     <div class="hint" style="margin-top:-0.3rem;">This permanently removes it and adjusts the balance. It cannot be undone.</div>
-    <div class="field-group">
-      <label>Admin PIN</label>
-      <input type="password" id="deletePin" inputmode="numeric" autocomplete="off">
-    </div>
     <div id="deleteError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelDelete" type="button">Cancel</button>
@@ -171,10 +161,6 @@
     <div class="field-group">
       <label>Type the customer's name to confirm</label>
       <input type="text" id="deleteCustomerConfirmName" autocomplete="off">
-    </div>
-    <div class="field-group">
-      <label>Admin PIN</label>
-      <input type="password" id="deleteCustomerPin" inputmode="numeric" autocomplete="off">
     </div>
     <div id="deleteCustomerError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
@@ -199,8 +185,12 @@ function balanceColor(balance) {
 }
 
 async function load() {
-  const res = await fetch(`/api/customers/${customerId}/ledger`);
-  const { customer, entries } = await res.json();
+  const [ledgerRes, user] = await Promise.all([
+    fetch(`/api/customers/${customerId}/ledger`),
+    window.AaralAuth.getUser(),
+  ]);
+  const isAdmin = user && user.role === 'admin';
+  const { customer, entries } = await ledgerRes.json();
   const rowsEl = document.getElementById('rows');
   rowsEl.innerHTML = '';
   entries.forEach((e) => {
@@ -213,28 +203,30 @@ async function load() {
       ? `<a class="invoice-link" href="/invoice.html?id=${e.invoice_id}">${label}</a>`
       : (e.type === 'payment' ? `<a class="invoice-link" href="/receipt.html?id=${e.id}">${label}</a>` : label);
 
+    const viewInvoice = e.invoice_id ? `<a href="/invoice.html?id=${e.invoice_id}">View</a>` : '';
+    const deleteBtn = (type, id) => (isAdmin ? `<button class="btn-danger" data-delete-type="${type}" data-delete-id="${id}">Delete</button>` : '');
+
     let actions;
     if (e.type === 'invoice' && e.invoice_id) {
       // Real invoice-backed row.
       actions = e.voided
-        ? `<span class="voided-badge">Voided</span>
-           <button class="btn-danger" data-delete-type="invoice" data-delete-id="${e.invoice_id}">Delete</button>`
-        : `<a href="/edit-invoice.html?id=${e.invoice_id}">Edit</a>
+        ? `${viewInvoice}<span class="voided-badge">Voided</span>${deleteBtn('invoice', e.invoice_id)}`
+        : `${viewInvoice}<a href="/edit-invoice.html?id=${e.invoice_id}">Edit</a>
            <button class="btn-danger" data-void-type="invoice" data-void-id="${e.invoice_id}">Void</button>
-           <button class="btn-danger" data-delete-type="invoice" data-delete-id="${e.invoice_id}">Delete</button>`;
+           ${deleteBtn('invoice', e.invoice_id)}`;
     } else if (e.type === 'invoice' && !e.invoice_id) {
       // Standalone due (Opening Balance) -- never voided, delete-only.
-      actions = `<button class="btn-danger" data-delete-type="due" data-delete-id="${e.id}">Delete</button>`;
+      actions = deleteBtn('due', e.id);
     } else if (e.type === 'payment' && e.invoice_id) {
-      // Payment tied to an invoice -- manage via the invoice, not this row.
-      actions = e.voided ? '<span class="voided-badge">Voided</span>' : '';
+      // Payment tied to an invoice -- manage via the invoice, not this row,
+      // but still viewable directly.
+      actions = `${viewInvoice}${e.voided ? '<span class="voided-badge">Voided</span>' : ''}`;
     } else {
       // Standalone payment.
       actions = e.voided
-        ? `<span class="voided-badge">Voided</span>
-           <button class="btn-danger" data-delete-type="payment" data-delete-id="${e.id}">Delete</button>`
+        ? `<span class="voided-badge">Voided</span>${deleteBtn('payment', e.id)}`
         : `<button class="btn-danger" data-void-type="payment" data-void-id="${e.id}">Void</button>
-           <button class="btn-danger" data-delete-type="payment" data-delete-id="${e.id}">Delete</button>`;
+           ${deleteBtn('payment', e.id)}`;
     }
     actions = `<div class="row-actions">${actions}</div>`;
 
@@ -262,7 +254,6 @@ function openOldBalanceModal() {
   oldBalanceAmount.value = '';
   oldBalanceDate.value = new Date().toLocaleDateString('en-CA');
   oldBalanceDescription.value = '';
-  document.getElementById('oldBalancePin').value = '';
   oldBalanceError.textContent = '';
   oldBalanceModal.classList.add('open');
   oldBalanceAmount.focus();
@@ -286,14 +277,9 @@ document.getElementById('saveOldBalance').addEventListener('click', async () => 
       amount,
       date: oldBalanceDate.value || null,
       description: oldBalanceDescription.value.trim() || null,
-      pin: document.getElementById('oldBalancePin').value,
     }),
   });
   const data = await res.json();
-  if (res.status === 401) {
-    oldBalanceError.textContent = 'Incorrect PIN.';
-    return;
-  }
   if (!data.ok) {
     oldBalanceError.textContent = data.error;
     return;
@@ -304,16 +290,13 @@ document.getElementById('saveOldBalance').addEventListener('click', async () => 
 
 const voidModal = document.getElementById('voidModal');
 const voidError = document.getElementById('voidError');
-const voidPin = document.getElementById('voidPin');
 let pendingVoid = null;
 
 function openVoidModal(type, id) {
   pendingVoid = { type, id };
   document.getElementById('voidModalTitle').textContent = type === 'invoice' ? 'Void Invoice' : 'Void Payment';
-  voidPin.value = '';
   voidError.textContent = '';
   voidModal.classList.add('open');
-  voidPin.focus();
 }
 function closeVoidModal() { voidModal.classList.remove('open'); pendingVoid = null; }
 
@@ -330,16 +313,8 @@ document.getElementById('confirmVoid').addEventListener('click', async () => {
   const url = pendingVoid.type === 'invoice'
     ? `/api/invoices/${pendingVoid.id}/void`
     : `/api/payments/${pendingVoid.id}/void`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin: voidPin.value }),
-  });
+  const res = await fetch(url, { method: 'POST' });
   const data = await res.json();
-  if (res.status === 401) {
-    voidError.textContent = 'Incorrect PIN.';
-    return;
-  }
   if (!data.ok) {
     voidError.textContent = data.error;
     return;
@@ -356,16 +331,13 @@ const DELETE_ENDPOINTS = {
 
 const deleteModal = document.getElementById('deleteModal');
 const deleteError = document.getElementById('deleteError');
-const deletePin = document.getElementById('deletePin');
 let pendingDelete = null;
 
 function openDeleteModal(type, id) {
   pendingDelete = { type, id };
   document.getElementById('deleteModalTitle').textContent = `Delete ${type === 'invoice' ? 'Invoice' : type === 'due' ? 'Entry' : 'Payment'}`;
-  deletePin.value = '';
   deleteError.textContent = '';
   deleteModal.classList.add('open');
-  deletePin.focus();
 }
 function closeDeleteModal() { deleteModal.classList.remove('open'); pendingDelete = null; }
 
@@ -379,16 +351,8 @@ deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) clo
 
 document.getElementById('confirmDelete').addEventListener('click', async () => {
   if (!pendingDelete) return;
-  const res = await fetch(DELETE_ENDPOINTS[pendingDelete.type](pendingDelete.id), {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin: deletePin.value }),
-  });
+  const res = await fetch(DELETE_ENDPOINTS[pendingDelete.type](pendingDelete.id), { method: 'DELETE' });
   const data = await res.json();
-  if (res.status === 401) {
-    deleteError.textContent = 'Incorrect PIN.';
-    return;
-  }
   if (!data.ok) {
     deleteError.textContent = data.error;
     return;
@@ -406,7 +370,6 @@ let currentCustomerName = '';
 function openDeleteCustomerModal() {
   document.getElementById('deleteCustomerName').textContent = currentCustomerName;
   deleteCustomerConfirmName.value = '';
-  document.getElementById('deleteCustomerPin').value = '';
   deleteCustomerError.textContent = '';
   confirmDeleteCustomerBtn.disabled = true;
   deleteCustomerModal.classList.add('open');
@@ -423,16 +386,8 @@ deleteCustomerConfirmName.addEventListener('input', () => {
 });
 
 confirmDeleteCustomerBtn.addEventListener('click', async () => {
-  const res = await fetch(`/api/customers/${customerId}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin: document.getElementById('deleteCustomerPin').value }),
-  });
+  const res = await fetch(`/api/customers/${customerId}`, { method: 'DELETE' });
   const data = await res.json();
-  if (res.status === 401) {
-    deleteCustomerError.textContent = 'Incorrect PIN.';
-    return;
-  }
   if (!data.ok) {
     deleteCustomerError.textContent = data.error;
     return;

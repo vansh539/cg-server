@@ -35,6 +35,7 @@
 </style>
 </head>
 <body>
+<script src="/auth-nav.js"></script>
 
 <div class="hero">
   <div class="hero-inner">
@@ -52,7 +53,8 @@
         <a href="/quotation.html">New Quotation</a>
         <a href="/chitti.html">New Slip</a>
         <a href="/payment.html">New Payment</a>
-        <a href="/updates.html">Updates</a>
+        <a href="/updates.html" data-admin-only>Updates</a>
+        <a href="/users.html" data-admin-only>Users</a>
       </nav>
     </div>
     <div class="hero-heading">
@@ -97,12 +99,7 @@
       <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
     </div>
 
-    <div class="field-group" style="margin-top:1.2rem;">
-      <label>Admin PIN</label>
-      <input type="password" id="pin" inputmode="numeric" autocomplete="off">
-    </div>
-
-    <button id="saveBtn" class="btn-primary" type="button">Save Changes</button>
+    <button id="saveBtn" class="btn-primary" type="button" style="margin-top:1.2rem;">Save Changes</button>
     <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
   </div>
 </div>
@@ -194,7 +191,6 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     unloadingCharge: document.getElementById('unloading').value || null,
     destination: document.getElementById('destination').value.trim() || null,
     invoiceDate: null,
-    pin: document.getElementById('pin').value,
   };
   const res = await fetch(`/api/invoices/${invoiceId}`, {
     method: 'PUT',
@@ -202,11 +198,6 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  if (res.status === 401) {
-    statusEl.textContent = 'Incorrect PIN.';
-    statusEl.style.color = 'var(--rust)';
-    return;
-  }
   if (!data.ok) {
     statusEl.textContent = `Error: ${data.error}`;
     statusEl.style.color = 'var(--rust)';

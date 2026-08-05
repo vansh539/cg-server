@@ -19,6 +19,7 @@
 </style>
 </head>
 <body>
+<script src="/auth-nav.js"></script>
 
 <div class="hero">
   <div class="hero-inner">
@@ -36,7 +37,8 @@
         <a href="/quotation.html">New Quotation</a>
         <a href="/chitti.html">New Slip</a>
         <a href="/payment.html">New Payment</a>
-        <a class="active" href="/updates.html">Updates</a>
+        <a class="active" href="/updates.html" data-admin-only>Updates</a>
+        <a href="/users.html" data-admin-only>Users</a>
       </nav>
     </div>
   </div>
@@ -56,30 +58,12 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="pinModal">
-  <div class="modal-box">
-    <h3>Admin PIN required</h3>
-    <div class="field-group">
-      <label>PIN</label>
-      <input type="password" id="pinInput" inputmode="numeric" autocomplete="off">
-    </div>
-    <div id="pinError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
-    <div class="modal-actions">
-      <button class="btn-secondary" id="cancelPin" type="button">Cancel</button>
-      <button class="btn-primary" id="confirmPin" type="button">Confirm</button>
-    </div>
-  </div>
-</div>
-
 <footer class="footer-credit">Powered by IntelliTech Solutions</footer>
 
 <script>
 const statusEl = document.getElementById('updatesStatus');
 const checkBtn = document.getElementById('checkBtn');
 const applyBtn = document.getElementById('applyBtn');
-const pinModal = document.getElementById('pinModal');
-const pinInput = document.getElementById('pinInput');
-const pinError = document.getElementById('pinError');
 let pollTimer = null;
 
 async function check() {
@@ -89,6 +73,12 @@ async function check() {
   try {
     const res = await fetch('/api/updates/check');
     const data = await res.json();
+    if (res.status === 403) {
+      statusEl.className = 'updates-status err';
+      statusEl.textContent = "You don't have access to this — Updates is admin-only.";
+      checkBtn.style.display = 'none';
+      return;
+    }
     if (data.updateAvailable) {
       statusEl.textContent = `Update available: v${data.latestVersion} (${data.commitsBehind} change${data.commitsBehind === 1 ? '' : 's'} behind current v${data.currentVersion}).`;
       applyBtn.style.display = 'inline-block';
@@ -102,31 +92,10 @@ async function check() {
   }
 }
 
-function openPinModal() {
-  pinInput.value = '';
-  pinError.textContent = '';
-  pinModal.classList.add('open');
-  pinInput.focus();
-}
-function closePinModal() { pinModal.classList.remove('open'); }
-
 checkBtn.addEventListener('click', check);
-applyBtn.addEventListener('click', openPinModal);
-document.getElementById('cancelPin').addEventListener('click', closePinModal);
-pinModal.addEventListener('click', (e) => { if (e.target === pinModal) closePinModal(); });
-
-document.getElementById('confirmPin').addEventListener('click', async () => {
-  const res = await fetch('/api/updates/apply', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin: pinInput.value }),
-  });
-  const data = await res.json();
-  if (res.status === 401) {
-    pinError.textContent = 'Incorrect PIN.';
-    return;
-  }
-  closePinModal();
+applyBtn.addEventListener('click', async () => {
+  if (!confirm('Update the app now? This restarts the dashboard and WhatsApp bridge for a couple of minutes.')) return;
+  await fetch('/api/updates/apply', { method: 'POST' });
   applyBtn.style.display = 'none';
   statusEl.className = 'updates-status';
   statusEl.textContent = 'Update started — this can take a couple of minutes. Do not close this page.';

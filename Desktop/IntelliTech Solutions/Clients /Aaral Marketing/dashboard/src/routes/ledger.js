@@ -2,7 +2,7 @@ const express = require('express');
 const balances = require('payment-ledger-core/ledger/balances');
 const customers = require('payment-ledger-core/ledger/customers');
 const { query, pool } = require('payment-ledger-core/db');
-const { requirePin } = require('../adminAuth');
+const { requireAdmin } = require('../sessionAuth');
 
 const router = express.Router();
 
@@ -16,36 +16,7 @@ router.get('/customers', async (req, res) => {
   res.json(rows);
 });
 
-// Powers the home page's stat strip + activity feed -- a system-wide view
-// across every customer, not one account's ledger.
-router.get('/dashboard-summary', async (_req, res) => {
-  const { rows: balanceRows } = await query('SELECT balance FROM customer_balances');
-  const totalOutstanding = balanceRows.reduce((sum, r) => sum + Math.max(Number(r.balance), 0), 0);
-  const customerCount = balanceRows.length;
-
-  const { rows: invoiceCountRows } = await query(
-    `SELECT count(*) FROM invoices WHERE voided_at IS NULL AND created_at >= date_trunc('month', now())`
-  );
-  const invoicesThisMonth = Number(invoiceCountRows[0].count);
-
-  const { rows: activity } = await query(
-    `SELECT 'invoice' AS type, d.description AS label, d.amount_due AS amount, d.created_at AS occurred_at,
-            d.invoice_id, c.name AS customer_name, c.id AS customer_id
-     FROM dues d JOIN customers c ON c.id = d.customer_id
-     WHERE NOT d.voided
-     UNION ALL
-     SELECT 'payment' AS type, pc.proof_type AS label, pc.amount_claimed AS amount, pc.reported_at AS occurred_at,
-            pc.invoice_id, c.name AS customer_name, c.id AS customer_id
-     FROM payment_claims pc JOIN customers c ON c.id = pc.customer_id
-     WHERE pc.status = 'confirmed'
-     ORDER BY occurred_at DESC
-     LIMIT 8`
-  );
-
-  res.json({ totalOutstanding, customerCount, invoicesThisMonth, activity });
-});
-
-router.post('/customers', requirePin, async (req, res) => {
+router.post('/customers', async (req, res) => {
   try {
     const name = (req.body.name || '').trim();
     const phoneNumber = (req.body.phoneNumber || '').trim();
@@ -62,7 +33,7 @@ router.post('/customers', requirePin, async (req, res) => {
   }
 });
 
-router.post('/customers/:id/opening-balance', requirePin, async (req, res) => {
+router.post('/customers/:id/opening-balance', async (req, res) => {
   try {
     const customer = await customers.findById(req.params.id);
     if (!customer) return res.status(404).json({ ok: false, error: 'Customer not found' });
@@ -116,7 +87,7 @@ router.get('/customers/:id/ledger', async (req, res) => {
 // Only for standalone dues (Opening Balance entries, invoice_id IS NULL) --
 // one linked to an invoice must be deleted by deleting the invoice itself,
 // same reasoning as payments.js's void/delete restriction.
-router.delete('/dues/:id', requirePin, async (req, res) => {
+router.delete('/dues/:id', requireAdmin, async (req, res) => {
   try {
     const { rows } = await query('SELECT invoice_id FROM dues WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ ok: false, error: 'Entry not found' });
@@ -134,7 +105,7 @@ router.delete('/dues/:id', requirePin, async (req, res) => {
 // (see the discussion this was built from). Deletes every invoice, invoice
 // item, due, and payment_claim this customer ever had, then the customer
 // itself.
-router.delete('/customers/:id', requirePin, async (req, res) => {
+router.delete('/customers/:id', requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

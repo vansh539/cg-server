@@ -87,6 +87,32 @@ async function createInvoice({ customerId, items, unloadingCharge, paidNow, crea
   }
 }
 
+// A payment_claims row written before the invoice_id column existed on that
+// table has no FK back to its invoice -- but createInvoice() always writes
+// the due and the (if paidNow) claim in the same transaction from the same
+// effectiveDate value, so for every real pre-migration invoice the confirmed
+// claim's reported_at is byte-identical to the invoice's created_at. When
+// exactly one unlinked confirmed claim matches customer_id + amount +
+// that exact timestamp, it's unambiguously the right one. Anything less
+// certain (zero or multiple candidates) still refuses -- guessing wrong
+// would corrupt the customer's balance.
+async function findOrphanedClaim(client, invoice) {
+  if (!invoice.customer_id) return null;
+  // Compares reported_at against invoices.created_at entirely in SQL via the
+  // join, rather than passing invoice.created_at back as a query parameter
+  // -- that value would have already been downcast to a JS Date (millisecond
+  // precision) on its way out of Postgres, silently losing the microsecond
+  // precision timestamptz actually stores and breaking the exact match.
+  const { rows } = await client.query(
+    `SELECT pc.id FROM payment_claims pc
+     JOIN invoices i ON i.id = $1
+     WHERE pc.invoice_id IS NULL AND pc.status = 'confirmed'
+       AND pc.customer_id = i.customer_id AND pc.amount_claimed = i.total AND pc.reported_at = i.created_at`,
+    [invoice.id]
+  );
+  return rows.length === 1 ? rows[0].id : null;
+}
+
 // Both void and edit touch real money on a live ledger, so both look up the
 // linked due/payment_claim by the real invoice_id FK (not the old regex/
 // description match) and, for a paid invoice, refuse outright if the linked
@@ -105,13 +131,13 @@ async function findLinkedRowsOrThrow(client, invoice) {
     const { rows: claimRows } = await client.query(
       `SELECT id FROM payment_claims WHERE invoice_id = $1 AND status = 'confirmed'`, [invoice.id]
     );
-    if (claimRows.length === 0) {
+    claimId = claimRows.length ? claimRows[0].id : await findOrphanedClaim(client, invoice);
+    if (!claimId) {
       throw new Error(
         'This invoice was marked paid before invoice linking existed, so its payment record ' +
         'can\'t be reliably located. Editing/voiding it isn\'t supported to avoid corrupting the balance.'
       );
     }
-    claimId = claimRows[0].id;
   }
   return { dueId: dueRows[0].id, claimId };
 }
@@ -120,20 +146,22 @@ async function findLinkedRowsOrThrow(client, invoice) {
 // (unlike findLinkedRowsOrThrow above) -- deleting must work on an
 // already-voided invoice too, to let staff fully clean up a mistaken entry
 // rather than leave an inert voided row behind forever. Same pre-migration
-// refusal still applies: a paid invoice whose claim has no invoice_id link
-// can't be safely deleted either, for the same balance-corruption reason.
+// refusal still applies when the orphaned-claim heuristic can't uniquely
+// resolve a paid invoice's claim either, for the same balance-corruption
+// reason. A null customer_id (pre-walk-in-policy legacy rows) has no
+// customer balance to corrupt at all, so it skips the claim check entirely.
 async function findLinkedRowsForDelete(client, invoice) {
   const { rows: dueRows } = await client.query('SELECT id FROM dues WHERE invoice_id = $1', [invoice.id]);
   let claimId = null;
-  if (invoice.paid_now) {
+  if (invoice.paid_now && invoice.customer_id) {
     const { rows: claimRows } = await client.query('SELECT id FROM payment_claims WHERE invoice_id = $1', [invoice.id]);
-    if (claimRows.length === 0) {
+    claimId = claimRows.length ? claimRows[0].id : await findOrphanedClaim(client, invoice);
+    if (!claimId) {
       throw new Error(
         'This invoice was marked paid before invoice linking existed, so its payment record ' +
         'can\'t be reliably located. Deleting it isn\'t supported to avoid corrupting the balance.'
       );
     }
-    claimId = claimRows[0].id;
   }
   return { dueId: dueRows.length ? dueRows[0].id : null, claimId };
 }

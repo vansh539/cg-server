@@ -5,7 +5,7 @@ const { notify, notifyWithPdf } = require('../notify');
 const customers = require('payment-ledger-core/ledger/customers');
 const balances = require('payment-ledger-core/ledger/balances');
 const { query } = require('payment-ledger-core/db');
-const { requirePin } = require('../adminAuth');
+const { requireAdmin } = require('../sessionAuth');
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ router.post('/payments', async (req, res) => {
     }
 
     const payment = await recordPayment({
-      customerId: customer.id, amount, method, date, createdBy: 'dashboard',
+      customerId: customer.id, amount, method, date, createdBy: req.session.user.username,
     });
 
     const balance = await balances.getBalanceByCustomerId(customer.id);
@@ -73,7 +73,7 @@ router.get('/payments/:id', async (req, res) => {
 // invoice_id, set when paidNow is checked at invoice creation) must be
 // voided by voiding the invoice itself, so the invoice's paid_now flag and
 // its claim never fall out of sync with each other.
-router.post('/payments/:id/void', requirePin, async (req, res) => {
+router.post('/payments/:id/void', async (req, res) => {
   try {
     const { rows } = await query('SELECT * FROM payment_claims WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ ok: false, error: 'Payment not found' });
@@ -94,7 +94,7 @@ router.post('/payments/:id/void', requirePin, async (req, res) => {
 // Same invoice_id restriction as void above -- a payment tied to an invoice
 // must be removed by deleting the invoice, so paid_now/claim never drift
 // apart. Permanent, no undo.
-router.delete('/payments/:id', requirePin, async (req, res) => {
+router.delete('/payments/:id', requireAdmin, async (req, res) => {
   try {
     const { rows } = await query('SELECT invoice_id FROM payment_claims WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ ok: false, error: 'Payment not found' });

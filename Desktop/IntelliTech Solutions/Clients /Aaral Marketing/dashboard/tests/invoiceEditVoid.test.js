@@ -59,7 +59,7 @@ test('voidInvoice refuses to void an already-voided invoice', async () => {
   await assert.rejects(() => voidInvoice(result.invoice.id, 'tester'), /already voided/);
 });
 
-test('voidInvoice refuses a paid invoice whose claim has no invoice_id link (pre-migration data)', async () => {
+test('voidInvoice resolves an orphaned pre-migration claim via customer+amount+timestamp match', async () => {
   const customer = await customers.createCustomer({ name: 'Legacy Traders', phoneNumber: '9812345673' });
   const result = await createInvoice({
     customerId: customer.id,
@@ -70,9 +70,33 @@ test('voidInvoice refuses a paid invoice whose claim has no invoice_id link (pre
   // never have had before invoice_id existed.
   await pool.query('UPDATE payment_claims SET invoice_id = NULL WHERE id = $1', [result.claimId]);
 
+  await voidInvoice(result.invoice.id, 'tester');
+
+  const { rows: invoiceRows } = await pool.query('SELECT voided_at FROM invoices WHERE id = $1', [result.invoice.id]);
+  assert.ok(invoiceRows[0].voided_at);
+  const { rows: claimRows } = await pool.query('SELECT status FROM payment_claims WHERE id = $1', [result.claimId]);
+  assert.equal(claimRows[0].status, 'voided', 'the uniquely-matched orphaned claim should be voided too');
+  const balance = await balances.getBalanceByCustomerId(customer.id);
+  assert.equal(Number(balance.balance), 0);
+});
+
+test('voidInvoice still refuses a pre-migration paid invoice when the orphaned-claim match is ambiguous', async () => {
+  const customer = await customers.createCustomer({ name: 'Ambiguous Traders', phoneNumber: '9812345676' });
+  const result = await createInvoice({
+    customerId: customer.id,
+    items: [{ particulars: 'OPC Cement', grade: '43', vch: '1', qty: 10, rate: 350 }],
+    unloadingCharge: null, paidNow: true, createdBy: '9999900000',
+  });
+  await pool.query('UPDATE payment_claims SET invoice_id = NULL WHERE id = $1', [result.claimId]);
+  await pool.query(
+    `INSERT INTO payment_claims (customer_id, amount_claimed, proof_type, status, reported_at, reviewed_at)
+     SELECT customer_id, amount_claimed, proof_type, status, reported_at, reviewed_at
+     FROM payment_claims WHERE id = $1`,
+    [result.claimId]
+  );
+
   await assert.rejects(() => voidInvoice(result.invoice.id, 'tester'), /can't be reliably located/);
 
-  // Nothing should have been mutated by the failed attempt.
   const { rows: invoiceRows } = await pool.query('SELECT voided_at FROM invoices WHERE id = $1', [result.invoice.id]);
   assert.equal(invoiceRows[0].voided_at, null);
 });
