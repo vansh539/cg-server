@@ -391,3 +391,32 @@ test('updateItem can toggle dualTrack on for an existing item, seeding stockPcs 
   assert.equal(updated.stockPcs, 0);
   assert.equal(updated.currentStockKg, 500); // kg counter untouched by the toggle
 });
+
+test('getReport includes pcs columns for a dualTrack item, reconciling independently of the kg column', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'MS Pipe Dual', unit: 'kg', dualTrack: true, initialStockKg: 0, initialStockPcs: 0 });
+  store.stockIn(item.id, 200, 80, 'received');
+  store.deduct(item.id, 50, 20, 'Chitti/Invoice');
+
+  const report = store.getReport({ type: 'monthly', date: new Date().toISOString() });
+  const row = report.rows.find((r) => r.itemId === item.id);
+  assert.equal(row.dualTrack, true);
+  assert.equal(row.stockIn, 200);
+  assert.equal(row.sold, 50);
+  assert.equal(row.closing, 150);
+  assert.equal(row.stockInPcs, 80);
+  assert.equal(row.soldPcs, 20);
+  assert.equal(row.closingPcs, 60);
+  assert.equal(row.openingPcs, row.closingPcs - row.stockInPcs + row.soldPcs - row.adjustmentsPcs);
+});
+
+test('getReport omits pcs columns for a non-dualTrack item', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'TMT Plain', unit: 'kg', initialStockKg: 100 });
+  const report = store.getReport({ type: 'monthly', date: new Date().toISOString() });
+  const row = report.rows.find((r) => r.itemId === item.id);
+  assert.equal(row.dualTrack, false);
+  assert.equal('closingPcs' in row, false);
+});

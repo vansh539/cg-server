@@ -317,17 +317,36 @@ function createStore(filePath) {
       const adjustments = inPeriod.filter((m) => m.reason === 'adjustment').reduce((s, m) => s + m.deltaKg, 0);
       const opening = closing - stockIn + sold - adjustments;
 
-      return {
+      const row = {
         itemId: item.id,
         name: item.name,
         categoryId: item.categoryId,
         unit: item.unit,
+        dualTrack: !!item.dualTrack,
         opening: round2(opening),
         stockIn: round2(stockIn),
         sold: round2(sold),
         adjustments: round2(adjustments),
         closing: round2(closing),
       };
+
+      if (item.dualTrack) {
+        const afterPeriodDeltaPcs = itemMovements
+          .filter((m) => new Date(m.at).getTime() >= endMs)
+          .reduce((sum, m) => sum + (m.deltaPcs || 0), 0);
+        const closingPcs = item.stockPcs - afterPeriodDeltaPcs;
+        const stockInPcs = inPeriod.filter((m) => m.reason === 'stock-in' || m.reason === 'initial').reduce((s, m) => s + (m.deltaPcs || 0), 0);
+        const soldPcs = -inPeriod.filter((m) => m.reason === 'invoice-deduct').reduce((s, m) => s + (m.deltaPcs || 0), 0);
+        const adjustmentsPcs = inPeriod.filter((m) => m.reason === 'adjustment').reduce((s, m) => s + (m.deltaPcs || 0), 0);
+        const openingPcs = closingPcs - stockInPcs + soldPcs - adjustmentsPcs;
+        row.openingPcs = round2(openingPcs);
+        row.stockInPcs = round2(stockInPcs);
+        row.soldPcs = round2(soldPcs);
+        row.adjustmentsPcs = round2(adjustmentsPcs);
+        row.closingPcs = round2(closingPcs);
+      }
+
+      return row;
     });
 
     return { type, periodStart: start.toISOString(), periodEnd: end.toISOString(), rows };
