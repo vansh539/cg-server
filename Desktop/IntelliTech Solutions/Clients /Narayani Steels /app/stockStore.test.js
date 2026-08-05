@@ -304,3 +304,90 @@ test('rapid sequential mutations are all applied (no lost updates)', () => {
   assert.equal(store.getItem(item.id).currentStockKg, 200);
   assert.equal(store.listMovements(item.id).length, 20);
 });
+
+test('addItem with dualTrack seeds stockPcs and tracks it independently of currentStockKg', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({
+    categoryId: cats[0].id, name: 'MS Pipe 20x20', unit: 'kg',
+    dualTrack: true, initialStockKg: 100, initialStockPcs: 40,
+  });
+  assert.equal(item.dualTrack, true);
+  assert.equal(item.currentStockKg, 100);
+  assert.equal(item.stockPcs, 40);
+  assert.equal(item.pieces, 40); // computePieces returns the real count directly for dual-track items
+});
+
+test('addItem without dualTrack defaults dualTrack false and stockPcs 0', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'TMT 12mm', unit: 'kg', initialStockKg: 50 });
+  assert.equal(item.dualTrack, false);
+  assert.equal(item.stockPcs, 0);
+});
+
+test('existing items loaded from a legacy stock.json file (no dualTrack/stockPcs fields) migrate to dualTrack:false, stockPcs:0', () => {
+  const file = tempFile();
+  const legacy = {
+    categories: [{ id: 'cat_1', name: 'TMT Bars' }],
+    items: [{ id: 'item_1', categoryId: 'cat_1', name: 'Legacy Item', unit: 'kg', weightPerPieceKg: null, currentStockKg: 250 }],
+    movements: [],
+  };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(legacy, null, 2));
+  const store = createStore(file);
+  const item = store.getItem('item_1');
+  assert.equal(item.dualTrack, false);
+  assert.equal(item.stockPcs, 0);
+  assert.equal(item.currentStockKg, 250); // untouched
+});
+
+test('stockIn on a dualTrack item requires both kg and pcs to be positive', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'Binding Wire', unit: 'kg', dualTrack: true, initialStockKg: 0, initialStockPcs: 0 });
+  assert.throws(() => store.stockIn(item.id, 50, 0), /positive/);
+  assert.throws(() => store.stockIn(item.id, 0, 10), /positive/);
+  const updated = store.stockIn(item.id, 50, 10);
+  assert.equal(updated.currentStockKg, 50);
+  assert.equal(updated.stockPcs, 10);
+});
+
+test('stockIn on a non-dualTrack item ignores any pcs argument and behaves exactly as before', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'TMT 16mm', unit: 'kg', initialStockKg: 0 });
+  const updated = store.stockIn(item.id, 100, 999, ''); // pcs=999 must be ignored, no dualTrack
+  assert.equal(updated.currentStockKg, 100);
+  assert.equal(updated.stockPcs, 0);
+});
+
+test('adjust on a dualTrack item sets both new totals independently', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'MS Pipe 25x25', unit: 'kg', dualTrack: true, initialStockKg: 100, initialStockPcs: 40 });
+  const updated = store.adjust(item.id, 80, 30, 'correction');
+  assert.equal(updated.currentStockKg, 80);
+  assert.equal(updated.stockPcs, 30);
+});
+
+test('deduct on a dualTrack item requires both kg and pcs to be positive and decrements both counters', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'MS Pipe 32x32', unit: 'kg', dualTrack: true, initialStockKg: 100, initialStockPcs: 40 });
+  assert.throws(() => store.deduct(item.id, 10, 0), /positive/);
+  const updated = store.deduct(item.id, 10, 4, 'Chitti/Invoice');
+  assert.equal(updated.currentStockKg, 90);
+  assert.equal(updated.stockPcs, 36);
+});
+
+test('updateItem can toggle dualTrack on for an existing item, seeding stockPcs at 0', () => {
+  const store = createStore(tempFile());
+  const cats = store.listCategories();
+  const item = store.addItem({ categoryId: cats[0].id, name: 'M.S. Section 40x40', unit: 'kg', initialStockKg: 500 });
+  assert.equal(item.dualTrack, false);
+  const updated = store.updateItem(item.id, { dualTrack: true });
+  assert.equal(updated.dualTrack, true);
+  assert.equal(updated.stockPcs, 0);
+  assert.equal(updated.currentStockKg, 500); // kg counter untouched by the toggle
+});

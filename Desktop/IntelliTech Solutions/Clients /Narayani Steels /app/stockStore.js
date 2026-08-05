@@ -18,6 +18,7 @@ function newId(prefix) {
 // surgical — the meaning is unit-dependent, tracked via the new `unit`
 // field below, not the field name.
 function computePieces(item) {
+  if (item.dualTrack) return item.stockPcs;
   if (item.unit === 'pcs') return null; // the tracked quantity already *is* the piece count — no separate derived value needed
   return item.weightPerPieceKg ? Math.floor(item.currentStockKg / item.weightPerPieceKg) : null;
 }
@@ -35,6 +36,15 @@ function createStore(filePath) {
       } catch (err) {
         throw new Error(`stock.json is corrupted and could not be parsed: ${err.message}`);
       }
+      // Migration: items written before dual pieces+kg tracking existed have
+      // neither field — seed dualTrack:false, stockPcs:0 (never a fabricated
+      // real count) and persist so this only runs once per file.
+      let migrated = false;
+      data.items.forEach((item) => {
+        if (item.dualTrack === undefined) { item.dualTrack = false; migrated = true; }
+        if (item.stockPcs === undefined) { item.stockPcs = 0; migrated = true; }
+      });
+      if (migrated) save();
     } else {
       data = {
         categories: PRESET_CATEGORIES.map((name) => ({ id: newId('cat'), name })),
@@ -89,13 +99,14 @@ function createStore(filePath) {
     return { ...item, pieces: computePieces(item) };
   }
 
-  function addItem({ categoryId, name, unit, weightPerPieceKg, initialStockKg }) {
+  function addItem({ categoryId, name, unit, weightPerPieceKg, initialStockKg, dualTrack, initialStockPcs }) {
     ensureLoaded();
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Item name is required');
     if (!data.categories.some((c) => c.id === categoryId)) throw new Error('Category not found');
 
     const resolvedUnit = unit === 'pcs' ? 'pcs' : 'kg';
+    const resolvedDualTrack = !!dualTrack;
 
     // Pieces-mode items (pure count, e.g. Covering Blocks) have no weight
     // concept at all — silently ignore any weightPerPieceKg passed for them
@@ -113,49 +124,90 @@ function createStore(filePath) {
     if (!Number.isFinite(initial) || initial < 0) {
       throw new Error('Initial stock must be zero or a positive number');
     }
+    const initialPcs = resolvedDualTrack && initialStockPcs !== undefined && initialStockPcs !== ''
+      ? Number(initialStockPcs)
+      : 0;
+    if (resolvedDualTrack && (!Number.isFinite(initialPcs) || initialPcs < 0)) {
+      throw new Error('Initial pieces must be zero or a positive number');
+    }
 
-    const item = { id: newId('item'), categoryId, name: trimmedName, unit: resolvedUnit, weightPerPieceKg: weight, currentStockKg: initial };
+    const item = {
+      id: newId('item'), categoryId, name: trimmedName, unit: resolvedUnit,
+      weightPerPieceKg: weight, currentStockKg: initial,
+      dualTrack: resolvedDualTrack, stockPcs: initialPcs,
+    };
     data.items.push(item);
-    if (initial > 0) {
-      data.movements.push({ id: newId('mv'), itemId: item.id, deltaKg: initial, reason: 'initial', note: '', at: new Date().toISOString() });
+    if (initial > 0 || (resolvedDualTrack && initialPcs > 0)) {
+      data.movements.push({
+        id: newId('mv'), itemId: item.id, deltaKg: initial,
+        deltaPcs: resolvedDualTrack ? initialPcs : undefined,
+        reason: 'initial', note: '', at: new Date().toISOString(),
+      });
     }
     save();
     return { ...item, pieces: computePieces(item) };
   }
 
-  function applyDelta(itemId, deltaKg, reason, note) {
+  function applyDelta(itemId, deltaKg, deltaPcs, reason, note) {
     ensureLoaded();
     const item = data.items.find((i) => i.id === itemId);
     if (!item) throw new Error('Item not found');
     if (!Number.isFinite(deltaKg)) throw new Error('Quantity must be a number');
+    if (item.dualTrack && !Number.isFinite(deltaPcs)) throw new Error('Pieces quantity must be a number');
     item.currentStockKg = item.currentStockKg + deltaKg;
-    data.movements.push({ id: newId('mv'), itemId, deltaKg, reason, note: note || '', at: new Date().toISOString() });
+    if (item.dualTrack) item.stockPcs = item.stockPcs + deltaPcs;
+    data.movements.push({
+      id: newId('mv'), itemId, deltaKg,
+      deltaPcs: item.dualTrack ? deltaPcs : undefined,
+      reason, note: note || '', at: new Date().toISOString(),
+    });
     save();
     return { ...item, pieces: computePieces(item) };
   }
 
-  function stockIn(itemId, kg, note) {
+  function stockIn(itemId, kg, pcs, note) {
+    ensureLoaded();
+    const item = data.items.find((i) => i.id === itemId);
+    if (!item) throw new Error('Item not found');
     const n = Number(kg);
-    if (!Number.isFinite(n) || n <= 0) throw new Error('Stock-in quantity must be a positive number');
-    return applyDelta(itemId, n, 'stock-in', note);
+    if (!item.dualTrack) {
+      if (!Number.isFinite(n) || n <= 0) throw new Error('Stock-in quantity must be a positive number');
+      return applyDelta(itemId, n, undefined, 'stock-in', note);
+    }
+    const p = Number(pcs);
+    if (!Number.isFinite(n) || n <= 0) throw new Error('Kg quantity must be a positive number');
+    if (!Number.isFinite(p) || p <= 0) throw new Error('Pieces quantity must be a positive number');
+    return applyDelta(itemId, n, p, 'stock-in', note);
   }
 
-  function adjust(itemId, newTotalKg, note) {
+  function adjust(itemId, newTotalKg, newTotalPcs, note) {
     ensureLoaded();
     const item = data.items.find((i) => i.id === itemId);
     if (!item) throw new Error('Item not found');
     const n = Number(newTotalKg);
     if (!Number.isFinite(n)) throw new Error('New total must be a number');
-    return applyDelta(itemId, n - item.currentStockKg, 'adjustment', note);
+    if (!item.dualTrack) return applyDelta(itemId, n - item.currentStockKg, undefined, 'adjustment', note);
+    const p = Number(newTotalPcs);
+    if (!Number.isFinite(p)) throw new Error('New pieces total must be a number');
+    return applyDelta(itemId, n - item.currentStockKg, p - item.stockPcs, 'adjustment', note);
   }
 
-  function deduct(itemId, kg, note) {
+  function deduct(itemId, kg, pcs, note) {
+    ensureLoaded();
+    const item = data.items.find((i) => i.id === itemId);
+    if (!item) throw new Error('Item not found');
     const n = Number(kg);
-    if (!Number.isFinite(n) || n <= 0) throw new Error('Deduct quantity must be a positive number');
-    return applyDelta(itemId, -n, 'invoice-deduct', note);
+    if (!item.dualTrack) {
+      if (!Number.isFinite(n) || n <= 0) throw new Error('Deduct quantity must be a positive number');
+      return applyDelta(itemId, -n, undefined, 'invoice-deduct', note);
+    }
+    const p = Number(pcs);
+    if (!Number.isFinite(n) || n <= 0) throw new Error('Kg quantity must be a positive number');
+    if (!Number.isFinite(p) || p <= 0) throw new Error('Pieces quantity must be a positive number');
+    return applyDelta(itemId, -n, -p, 'invoice-deduct', note);
   }
 
-  function updateItem(id, { name, weightPerPieceKg } = {}) {
+  function updateItem(id, { name, weightPerPieceKg, dualTrack } = {}) {
     ensureLoaded();
     const item = data.items.find((i) => i.id === id);
     if (!item) throw new Error('Item not found');
@@ -171,6 +223,15 @@ function createStore(filePath) {
         throw new Error('Weight per piece must be a positive number or omitted');
       }
       item.weightPerPieceKg = weight;
+    }
+    if (dualTrack !== undefined) {
+      // Turning this on never fabricates a real Pieces count — it just
+      // starts the new counter at 0 if it isn't already tracked; turning it
+      // off leaves stockPcs dormant (not reset), so no data is lost if it's
+      // switched back on later.
+      const next = !!dualTrack;
+      if (next && item.stockPcs === undefined) item.stockPcs = 0;
+      item.dualTrack = next;
     }
     save();
     return { ...item, pieces: computePieces(item) };
