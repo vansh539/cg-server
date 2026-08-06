@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vishesh Steels - Delivery Challan Generator</title>
+    <style>
+        /* Base Resets & Form Styling (Hidden on Print) */
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; }
+        
+        .no-print {
+            background: white; padding: 20px; border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 900px; margin: 0 auto 20px auto;
+        }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-weight: bold; margin-bottom: 5px; font-size: 14px; }
+        .form-group input, .form-group textarea { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: Arial, sans-serif;}
+        .items-section { margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; }
+        .item-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr auto; gap: 5px; margin-bottom: 10px; }
+        button { padding: 10px 15px; background-color: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #004494; }
+        .print-btn { background-color: #28a745; margin-top: 20px; width: 100%; font-size: 16px; font-weight: bold;}
+        .print-btn:hover { background-color: #218838; }
+
+        /* Exact Challan Recreation */
+        .bg-green { background-color: #c2d69b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .center { text-align: center; }
+        .left { text-align: left; }
+        .right { text-align: right; }
+        .bold { font-weight: bold; }
+        .serif { font-family: "Cambria", "Times New Roman", serif; }
+        
+        /* Web Preview Size (A5 Landscape Proportions) */
+        .challan-container {
+            width: 190mm;      
+            height: auto;
+            background: white;
+            margin: 0 auto;
+            color: #000;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 10.5px;
+        }
+
+        table.main-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 2px solid black;
+        }
+
+        table.main-table > tbody > tr > td {
+            border: 1px solid black;
+            padding: 2px 3px;
+            vertical-align: middle;
+        }
+
+        /* Specific Row Styles */
+        .title-row { font-size: 17px; letter-spacing: 1px; }
+        .address-cell { line-height: 1.3; font-size: 9.5px; }
+        
+        .copies-table { width: 100%; height: 100%; border-collapse: collapse; }
+        .copies-table td { border-bottom: 1px solid black; border-left: 1px solid black; padding: 1px 3px; width: 50%;}
+        .copies-table tr:last-child td { border-bottom: none; }
+        .copies-table td:first-child { border-left: none; }
+
+        .challan-header-box { padding: 3px 0; }
+        .challan-header-title { font-size: 15px; margin-bottom: 2px; }
+        .challan-header-sub { font-size: 9px; }
+
+        .info-cell { font-size: 10.5px; padding: 2px 3px; }
+        .items-header td { padding: 3px; font-size: 10px; }
+        
+        .item-row-tr td { height: 14px; text-align: center; border-bottom: 1px solid black; }
+        .item-row-tr td:nth-child(2) { text-align: left; } 
+
+        .total-row td { padding: 3px; }
+        .total-text { font-size: 16px; }
+
+        .tc-cell { vertical-align: top !important; font-size: 8.5px; line-height: 1.2; padding-right: 8px !important; }
+        .tc-cell p { margin: 2px 0; }
+
+        /* Stamp Area Modification (Fixed Flexbox Bug) */
+        .stamp-area {
+            height: 45px; 
+            text-align: center; /* Use standard table centering instead of flex */
+            vertical-align: middle;
+        }
+        .company-stamp {
+            height: 40px;     
+            max-width: 100%;  
+            object-fit: contain;
+            display: inline-block; /* Inline block plays nicely with text-align: center */
+            transform: rotate(-8deg); 
+            opacity: 0.95;    
+            vertical-align: middle;
+        }
+
+        /* Print Settings for Top Half of A4 Portrait */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 0; /* Removing page margins removes browser date/title/URL text */
+            }
+            body { 
+                padding: 10mm; 
+                background: white; 
+                margin: 0;
+            }
+            .no-print { display: none !important; }
+            .challan-container { 
+                width: 190mm; /* A4 width (210mm) minus padding */
+                height: auto; 
+                max-height: 140mm; /* Strict limit to keep it in the top half */
+                margin: 0; 
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="no-print">
+        <h2>Enter Delivery Challan Details</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Date</label>
+                <input type="date" id="in_date" value="" onchange="updatePreview()">
+            </div>
+            <div class="form-group">
+                <label>Challan No.</label>
+                <input type="text" id="in_challan" value="" oninput="updatePreview()">
+            </div>
+            <div class="form-group">
+                <label>Consignee Name</label>
+                <input type="text" id="in_name" value="" oninput="updatePreview()">
+            </div>
+            <div class="form-group">
+                <label>Delivery Address</label>
+                <input type="text" id="in_address" value="" oninput="updatePreview()">
+            </div>
+            <div class="form-group">
+                <label>Consignee GSTIN</label>
+                <input type="text" id="in_gstin" value="" oninput="updatePreview()">
+            </div>
+            <div class="form-group">
+                <label>Vehicle Number</label>
+                <input type="text" id="in_vehicle" value="" oninput="updatePreview()">
+            </div>
+        </div>
+
+        <div class="items-section">
+            <h3>Items (Max 5 Rows)</h3>
+            <div id="items_container">
+                <div class="item-row" id="row_1">
+                    <input type="text" placeholder="Description" id="desc_1" value="" oninput="updatePreview()"><input type="text" placeholder="HSN code" id="hsn_1" value="" oninput="updatePreview()"><input type="text" placeholder="UOM" id="uom_1" oninput="updatePreview()"><input type="number" placeholder="Qty" id="qty_1" value="" oninput="updatePreview()" min="0"><input type="number" placeholder="Rate" id="rate_1" value="" oninput="updatePreview()" min="0">
+                </div>
+                <div class="item-row" id="row_2">
+                    <input type="text" placeholder="Description" id="desc_2" value="" oninput="updatePreview()"><input type="text" placeholder="HSN code" id="hsn_2" value="" oninput="updatePreview()"><input type="text" placeholder="UOM" id="uom_2" oninput="updatePreview()"><input type="number" placeholder="Qty" id="qty_2" value="" oninput="updatePreview()" min="0"><input type="number" placeholder="Rate" id="rate_2" value="" oninput="updatePreview()" min="0">
+                </div>
+                <div class="item-row" id="row_3">
+                    <input type="text" placeholder="Description" id="desc_3" oninput="updatePreview()"><input type="text" placeholder="HSN code" id="hsn_3" oninput="updatePreview()"><input type="text" placeholder="UOM" id="uom_3" oninput="updatePreview()"><input type="number" placeholder="Qty" id="qty_3" oninput="updatePreview()"><input type="number" placeholder="Rate" id="rate_3" oninput="updatePreview()">
+                </div>
+                <div class="item-row" id="row_4">
+                    <input type="text" placeholder="Description" id="desc_4" oninput="updatePreview()"><input type="text" placeholder="HSN code" id="hsn_4" oninput="updatePreview()"><input type="text" placeholder="UOM" id="uom_4" oninput="updatePreview()"><input type="number" placeholder="Qty" id="qty_4" oninput="updatePreview()"><input type="number" placeholder="Rate" id="rate_4" oninput="updatePreview()">
+                </div>
+                <div class="item-row" id="row_5">
+                    <input type="text" placeholder="Description" id="desc_5" oninput="updatePreview()"><input type="text" placeholder="HSN code" id="hsn_5" oninput="updatePreview()"><input type="text" placeholder="UOM" id="uom_5" oninput="updatePreview()"><input type="number" placeholder="Qty" id="qty_5" oninput="updatePreview()"><input type="number" placeholder="Rate" id="rate_5" oninput="updatePreview()">
+                </div>
+            </div>
+        </div>
+        
+        <button class="print-btn" onclick="window.print()">🖨️ Print Delivery Challan</button>
+    </div>
+
+    <div class="challan-container">
+        <table class="main-table">
+            <tr>
+                <td colspan="7" class="center title-row serif bold">VISHESH STEELS</td>
+            </tr>
+            
+            <tr>
+                <td colspan="5" class="address-cell bold">
+                    19-2-225/C&D MIRALAM TANK ROAD<br>
+                    BAHADURPURA HYDERABAD 500064<br>
+                    GSTIN:-36ADQPJ3563J1Z4
+                </td>
+                <td colspan="2" style="padding: 0; border: none; width: 25%;">
+                    <table class="copies-table">
+                        <tr><td class="bold">Original</td><td></td></tr>
+                        <tr><td class="bold">Duplicate</td><td></td></tr>
+                        <tr><td class="bold">Triplicate</td><td></td></tr>
+                    </table>
+                </td>
+            </tr>
+
+            <tr>
+                <td colspan="7" class="bg-green center challan-header-box">
+                    <div class="challan-header-title serif bold">Delivery Challan</div>
+                    <div class="challan-header-sub bold">(Issued as per Rule 55 of the CGST Rules, 2017)</div>
+                </td>
+            </tr>
+
+            <tr>
+                <td colspan="3" class="info-cell bold" style="width: 50%;">Delivery Challan No.: <span id="out_challan">25-26/055</span></td>
+                <td colspan="4" class="info-cell bold">Transport Mode: By Road</td>
+            </tr>
+            <tr>
+                <td colspan="3" class="info-cell bold">Challan Date <span id="out_date">05-03-2026</span></td>
+                <td colspan="4" class="info-cell bold">Vehicle number: <span id="out_vehicle">AP12V1717</span></td>
+            </tr>
+
+            <tr>
+                <td colspan="7" class="bg-green bold info-cell">Detail of Consignee</td>
+            </tr>
+
+            <tr><td colspan="7" class="info-cell bold">Name <span id="out_name">JAIMATHA HARDWARE-kalwakurthy</span></td></tr>
+            <tr><td colspan="7" class="info-cell bold">Delivery/ Shipping Address: <span id="out_address">KALWAKURTHY</span></td></tr>
+            <tr><td colspan="7" class="info-cell bold">Consignee GSTIN <span id="out_gstin">36CBWPS5020D3ZE</span></td></tr>
+
+            <tr class="bg-green bold center items-header">
+                <td style="width: 8%;">S. No.</td>
+                <td style="width: 38%;">Description of Goods</td>
+                <td style="width: 14%;">HSN code</td>
+                <td style="width: 8%;">UOM</td>
+                <td style="width: 10%;">Qty</td>
+                <td style="width: 10%;">Rate</td>
+                <td style="width: 12%;">Total Value</td>
+            </tr>
+
+            <tbody id="out_items_body">
+                <tr class="item-row-tr"><td class="right">1</td><td id="out_desc_1">MS PIPE</td><td id="out_hsn_1">73063090</td><td id="out_uom_1"></td><td id="out_qty_1">1015</td><td id="out_rate_1">59</td><td class="bold" id="out_val_1">59885</td></tr>
+                <tr class="item-row-tr"><td class="right">2</td><td id="out_desc_2">MS FLAT</td><td id="out_hsn_2">721114</td><td id="out_uom_2"></td><td id="out_qty_2">505</td><td id="out_rate_2">57</td><td class="bold" id="out_val_2">28785</td></tr>
+                <tr class="item-row-tr"><td class="right">3</td><td id="out_desc_3"></td><td id="out_hsn_3"></td><td id="out_uom_3"></td><td id="out_qty_3"></td><td id="out_rate_3"></td><td class="bold" id="out_val_3"></td></tr>
+                <tr class="item-row-tr"><td class="right">4</td><td id="out_desc_4"></td><td id="out_hsn_4"></td><td id="out_uom_4"></td><td id="out_qty_4"></td><td id="out_rate_4"></td><td class="bold" id="out_val_4"></td></tr>
+                <tr class="item-row-tr"><td class="right">5</td><td id="out_desc_5"></td><td id="out_hsn_5"></td><td id="out_uom_5"></td><td id="out_qty_5"></td><td id="out_rate_5"></td><td class="bold" id="out_val_5"></td></tr>
+            </tbody>
+
+            <tr class="total-row center">
+                <td colspan="2" class="bg-green serif bold total-text">Total</td>
+                <td></td><td></td>
+                <td id="out_total_qty">1520</td>
+                <td></td>
+                <td class="bold" id="out_total_value">88670</td>
+            </tr>
+
+            <tr>
+                <td colspan="2" class="bg-green bold" style="padding: 4px;">Total Challan amount in words <span id="out_words" style="font-weight:normal;"></span></td>
+                <td colspan="5" class="center serif" style="font-size: 10px;">Ceritified that the particulars above are true and correct</td>
+            </tr>
+
+            <tr>
+                <td colspan="2" rowspan="4" class="tc-cell">
+                    <p class="bold" style="text-decoration: underline;">T&C (others):</p>
+                    <p>1. The DC is being issued for movement/ transport of goods for reasons other than Supply. <span class="bold">Hence GST is not payable.</span></p>
+                    <p>2. This DC is not for supply of Goods. Hence, GST Rate & Tax Amount is not required to be mentioned.</p>
+                    <p>3. <span class="bold">E-way bill is NOT required</span> as per <span class="bold">Rule 138(14)(n) of the CGST Rules, 2017</span>, if the loaded vehicle is going to <span class="bold">weighbridge for weighment upto 20 kms</span> from the place of business of consignor or from weighbridge back to the place of business of the said consignor.</p>
+                </td>
+                
+                <td colspan="5" class="center bold" style="padding: 4px; border-bottom: none;">For M/s VISHESH STEELS</td>
+            </tr>
+            <tr>
+                <td colspan="5" class="stamp-area" style="border-top: none; border-bottom: none;">
+                    <img src="Stamp.jpeg" alt="" class="company-stamp">
+                </td>
+            </tr>
+            <tr>
+                <td colspan="5" class="bg-green" style="height: 10px; border-top: 1px solid black; border-bottom: 1px solid black;"></td>
+            </tr>
+            <tr>
+                <td colspan="5" class="center bold" style="padding: 3px; border-top: none;">(Authorised signatory)</td>
+            </tr>
+        </table>
+    </div>
+
+    <script>
+        function updatePreview() {
+            // Update Headers
+            let dateVal = document.getElementById('in_date').value;
+            if(dateVal) {
+                document.getElementById('out_date').innerText = dateVal.split('-').reverse().join('-');
+            } else {
+                document.getElementById('out_date').innerText = '';
+            }
+            
+            document.getElementById('out_challan').innerText = document.getElementById('in_challan').value;
+            document.getElementById('out_name').innerText = document.getElementById('in_name').value;
+            document.getElementById('out_address').innerText = document.getElementById('in_address').value;
+            document.getElementById('out_gstin').innerText = document.getElementById('in_gstin').value;
+            document.getElementById('out_vehicle').innerText = document.getElementById('in_vehicle').value;
+
+            // Update Items (Strict 5 Rows)
+            let totalQty = 0;
+            let totalVal = 0;
+
+            for(let i=1; i<=5; i++) {
+                let desc = document.getElementById('desc_'+i).value;
+                let hsn = document.getElementById('hsn_'+i).value;
+                let uom = document.getElementById('uom_'+i).value;
+                let qty = parseFloat(document.getElementById('qty_'+i).value) || 0;
+                let rate = parseFloat(document.getElementById('rate_'+i).value) || 0;
+                
+                let val = 0;
+                if(qty > 0 && rate > 0) val = qty * rate;
+
+                document.getElementById('out_desc_'+i).innerText = desc;
+                document.getElementById('out_hsn_'+i).innerText = hsn;
+                document.getElementById('out_uom_'+i).innerText = uom;
+                document.getElementById('out_qty_'+i).innerText = qty > 0 ? qty : '';
+                document.getElementById('out_rate_'+i).innerText = rate > 0 ? rate : '';
+                document.getElementById('out_val_'+i).innerText = val > 0 ? val : '';
+
+                totalQty += qty;
+                totalVal += val;
+            }
+
+            document.getElementById('out_total_qty').innerText = totalQty > 0 ? totalQty : '';
+            document.getElementById('out_total_value').innerText = totalVal > 0 ? totalVal : '';
+        }
+        
+        // Run once on load to populate the default exact match values
+        window.onload = updatePreview;
+    </script>
+</body>
+</html>
