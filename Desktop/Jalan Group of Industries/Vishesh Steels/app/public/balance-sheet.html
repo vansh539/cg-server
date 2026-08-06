@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Vishesh Steels — Balance Sheet</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f4f4f0;min-height:100vh;padding:1.5rem 1rem}
+.wrap{max-width:900px;margin:0 auto}
+.back-link{display:inline-block;font-size:13px;color:#888;text-decoration:none;margin-bottom:10px}
+.back-link:hover{color:#1a2a6e}
+.app-title{font-size:20px;font-weight:600;color:#1a2a6e;margin-bottom:4px;text-align:center}
+.app-sub{font-size:13px;color:#888;text-align:center;margin-bottom:1.25rem}
+.card{background:#fff;border:1px solid #e2e2e2;border-radius:12px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.nav-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:4px}
+.nav-btn{background:#fff;border:1.5px solid #e2e2e2;border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;color:#333}
+.nav-btn:hover{border-color:#1a2a6e;color:#1a2a6e}
+.today-btn{display:block;margin:6px auto 0;background:none;border:none;color:#1a2a6e;font-size:12px;cursor:pointer;text-decoration:underline}
+
+.bs-sheet{background:#fff;border:1px solid #e2e2e2;border-radius:12px;padding:1.5rem}
+.bs-shri{text-align:center;font-size:22px;font-weight:700;color:#111;font-family:'Noto Sans Devanagari','Nirmala UI',sans-serif;margin-bottom:8px}
+.bs-rule{border:none;border-top:2px solid #111;margin:0}
+.bs-rule.thin{border-top:1px solid #111}
+.bs-titlerow{display:flex;justify-content:space-between;align-items:baseline;padding:10px 2px;font-size:15px}
+.bs-hindi{font-weight:700;font-family:'Noto Sans Devanagari','Nirmala UI',sans-serif;font-size:17px}
+.bs-date{font-weight:600}
+
+.bs-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:6px;border:1.5px solid #111}
+.bs-square{border:1px solid #111;padding:10px 12px;min-height:160px}
+.bs-square h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#1a2a6e;margin-bottom:8px}
+.bs-row{display:flex;gap:6px;margin-bottom:5px;align-items:center}
+.bs-row input.lbl{flex:1;border:none;border-bottom:1px solid #ddd;padding:3px 2px;font-size:13.5px;font-family:inherit}
+.bs-row input.amt{width:100px;border:none;border-bottom:1px solid #ddd;padding:3px 2px;font-size:13.5px;text-align:right;font-family:inherit}
+.bs-row input:focus{outline:none;border-bottom-color:#1a2a6e}
+.bs-row .del{background:none;border:none;color:#bbb;cursor:pointer;font-size:15px;padding:0 4px;line-height:1}
+.bs-row .del:hover{color:#dc2626}
+.bs-row.locked input.lbl{color:#111;font-weight:600}
+.bs-addrow{background:none;border:1px dashed #ccc;border-radius:6px;color:#888;font-size:12px;padding:4px 8px;cursor:pointer;margin-top:2px}
+.bs-addrow:hover{border-color:#1a2a6e;color:#1a2a6e}
+.bs-subtotal{display:flex;justify-content:space-between;font-weight:700;font-size:13.5px;border-top:1px solid #111;margin-top:8px;padding-top:6px}
+
+.bs-totals{display:flex;justify-content:flex-end;gap:22px;margin-top:14px;padding-top:12px;border-top:2px solid #111;font-size:14px}
+.bs-totals .t-lbl{color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.bs-totals .t-val{font-weight:700;font-size:16px}
+.bs-totals .closing .t-val{color:#1a2a6e;font-size:20px}
+
+.bs-actions{display:flex;justify-content:center;gap:10px;margin-top:16px}
+.btn{background:#1a2a6e;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer}
+.btn:hover{background:#0d2a1f}
+.btn.secondary{background:#fff;color:#1a2a6e;border:1.5px solid #1a2a6e}
+.save-note{text-align:center;font-size:12px;color:#16a34a;margin-top:8px;height:16px}
+
+@media print{
+  @page{size:A4 portrait;margin:12mm}
+  body{background:#fff;padding:0}
+  .no-print{display:none!important}
+  .wrap{max-width:none}
+  .bs-sheet{border:none;padding:0;border-radius:0}
+  .bs-row input{border:none!important}
+}
+.bs-row input.amt::-webkit-inner-spin-button,.bs-row input.amt::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.bs-row input.amt{-moz-appearance:textfield}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="no-print" style="display:flex;justify-content:space-between">
+    <a class="back-link" href="final-invoice-VS.html">← Back to Billing</a>
+    <a class="back-link" href="reports.html">📊 Reports →</a>
+  </div>
+  <div class="app-title no-print">🧮 Vishesh Steels — Balance Sheet</div>
+  <div class="app-sub no-print">Daily cash &amp; bank position — replaces the handwritten sheet</div>
+
+  <div class="card no-print">
+    <div class="nav-row">
+      <button class="nav-btn" onclick="navDay(-1)">‹</button>
+      <div style="font-weight:600;min-width:200px;text-align:center" id="period-label">—</div>
+      <button class="nav-btn" onclick="navDay(1)">›</button>
+    </div>
+    <button class="today-btn" onclick="jumpToToday()">Jump to today</button>
+  </div>
+
+  <div class="bs-sheet" id="bs-sheet">
+    <div class="bs-shri">श्री</div>
+    <hr class="bs-rule">
+    <div class="bs-titlerow">
+      <div class="bs-hindi">Vishesh Steels</div>
+      <div class="bs-date" id="bs-date-display">—</div>
+    </div>
+    <hr class="bs-rule thin">
+
+    <div class="bs-grid">
+      <div class="bs-square"><h4>Cash In</h4>
+        <div class="bs-rows" id="rows-cashIn"></div>
+        <button class="bs-addrow no-print" onclick="addRow('cashIn')">+ Add row</button>
+        <div class="bs-subtotal"><span>Cash Total</span><span id="sub-cashIn">0</span></div>
+      </div>
+      <div class="bs-square"><h4>Expenses</h4>
+        <div class="bs-rows" id="rows-expenses"></div>
+        <button class="bs-addrow no-print" onclick="addRow('expenses')">+ Add row</button>
+        <div class="bs-subtotal"><span>Expenses Total</span><span id="sub-expenses">0</span></div>
+      </div>
+      <div class="bs-square"><h4>Bank In</h4>
+        <div class="bs-rows" id="rows-bankIn"></div>
+        <button class="bs-addrow no-print" onclick="addRow('bankIn')">+ Add row</button>
+        <div class="bs-subtotal"><span>Bank In Total</span><span id="sub-bankIn">0</span></div>
+      </div>
+      <div class="bs-square"><h4>Bank Out</h4>
+        <div class="bs-rows" id="rows-bankOut"></div>
+        <button class="bs-addrow no-print" onclick="addRow('bankOut')">+ Add row</button>
+        <div class="bs-subtotal"><span>Bank Out Total</span><span id="sub-bankOut">0</span></div>
+      </div>
+    </div>
+
+    <div class="bs-totals">
+      <div><div class="t-lbl">Cash Subtotal</div><div class="t-val" id="tot-cash">0</div></div>
+      <div><div class="t-lbl">Bank Subtotal</div><div class="t-val" id="tot-bank">0</div></div>
+      <div class="closing"><div class="t-lbl">Closing Balance</div><div class="t-val" id="tot-closing">0</div></div>
+    </div>
+  </div>
+
+  <div class="no-print bs-actions">
+    <button class="btn" onclick="saveDay()">Save</button>
+    <button class="btn secondary" onclick="printDay()">Print</button>
+  </div>
+  <div class="no-print save-note" id="save-note"></div>
+</div>
+
+<script>
+const API = '/api/balance-sheet';
+const SQUARES = ['cashIn', 'bankIn', 'expenses', 'bankOut'];
+let currentDate = new Date();
+let current = null;
+
+function dateKey(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function fmt(n) {
+  return Math.round(n).toLocaleString('en-IN');
+}
+function fmtHeaderDate(d) {
+  return d.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+}
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+function navDay(dir) {
+  const d = new Date(currentDate);
+  d.setDate(d.getDate() + dir);
+  currentDate = d;
+  loadDay();
+}
+function jumpToToday() {
+  currentDate = new Date();
+  loadDay();
+}
+
+function renderRows(square) {
+  const container = document.getElementById(`rows-${square}`);
+  container.innerHTML = current[square]
+    .map((r, i) => {
+      const locked = square === 'cashIn' && i === 0;
+      return `<div class="bs-row${locked ? ' locked' : ''}">
+        <input class="lbl" value="${escapeAttr(r.label)}" ${locked ? 'readonly' : ''} oninput="onRowInput('${square}',${i},'label',this.value)">
+        <input class="amt" type="number" min="0" step="1" value="${r.amount}" onfocus="this.select()" oninput="onRowInput('${square}',${i},'amount',this.value)">
+        ${locked ? '' : `<button class="del no-print" onclick="deleteRow('${square}',${i})">✕</button>`}
+      </div>`;
+    })
+    .join('');
+}
+
+function onRowInput(square, idx, field, value) {
+  current[square][idx][field] = field === 'amount' ? (Number(value) || 0) : value;
+  recalc();
+}
+
+function addRow(square) {
+  current[square].push({ label: '', amount: 0 });
+  renderRows(square);
+}
+
+function deleteRow(square, idx) {
+  current[square].splice(idx, 1);
+  renderRows(square);
+  recalc();
+}
+
+function sum(rows) {
+  return rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+}
+
+function recalc() {
+  const cashTotal = sum(current.cashIn);
+  const expensesTotal = sum(current.expenses);
+  const cashSubtotal = cashTotal - expensesTotal;
+  const bankInTotal = sum(current.bankIn);
+  const bankOutTotal = sum(current.bankOut);
+  const bankSubtotal = bankInTotal - bankOutTotal;
+  const closingBalance = cashSubtotal + bankSubtotal;
+
+  document.getElementById('sub-cashIn').textContent = fmt(cashTotal);
+  document.getElementById('sub-expenses').textContent = fmt(expensesTotal);
+  document.getElementById('sub-bankIn').textContent = fmt(bankInTotal);
+  document.getElementById('sub-bankOut').textContent = fmt(bankOutTotal);
+  document.getElementById('tot-cash').textContent = fmt(cashSubtotal);
+  document.getElementById('tot-bank').textContent = fmt(bankSubtotal);
+  document.getElementById('tot-closing').textContent = fmt(closingBalance);
+}
+
+function renderAll() {
+  SQUARES.forEach(renderRows);
+  recalc();
+}
+
+async function loadDay() {
+  const key = dateKey(currentDate);
+  document.getElementById('period-label').textContent = key;
+  document.getElementById('bs-date-display').textContent = fmtHeaderDate(currentDate);
+  const note = document.getElementById('save-note');
+  note.textContent = '';
+  try {
+    const res = await fetch(`${API}/${key}`);
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Could not load this day');
+    current = body;
+    renderAll();
+  } catch (err) {
+    note.style.color = '#dc2626';
+    note.textContent = `Could not load ${key}: ${err.message}`;
+  }
+}
+
+async function saveDay() {
+  const key = dateKey(currentDate);
+  const body = { cashIn: current.cashIn, bankIn: current.bankIn, expenses: current.expenses, bankOut: current.bankOut };
+  const res = await fetch(`${API}/${key}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const note = document.getElementById('save-note');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    note.style.color = '#dc2626';
+    note.textContent = err.error || 'Save failed';
+    return false;
+  }
+  current = await res.json();
+  renderAll();
+  note.style.color = '#16a34a';
+  note.textContent = 'Saved ✓';
+  return true;
+}
+
+async function printDay() {
+  const saved = await saveDay();
+  if (!saved) return;
+  const key = dateKey(currentDate);
+  window.open(`${API}/${key}/pdf`, '_blank');
+}
+
+loadDay();
+</script>
+</body>
+</html>

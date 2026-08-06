@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Vishesh Steels — Reports</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f4f4f0;min-height:100vh;padding:1.5rem 1rem}
+.wrap{max-width:900px;margin:0 auto}
+.back-link{display:inline-block;font-size:13px;color:#888;text-decoration:none;margin-bottom:10px}
+.back-link:hover{color:#1a2a6e}
+.app-title{font-size:20px;font-weight:600;color:#1a2a6e;margin-bottom:4px;text-align:center}
+.app-sub{font-size:13px;color:#888;text-align:center;margin-bottom:1.25rem}
+.card{background:#fff;border:1px solid #e2e2e2;border-radius:12px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.type-bar{display:flex;gap:8px;margin-bottom:12px}
+.type-pill{flex:1;background:#f7f7f5;border:1.5px solid #e2e2e2;border-radius:8px;padding:9px 10px;font-size:13px;font-weight:600;color:#333;cursor:pointer;text-align:center}
+.type-pill:hover{border-color:#aaa}
+.type-pill.on{border-color:#1a2a6e;background:#1a2a6e;color:#fff}
+.nav-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:4px}
+.nav-btn{background:#fff;border:1.5px solid #e2e2e2;border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;color:#333}
+.nav-btn:hover{border-color:#1a2a6e;color:#1a2a6e}
+.period-label{font-size:15px;font-weight:600;color:#111;min-width:220px;text-align:center}
+.today-btn{display:block;margin:6px auto 0;background:none;border:none;color:#1a2a6e;font-size:12px;cursor:pointer;text-decoration:underline}
+.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+.stat{background:#f7f7f5;border-radius:8px;padding:10px 12px;text-align:center}
+.stat .l{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.stat .v{font-size:17px;font-weight:700;color:#111}
+.stat.in .v{color:#16a34a}
+.stat.sold .v{color:#1a2a6e}
+table.rtbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.rtbl th{font-size:10.5px;font-weight:600;color:#888;padding:6px 4px;border-bottom:1.5px solid #e9e9e9;text-align:right}
+.rtbl th:first-child{text-align:left}
+.rtbl td{padding:6px 4px;text-align:right;border-bottom:1px solid #f2f2f2}
+.rtbl td:first-child{text-align:left}
+.rtbl tr.cat-row td{background:#f7f7f5;font-weight:700;color:#111;border-top:1.5px solid #e2e2e2;border-bottom:1.5px solid #e2e2e2;cursor:pointer}
+.rtbl tr.cat-row td:first-child::before{content:'▾ ';color:#1a2a6e}
+.rtbl tr.cat-row.collapsed td:first-child::before{content:'▸ '}
+.rtbl tr.item-row.hidden{display:none}
+.rtbl tr.item-row td{color:#444}
+.rtbl tr.grand-row td{background:#111;color:#fff;font-weight:700;border-top:2px solid #111}
+.rtbl td.in{color:#16a34a}
+.rtbl td.sold{color:#1a2a6e}
+.rtbl td.adj-neg{color:#dc2626}
+.empty-note{color:#999;font-size:13px;padding:14px 0;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between">
+    <a class="back-link" href="final-invoice-VS.html">← Back to Billing</a>
+    <a class="back-link" href="balance-sheet.html">🧮 Balance Sheet</a>
+    <a class="back-link" href="stock.html">📦 Stock →</a>
+  </div>
+  <div class="app-title">📊 Vishesh Steels — Reports</div>
+  <div class="app-sub">Stock in, sold, and current balance — by item and by category</div>
+
+  <div class="card">
+    <div class="type-bar" id="type-bar"></div>
+    <div class="nav-row">
+      <button class="nav-btn" onclick="navPeriod(-1)">‹</button>
+      <div class="period-label" id="period-label">—</div>
+      <button class="nav-btn" onclick="navPeriod(1)">›</button>
+    </div>
+    <button class="today-btn" onclick="jumpToToday()">Jump to today</button>
+    <div class="summary-grid" id="summary-grid"></div>
+    <div class="empty-note" id="report-err" style="display:none;color:#dc2626"></div>
+  </div>
+
+  <div class="card">
+    <table class="rtbl">
+      <thead><tr><th>Item</th><th>Opening</th><th>Stock In</th><th>Sold</th><th>Adjustments</th><th>Closing</th></tr></thead>
+      <tbody id="report-tbody"></tbody>
+    </table>
+    <div class="empty-note" id="empty-note" style="display:none">No stock items yet.</div>
+  </div>
+</div>
+
+<script>
+const API = '/api/stock';
+let categories = [];
+let periodType = 'daily';
+let anchorDate = new Date();
+let collapsedCats = new Set();
+
+function fmtQty(v, unit) {
+  const n = Number(v.toFixed ? v.toFixed(2) : v);
+  const rounded = Math.round(n * 100) / 100;
+  return `${rounded.toLocaleString('en-IN')} ${unit === 'pcs' ? 'pcs' : 'kg'}`;
+}
+function signed(v) {
+  return v > 0 ? `+${Math.round(v * 100) / 100}` : `${Math.round(v * 100) / 100}`;
+}
+
+function renderTypeBar() {
+  const bar = document.getElementById('type-bar');
+  bar.innerHTML = ['daily', 'weekly', 'monthly']
+    .map((t) => `<button class="type-pill${t === periodType ? ' on' : ''}" onclick="setPeriodType('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`)
+    .join('');
+}
+function setPeriodType(t) {
+  periodType = t;
+  renderTypeBar();
+  loadReport();
+}
+function navPeriod(dir) {
+  const d = new Date(anchorDate);
+  if (periodType === 'daily') d.setDate(d.getDate() + dir);
+  else if (periodType === 'weekly') d.setDate(d.getDate() + dir * 7);
+  else d.setMonth(d.getMonth() + dir);
+  anchorDate = d;
+  loadReport();
+}
+function jumpToToday() {
+  anchorDate = new Date();
+  loadReport();
+}
+
+function fmtDate(d) {
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function updatePeriodLabel(periodStart, periodEnd) {
+  const start = new Date(periodStart);
+  const end = new Date(new Date(periodEnd).getTime() - 1); // inclusive display end
+  const label =
+    periodType === 'daily'
+      ? fmtDate(start)
+      : periodType === 'weekly'
+      ? `${fmtDate(start)} – ${fmtDate(end)}`
+      : start.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  document.getElementById('period-label').textContent = label;
+}
+
+async function loadCategories() {
+  const res = await fetch(`${API}/categories`);
+  categories = await res.json();
+}
+
+function catName(id) {
+  return categories.find((c) => c.id === id)?.name || 'Uncategorized';
+}
+
+function sumRows(rows) {
+  return rows.reduce(
+    (acc, r) => ({
+      opening: acc.opening + r.opening,
+      stockIn: acc.stockIn + r.stockIn,
+      sold: acc.sold + r.sold,
+      adjustments: acc.adjustments + r.adjustments,
+      closing: acc.closing + r.closing,
+      openingPcs: acc.openingPcs + (r.openingPcs || 0),
+      stockInPcs: acc.stockInPcs + (r.stockInPcs || 0),
+      soldPcs: acc.soldPcs + (r.soldPcs || 0),
+      adjustmentsPcs: acc.adjustmentsPcs + (r.adjustmentsPcs || 0),
+      closingPcs: acc.closingPcs + (r.closingPcs || 0),
+      hasDual: acc.hasDual || !!r.dualTrack,
+    }),
+    { opening: 0, stockIn: 0, sold: 0, adjustments: 0, closing: 0, openingPcs: 0, stockInPcs: 0, soldPcs: 0, adjustmentsPcs: 0, closingPcs: 0, hasDual: false }
+  );
+}
+
+// Renders a quantity cell as the plain kg/count number for a normal row or
+// category, or as "X pcs / Y" when pieces are tracked independently (a
+// single dual-track item, or a category subtotal containing at least one).
+function combinedCell(kgVal, pcsVal, isDual, kgFmt, pcsFmt) {
+  if (!isDual) return kgFmt(kgVal);
+  const fmtPcs = pcsFmt || kgFmt;
+  return `${fmtPcs(pcsVal)} pcs / ${kgFmt(kgVal)}`;
+}
+
+function toggleCat(catId) {
+  if (collapsedCats.has(catId)) collapsedCats.delete(catId);
+  else collapsedCats.add(catId);
+  renderRows(lastReportRows);
+}
+
+let lastReportRows = [];
+
+function renderRows(rows) {
+  lastReportRows = rows;
+  const tbody = document.getElementById('report-tbody');
+  document.getElementById('empty-note').style.display = rows.length ? 'none' : 'block';
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    return;
+  }
+  const byCat = {};
+  rows.forEach((r) => {
+    (byCat[r.categoryId] = byCat[r.categoryId] || []).push(r);
+  });
+  // Keep category order stable and consistent with the Stock page's category list.
+  const catIds = categories.map((c) => c.id).filter((id) => byCat[id]);
+  let html = '';
+  catIds.forEach((catId) => {
+    const items = byCat[catId];
+    const totals = sumRows(items);
+    const collapsed = collapsedCats.has(catId);
+    const soldFmt = (v) => (v ? '-' + Math.round(v * 100) / 100 : 0);
+    const plainNum = (v) => Math.round((v || 0) * 100) / 100;
+    html += `<tr class="cat-row${collapsed ? ' collapsed' : ''}" onclick="toggleCat('${catId}')">
+      <td>${catName(catId)}</td>
+      <td>${combinedCell(totals.opening, totals.openingPcs, totals.hasDual, (v) => fmtQty(v, items[0].unit), plainNum)}</td>
+      <td class="in">${combinedCell(totals.stockIn, totals.stockInPcs, totals.hasDual, signed)}</td>
+      <td class="sold">${combinedCell(totals.sold, totals.soldPcs, totals.hasDual, soldFmt)}</td>
+      <td class="${totals.adjustments < 0 ? 'adj-neg' : ''}">${combinedCell(totals.adjustments, totals.adjustmentsPcs, totals.hasDual, signed)}</td>
+      <td>${combinedCell(totals.closing, totals.closingPcs, totals.hasDual, (v) => fmtQty(v, items[0].unit), plainNum)}</td>
+    </tr>`;
+    items.forEach((r) => {
+      const rSoldFmt = (v) => (v ? '-' + Math.round(v * 100) / 100 : 0);
+      html += `<tr class="item-row${collapsed ? ' hidden' : ''}">
+        <td style="padding-left:16px">${r.name}</td>
+        <td>${combinedCell(r.opening, r.openingPcs, r.dualTrack, (v) => fmtQty(v, r.unit), plainNum)}</td>
+        <td class="in">${combinedCell(r.stockIn, r.stockInPcs, r.dualTrack, signed)}</td>
+        <td class="sold">${combinedCell(r.sold, r.soldPcs, r.dualTrack, rSoldFmt)}</td>
+        <td class="${r.adjustments < 0 ? 'adj-neg' : ''}">${combinedCell(r.adjustments, r.adjustmentsPcs, r.dualTrack, signed)}</td>
+        <td>${combinedCell(r.closing, r.closingPcs, r.dualTrack, (v) => fmtQty(v, r.unit), plainNum)}</td>
+      </tr>`;
+    });
+  });
+  const grand = sumRows(rows);
+  html += `<tr class="grand-row">
+    <td>ALL SECTIONS</td>
+    <td>${Math.round(grand.opening * 100) / 100}</td>
+    <td>${signed(grand.stockIn)}</td>
+    <td>${grand.sold ? '-' + Math.round(grand.sold * 100) / 100 : 0}</td>
+    <td>${signed(grand.adjustments)}</td>
+    <td>${Math.round(grand.closing * 100) / 100}</td>
+  </tr>`;
+  tbody.innerHTML = html;
+}
+
+function renderSummary(rows) {
+  const totals = sumRows(rows);
+  const grid = document.getElementById('summary-grid');
+  grid.innerHTML = `
+    <div class="stat in"><div class="l">Stock In</div><div class="v">${signed(totals.stockIn)}</div></div>
+    <div class="stat sold"><div class="l">Sold</div><div class="v">${totals.sold ? '-' + Math.round(totals.sold * 100) / 100 : 0}</div></div>
+    <div class="stat"><div class="l">Adjustments</div><div class="v">${signed(totals.adjustments)}</div></div>
+    <div class="stat"><div class="l">Closing (all)</div><div class="v">${Math.round(totals.closing * 100) / 100}</div></div>
+  `;
+}
+
+async function loadReport() {
+  const errEl = document.getElementById('report-err');
+  try {
+    const res = await fetch(`${API}/report?type=${periodType}&date=${encodeURIComponent(anchorDate.toISOString())}`);
+    const report = await res.json();
+    if (!res.ok) throw new Error(report.error || 'Could not load report');
+    errEl.style.display = 'none';
+    updatePeriodLabel(report.periodStart, report.periodEnd);
+    renderRows(report.rows);
+    renderSummary(report.rows);
+  } catch (err) {
+    errEl.textContent = `Could not load this report: ${err.message}`;
+    errEl.style.display = 'block';
+  }
+}
+
+async function init() {
+  renderTypeBar();
+  await loadCategories();
+  await loadReport();
+}
+init();
+</script>
+</body>
+</html>

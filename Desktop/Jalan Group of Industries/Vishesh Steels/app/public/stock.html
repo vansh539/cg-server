@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Vishesh Steels — Stock</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f4f4f0;min-height:100vh;padding:1.5rem 1rem}
+.wrap{max-width:820px;margin:0 auto}
+.back-link{display:inline-block;font-size:13px;color:#888;text-decoration:none;margin-bottom:10px}
+.back-link:hover{color:#1a2a6e}
+.app-title{font-size:20px;font-weight:600;color:#1a2a6e;margin-bottom:4px;text-align:center}
+.app-sub{font-size:13px;color:#888;text-align:center;margin-bottom:1.25rem}
+.card{background:#fff;border:1px solid #e2e2e2;border-radius:12px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+h3{font-size:12px;font-weight:600;color:#888;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.fg label{font-size:12px;color:#666;font-weight:500}
+.fg input,.fg select{width:100%;padding:9px 11px;border:1.5px solid #e2e2e2;border-radius:7px;font-size:14px;background:#fff;color:#111}
+.fg input:focus,.fg select:focus{outline:none;border-color:#1a2a6e}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn-p{background:#1a2a6e;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer}
+.btn-p:hover{filter:brightness(1.2)}
+.btn-p:disabled{opacity:.5;pointer-events:none}
+.btn-s{background:#fff;border:1.5px solid #e2e2e2;border-radius:8px;padding:9px 18px;font-size:14px;color:#333;cursor:pointer;font-weight:500}
+.btn-s:hover{background:#f4f4f0}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px}
+.cat-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem}
+.cat-pill{background:#f7f7f5;border:1.5px solid #e2e2e2;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:500;color:#333;cursor:pointer}
+.cat-pill:hover{border-color:#aaa}
+.cat-pill.on{border-color:#1a2a6e;background:#1a2a6e;color:#fff}
+.cat-pill.add{border-style:dashed;color:#888;background:none}
+.cat-pill.add:hover{border-color:#1a2a6e;color:#1a2a6e}
+table.stbl{width:100%;border-collapse:collapse;font-size:13px}
+.stbl th{font-size:11px;font-weight:600;color:#888;padding:6px 5px;border-bottom:1.5px solid #e9e9e9;text-align:left}
+.stbl td{padding:8px 5px;vertical-align:middle;border-bottom:1px solid #f0f0f0}
+.stbl td.r{text-align:right}
+.stbl td.neg{color:#dc2626;font-weight:700}
+.stbl tr.zero-row{opacity:.45}
+.stbl tr.stock-divider td{padding:0;border-top:2px dashed #ddd;border-bottom:none;height:1px}
+.stbl .actions{display:flex;gap:6px;flex-wrap:wrap}
+.inline-form{background:#f7f7f5;border-radius:8px;padding:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.inline-form input{padding:7px 9px;border:1.5px solid #e2e2e2;border-radius:6px;font-size:13px;width:140px}
+.hist-row td{background:#fafafa;font-size:12px;color:#555;padding:10px}
+.hist-row ul{list-style:none}
+.hist-row li{padding:2px 0}
+.empty-note{color:#999;font-size:13px;padding:14px 0;text-align:center}
+.pieces-preview{font-size:12px;color:#888;margin-top:-4px;margin-bottom:10px}
+.err{color:#dc2626;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between">
+    <a class="back-link" href="final-invoice-VS.html">← Back to Billing</a>
+    <a class="back-link" href="balance-sheet.html">🧮 Balance Sheet</a>
+    <a class="back-link" href="reports.html">📊 Reports →</a>
+  </div>
+  <div class="app-title">📦 Vishesh Steels — Stock</div>
+  <div class="app-sub">Categories, items, and current stock levels</div>
+
+  <div class="fg"><input id="stock-search" type="text" placeholder="🔍 Search items across all categories…" oninput="onSearchInput()"></div>
+
+  <div class="cat-bar" id="cat-bar"></div>
+
+  <div class="card" id="add-cat-card" style="display:none">
+    <h3>New category</h3>
+    <div class="fg"><input id="new-cat-name" type="text" placeholder="Category name"></div>
+    <div class="err" id="cat-err" style="display:none"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-p" onclick="saveCategory()">Save</button>
+      <button class="btn-s" onclick="hideAddCategory()">Cancel</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 id="items-heading">Items</h3>
+    <table class="stbl">
+      <thead><tr><th>Name</th><th>Wt/Pc (kg)</th><th class="r">Stock</th><th class="r">Pieces</th><th>Actions</th></tr></thead>
+      <tbody id="items-tbody"></tbody>
+    </table>
+    <div class="empty-note" id="empty-note" style="display:none">No items in this category yet.</div>
+  </div>
+
+  <div class="card">
+    <h3>+ Add item</h3>
+    <div class="grid2">
+      <div class="fg"><label>Category</label><select id="new-item-cat"></select></div>
+      <div class="fg"><label>Name</label><input id="new-item-name" type="text" placeholder="TMT 12mm Bar"></div>
+    </div>
+    <div class="fg">
+      <label>Tracked by</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn-s btn-sm" id="unit-btn-kg" onclick="setNewItemUnit('kg')">By Weight (kg)</button>
+        <button type="button" class="btn-s btn-sm" id="unit-btn-pcs" onclick="setNewItemUnit('pcs')">By Piece Count</button>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="fg" id="new-item-weight-fg"><label>Weight/Piece (kg, optional)</label><input id="new-item-weight" type="number" min="0" step="any" placeholder="10.5" oninput="updateNewItemPreview()"></div>
+      <div class="fg"><label id="new-item-stock-label">Initial Stock (kg)</label><input id="new-item-stock" type="number" min="0" step="any" placeholder="0" oninput="updateNewItemPreview()"></div>
+    </div>
+    <div class="pieces-preview" id="new-item-preview">Pieces: —</div>
+    <div class="fg" style="flex-direction:row;align-items:center;gap:7px">
+      <input id="new-item-dualtrack" type="checkbox" style="width:16px;height:16px" onchange="onNewItemDualTrackChange()">
+      <label for="new-item-dualtrack" style="margin:0">Track Pieces + Kg together (both required at Stock In)</label>
+    </div>
+    <div class="grid2" id="new-item-dualpcs-fg" style="display:none">
+      <div class="fg"><label>Initial Stock — Pieces</label><input id="new-item-stock-pcs" type="number" min="0" step="1" placeholder="0"></div>
+    </div>
+    <div class="err" id="item-err" style="display:none"></div>
+    <button class="btn-p" onclick="saveNewItem()">+ Add Item</button>
+  </div>
+</div>
+
+<script>
+const API = '/api/stock';
+let categories = [];
+let items = [];
+let selectedCatId = null;
+let openRow = null; // {itemId, mode: 'stock-in'|'adjust'|'history'|'edit'}
+let newItemUnit = 'kg';
+let searchQuery = '';
+
+function onSearchInput() {
+  searchQuery = document.getElementById('stock-search').value.trim().toLowerCase();
+  openRow = null;
+  renderItems();
+}
+
+function fmtKg(v) {
+  return Number(v.toFixed(2));
+}
+function computePiecesPreview(weightPerPieceKg, currentStockKg) {
+  return weightPerPieceKg ? Math.floor(currentStockKg / weightPerPieceKg) : null;
+}
+
+async function loadAll() {
+  const [catsRes, itemsRes] = await Promise.all([fetch(`${API}/categories`), fetch(`${API}/items`)]);
+  categories = await catsRes.json();
+  items = await itemsRes.json();
+  if (!selectedCatId && categories.length) selectedCatId = categories[0].id;
+  renderCatBar();
+  renderItemCatSelect();
+  renderItems();
+}
+
+function renderCatBar() {
+  const bar = document.getElementById('cat-bar');
+  bar.innerHTML =
+    categories.map((c) => `<button class="cat-pill${c.id === selectedCatId ? ' on' : ''}" onclick="selectCategory('${c.id}')">${c.name}</button>`).join('') +
+    `<button class="cat-pill add" onclick="showAddCategory()">+ Add category</button>`;
+}
+
+function renderItemCatSelect() {
+  const sel = document.getElementById('new-item-cat');
+  sel.innerHTML = categories.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  sel.value = selectedCatId || '';
+}
+
+function selectCategory(id) {
+  selectedCatId = id;
+  openRow = null;
+  searchQuery = '';
+  document.getElementById('stock-search').value = '';
+  renderCatBar();
+  renderItemCatSelect();
+  renderItems();
+}
+
+function showAddCategory() {
+  document.getElementById('add-cat-card').style.display = 'block';
+  document.getElementById('new-cat-name').value = '';
+  document.getElementById('cat-err').style.display = 'none';
+  document.getElementById('new-cat-name').focus();
+}
+function hideAddCategory() {
+  document.getElementById('add-cat-card').style.display = 'none';
+}
+async function saveCategory() {
+  const name = document.getElementById('new-cat-name').value;
+  const errEl = document.getElementById('cat-err');
+  errEl.style.display = 'none';
+  try {
+    const res = await fetch(`${API}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Could not save category');
+    selectedCatId = body.id;
+    hideAddCategory();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function catName(categoryId) {
+  return categories.find((c) => c.id === categoryId)?.name || '';
+}
+
+function isZeroStock(item) {
+  if (item.dualTrack) return item.currentStockKg === 0 && item.stockPcs === 0;
+  return item.currentStockKg === 0;
+}
+
+function renderItemRow(item, searching, zero) {
+  const stockLabel = `${fmtKg(item.currentStockKg)} ${item.unit === 'pcs' && !item.dualTrack ? 'pcs' : 'kg'}`;
+  const nameCell = searching ? `${item.name} <span style="color:#999;font-size:11px">(${catName(item.categoryId)})</span>` : item.name;
+  const rows = [
+    `<tr class="${zero ? 'zero-row' : ''}"><td>${nameCell}</td><td>${item.unit === 'pcs' || item.dualTrack ? '—' : (item.weightPerPieceKg ?? '—')}</td><td class="r${item.currentStockKg < 0 ? ' neg' : ''}">${stockLabel}</td><td class="r">${item.pieces ?? '—'}</td><td class="actions"><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','stock-in')">+ Stock In</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','adjust')">Adjust</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','edit')">Edit</button><button class="btn-s btn-sm" onclick="toggleRow('${item.id}','history')">History</button><button class="btn-s btn-sm" onclick="deleteItemPrompt('${item.id}')" style="color:#dc2626">Delete</button></td></tr>`,
+  ];
+  if (openRow && openRow.itemId === item.id) rows.push(renderExpandedRow(item));
+  return rows.join('');
+}
+
+function renderItems() {
+  const heading = document.getElementById('items-heading');
+  const searching = searchQuery.length > 0;
+  let visibleItems;
+  if (searching) {
+    heading.textContent = `Search results for "${document.getElementById('stock-search').value.trim()}"`;
+    visibleItems = items.filter((i) => i.name.toLowerCase().includes(searchQuery));
+  } else {
+    const cat = categories.find((c) => c.id === selectedCatId);
+    heading.textContent = cat ? `Items — ${cat.name}` : 'Items';
+    visibleItems = items.filter((i) => i.categoryId === selectedCatId);
+  }
+  const tbody = document.getElementById('items-tbody');
+  document.getElementById('empty-note').style.display = visibleItems.length ? 'none' : 'block';
+  document.getElementById('empty-note').textContent = searching ? 'No items match your search.' : 'No items in this category yet.';
+
+  // Stable partition: items with any stock left first (original order kept),
+  // then a divider, then zero-stock items (also original order kept) — no
+  // alphabetizing, negative (over-deducted) stock stays in the top group
+  // since it needs attention, not burial at the bottom.
+  const inStock = visibleItems.filter((i) => !isZeroStock(i));
+  const outStock = visibleItems.filter(isZeroStock);
+
+  let html = inStock.map((item) => renderItemRow(item, searching, false)).join('');
+  if (inStock.length && outStock.length) html += `<tr class="stock-divider"><td colspan="5"></td></tr>`;
+  html += outStock.map((item) => renderItemRow(item, searching, true)).join('');
+  tbody.innerHTML = html;
+}
+
+// Items with unit:'kg' AND a set weightPerPieceKg (e.g. Binding Wire with
+// an average weight-per-bundle) can have Stock In/Adjust entered as EITHER
+// kg or pieces — a unit dropdown appears next to the input in that case,
+// and the entered number is converted to kg (the API's one true unit for
+// unit:'kg' items) before submitting. Pure unit:'pcs' items never show this
+// toggle — there's only one unit for them.
+function rowUnitToggle(item) {
+  if (item.unit === 'pcs' || !item.weightPerPieceKg) return '';
+  return `<select id="row-unit"><option value="kg">kg</option><option value="pcs">pcs</option></select>`;
+}
+function rowInputToStockValue(item) {
+  const raw = parseFloat(document.getElementById('row-input').value);
+  const unitSel = document.getElementById('row-unit');
+  if (unitSel && unitSel.value === 'pcs') return raw * item.weightPerPieceKg;
+  return raw;
+}
+function renderExpandedRow(item) {
+  const unitLabel = item.unit === 'pcs' ? 'pcs' : 'kg';
+  if (openRow.mode === 'stock-in') {
+    if (item.dualTrack) {
+      return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+        <input id="row-input-kg" type="number" min="0" step="any" placeholder="Kg received">
+        <input id="row-input-pcs" type="number" min="0" step="1" placeholder="Pieces received">
+        <button class="btn-p btn-sm" onclick="submitStockIn('${item.id}')">Save</button>
+        <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+        <span class="err" id="row-err" style="display:none"></span>
+      </div></td></tr>`;
+    }
+    return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+      <input id="row-input" type="number" min="0" step="any" placeholder="${item.unit === 'pcs' ? 'Pieces received' : 'Kg received'}">
+      ${rowUnitToggle(item)}
+      <button class="btn-p btn-sm" onclick="submitStockIn('${item.id}')">Save</button>
+      <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+      <span class="err" id="row-err" style="display:none"></span>
+    </div></td></tr>`;
+  }
+  if (openRow.mode === 'adjust') {
+    if (item.dualTrack) {
+      return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+        <input id="row-input-kg" type="number" step="any" placeholder="New true total (kg)" value="${fmtKg(item.currentStockKg)}">
+        <input id="row-input-pcs" type="number" step="1" placeholder="New true total (pcs)" value="${item.stockPcs}">
+        <button class="btn-p btn-sm" onclick="submitAdjust('${item.id}')">Save</button>
+        <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+        <span class="err" id="row-err" style="display:none"></span>
+      </div></td></tr>`;
+    }
+    return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+      <input id="row-input" type="number" step="any" placeholder="New true total (${unitLabel})" value="${fmtKg(item.currentStockKg)}">
+      ${rowUnitToggle(item)}
+      <button class="btn-p btn-sm" onclick="submitAdjust('${item.id}')">Save</button>
+      <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+      <span class="err" id="row-err" style="display:none"></span>
+    </div></td></tr>`;
+  }
+  if (openRow.mode === 'edit') {
+    const weightField = item.unit === 'kg' && !item.dualTrack
+      ? `<input id="edit-weight" type="number" min="0" step="any" placeholder="Weight/Piece (kg, optional)" value="${item.weightPerPieceKg ?? ''}">`
+      : '';
+    return `<tr class="hist-row"><td colspan="5"><div class="inline-form">
+      <input id="edit-name" type="text" placeholder="Item name" value="${item.name}">
+      ${weightField}
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px"><input id="edit-dualtrack" type="checkbox" ${item.dualTrack ? 'checked' : ''}> Track Pieces + Kg together</label>
+      <button class="btn-p btn-sm" onclick="submitEdit('${item.id}')">Save</button>
+      <button class="btn-s btn-sm" onclick="closeRow()">Cancel</button>
+      <span class="err" id="row-err" style="display:none"></span>
+    </div></td></tr>`;
+  }
+  return `<tr class="hist-row"><td colspan="5" id="history-cell">Loading history…</td></tr>`;
+}
+
+function toggleRow(itemId, mode) {
+  if (openRow && openRow.itemId === itemId && openRow.mode === mode) {
+    closeRow();
+    return;
+  }
+  openRow = { itemId, mode };
+  renderItems();
+  if (mode === 'history') loadHistory(itemId);
+}
+function closeRow() {
+  openRow = null;
+  renderItems();
+}
+
+async function loadHistory(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  const unitLabel = item && item.unit === 'pcs' ? 'pcs' : 'kg';
+  const res = await fetch(`${API}/items/${itemId}/movements`);
+  const movements = await res.json();
+  const cell = document.getElementById('history-cell');
+  if (!cell) return;
+  cell.innerHTML = movements.length
+    ? `<ul>${movements
+        .map((m) => `<li>${new Date(m.at).toLocaleString('en-IN')} — ${m.reason} — ${m.deltaKg > 0 ? '+' : ''}${fmtKg(m.deltaKg)}${unitLabel}${m.note ? ` (${m.note})` : ''}</li>`)
+        .join('')}</ul>`
+    : 'No movements yet.';
+}
+
+async function submitStockIn(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  const errEl = document.getElementById('row-err');
+  const payload = item.dualTrack
+    ? { kg: parseFloat(document.getElementById('row-input-kg').value), pcs: parseFloat(document.getElementById('row-input-pcs').value) }
+    : { kg: rowInputToStockValue(item) };
+  try {
+    const res = await fetch(`${API}/items/${itemId}/stock-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Could not save');
+    closeRow();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function submitAdjust(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  const errEl = document.getElementById('row-err');
+  const payload = item.dualTrack
+    ? { newTotalKg: parseFloat(document.getElementById('row-input-kg').value), newTotalPcs: parseFloat(document.getElementById('row-input-pcs').value) }
+    : { newTotalKg: rowInputToStockValue(item) };
+  try {
+    const res = await fetch(`${API}/items/${itemId}/adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Could not save');
+    closeRow();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function submitEdit(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  const name = document.getElementById('edit-name').value;
+  const weightEl = document.getElementById('edit-weight');
+  const dualTrackEl = document.getElementById('edit-dualtrack');
+  const errEl = document.getElementById('row-err');
+  const body = { name };
+  if (weightEl) {
+    const raw = weightEl.value;
+    body.weightPerPieceKg = raw === '' ? null : parseFloat(raw);
+  }
+  if (dualTrackEl) body.dualTrack = dualTrackEl.checked;
+  try {
+    const res = await fetch(`${API}/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const resBody = await res.json();
+    if (!res.ok) throw new Error(resBody.error || 'Could not save');
+    closeRow();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteItemPrompt(itemId) {
+  const item = items.find((i) => i.id === itemId);
+  if (!item) return;
+  if (!confirm(`Delete "${item.name}"? This also removes its stock movement history. This cannot be undone.`)) return;
+  try {
+    const res = await fetch(`${API}/items/${itemId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Could not delete item');
+    }
+    if (openRow && openRow.itemId === itemId) openRow = null;
+    await loadAll();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function setNewItemUnit(unit) {
+  newItemUnit = unit;
+  document.getElementById('unit-btn-kg').style.background = unit === 'kg' ? '#1a2a6e' : '#fff';
+  document.getElementById('unit-btn-kg').style.color = unit === 'kg' ? '#fff' : '#333';
+  document.getElementById('unit-btn-pcs').style.background = unit === 'pcs' ? '#1a2a6e' : '#fff';
+  document.getElementById('unit-btn-pcs').style.color = unit === 'pcs' ? '#fff' : '#333';
+  document.getElementById('new-item-weight-fg').style.display = unit === 'pcs' ? 'none' : 'flex';
+  document.getElementById('new-item-stock-label').textContent = unit === 'pcs' ? 'Initial Stock (pcs)' : 'Initial Stock (kg)';
+  document.getElementById('new-item-preview').style.display = unit === 'pcs' ? 'none' : 'block';
+}
+
+function updateNewItemPreview() {
+  const weight = parseFloat(document.getElementById('new-item-weight').value);
+  const stock = parseFloat(document.getElementById('new-item-stock').value) || 0;
+  const pieces = computePiecesPreview(weight || null, stock);
+  document.getElementById('new-item-preview').textContent = `Pieces: ${pieces ?? '—'}`;
+}
+
+function onNewItemDualTrackChange() {
+  const on = document.getElementById('new-item-dualtrack').checked;
+  document.getElementById('new-item-dualpcs-fg').style.display = on ? 'grid' : 'none';
+}
+
+async function saveNewItem() {
+  const categoryId = document.getElementById('new-item-cat').value;
+  const name = document.getElementById('new-item-name').value;
+  const weightRaw = document.getElementById('new-item-weight').value;
+  const weightPerPieceKg = newItemUnit === 'pcs' || weightRaw === '' ? null : parseFloat(weightRaw);
+  const initialStockKg = parseFloat(document.getElementById('new-item-stock').value) || 0;
+  const dualTrack = document.getElementById('new-item-dualtrack').checked;
+  const initialStockPcs = dualTrack ? (parseFloat(document.getElementById('new-item-stock-pcs').value) || 0) : 0;
+  const errEl = document.getElementById('item-err');
+  errEl.style.display = 'none';
+  try {
+    const res = await fetch(`${API}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoryId, name, unit: newItemUnit, weightPerPieceKg, initialStockKg, dualTrack, initialStockPcs }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Could not save item');
+    document.getElementById('new-item-name').value = '';
+    document.getElementById('new-item-weight').value = '';
+    document.getElementById('new-item-stock').value = '';
+    document.getElementById('new-item-stock-pcs').value = '';
+    document.getElementById('new-item-dualtrack').checked = false;
+    onNewItemDualTrackChange();
+    updateNewItemPreview();
+    await loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+setNewItemUnit('kg');
+loadAll();
+</script>
+</body>
+</html>
