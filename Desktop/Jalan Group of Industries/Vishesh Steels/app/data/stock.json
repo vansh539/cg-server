@@ -1,13 +1,37 @@
 {
   "categories": [
-    { "id": "cat_tmt_bars", "name": "TMT Bars" },
-    { "id": "cat_ms_pipes", "name": "MS Pipes" },
-    { "id": "cat_ms_rounds", "name": "MS Rounds" },
-    { "id": "cat_flats", "name": "Flats" },
-    { "id": "cat_angles", "name": "Angles" },
-    { "id": "cat_channels", "name": "Channels" },
-    { "id": "cat_squares", "name": "Squares" },
-    { "id": "cat_profile_sheets", "name": "Profile Sheets" }
+    {
+      "id": "cat_tmt_bars",
+      "name": "TMT Bars"
+    },
+    {
+      "id": "cat_ms_pipes",
+      "name": "MS Pipes"
+    },
+    {
+      "id": "cat_ms_rounds",
+      "name": "MS Rounds"
+    },
+    {
+      "id": "cat_flats",
+      "name": "Flats"
+    },
+    {
+      "id": "cat_angles",
+      "name": "Angles"
+    },
+    {
+      "id": "cat_channels",
+      "name": "Channels"
+    },
+    {
+      "id": "cat_squares",
+      "name": "Squares"
+    },
+    {
+      "id": "cat_profile_sheets",
+      "name": "Profile Sheets"
+    }
   ],
   "items": [],
   "movements": []
