@@ -80,6 +80,8 @@ input[type=number]{-moz-appearance:textfield}
 </head>
 <body>
 <div class="wrap">
+  <datalist id="stock-items-datalist"></datalist>
+  <div id="module-warn-banner" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:10px"></div>
   <div class="app-title">🏭 Vishesh Steels</div>
   <div class="app-sub">Nothing is saved · Instant print only</div>
   <div class="step active" id="s2"><div class="card"><h2>Document type</h2>
@@ -164,14 +166,72 @@ function go(n){
   if(n===3&&rows.length===0)addRow();
   window.scrollTo(0,0);
 }
-function addRow(){rows.push({q:'',name:'',p:'',r:''});renderRows();}
+function addRow(){rows.push({q:'',name:'',p:'',r:'',stockItemId:null});renderRows();}
 function renderRows(){
   const tb=document.getElementById('tbody');tb.innerHTML='';
-  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td><input type="text" value="${row.name}" placeholder="Item" oninput="upd(${i},'name',this.value)"></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});recalc();
+  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td style="position:relative"><input type="text" list="stock-items-datalist" value="${row.name}" placeholder="Item" style="padding-right:20px" oninput="upd(${i},'name',this.value);matchStockItem(${i},this.value)"><span id="stockbadge-${i}" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:12px;pointer-events:none"></span></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});rows.forEach((row,i)=>updateStockBadge(i));recalc();
 }
 function calcAmt(row){const q=parseFloat(row.q)||0,r=parseFloat(row.r)||0,a=q*r;return a>0?''+Math.round(a).toLocaleString('en-IN'):'—';}
-function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);recalc();}
-function delRow(i){rows.splice(i,1);if(!rows.length)rows.push({q:'',name:'',p:'',r:''});renderRows();}
+function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);if(f==='q'||f==='p')updateStockBadge(i);recalc();}
+function delRow(i){rows.splice(i,1);if(!rows.length)rows.push({q:'',name:'',p:'',r:'',stockItemId:null});renderRows();}
+let stockCategories=[],stockItems=[];
+function stockDisplayName(item){const cat=stockCategories.find(c=>c.id===item.categoryId);const base=cat?`${item.name} (${cat.name})`:item.name;return item.unit==='pcs'?`${base} — sold by piece`:base;}
+let stockLoadFailed=false;
+function updateModuleWarnBanner(){
+  const banner=document.getElementById('module-warn-banner');
+  const msgs=[];
+  if(stockLoadFailed)msgs.push('Stock module failed to load — items will NOT be linked to stock or deducted this session. Open this page via the running local server (not by double-clicking the file) and reload to retry.');
+  banner.style.display=msgs.length?'block':'none';
+  banner.textContent=msgs.length?'⚠ '+msgs.join(' ⚠ '):'';
+}
+async function loadStockDatalist(){
+  try{
+    const [catsRes,itemsRes]=await Promise.all([fetch('/api/stock/categories'),fetch('/api/stock/items')]);
+    if(!catsRes.ok||!itemsRes.ok)throw new Error('Stock API returned an error');
+    stockCategories=await catsRes.json();
+    stockItems=await itemsRes.json();
+    document.getElementById('stock-items-datalist').innerHTML=stockItems.map(it=>`<option value="${stockDisplayName(it)}">`).join('');
+    stockLoadFailed=false;
+  }catch(err){
+    stockLoadFailed=true;
+  }
+  updateModuleWarnBanner();
+}
+function matchStockItem(i,value){
+  const trimmed=value.trim().toLowerCase();
+  let match=stockItems.find(it=>stockDisplayName(it).toLowerCase()===trimmed);
+  if(!match){
+    const byBareName=stockItems.filter(it=>it.name.trim().toLowerCase()===trimmed);
+    if(byBareName.length===1)match=byBareName[0];
+  }
+  rows[i].stockItemId=match?match.id:null;
+  if(match){
+    rows[i].name=match.name;
+    const inp=document.getElementById('tbody').children[i]?.children[1]?.querySelector('input');
+    if(inp)inp.value=match.name;
+  }
+  updateStockBadge(i);
+}
+function updateStockBadge(i){
+  const badge=document.getElementById('stockbadge-'+i);
+  if(!badge)return;
+  const row=rows[i];
+  const hasQty=(parseFloat(row.q)||0)>0||(parseFloat(row.p)||0)>0;
+  if(!row.name.trim()||!hasQty){badge.textContent='';badge.title='';return;}
+  if(!row.stockItemId){badge.textContent='⚠';badge.title='Not linked to a stock item — will NOT be deducted from stock. Pick the item from the dropdown suggestions to link it.';return;}
+  const item=stockItems.find(it=>it.id===row.stockItemId);
+  if(item&&item.dualTrack&&!rowDeductable(row)){
+    badge.textContent='⚠';badge.title='This item tracks both Pieces and Kg — fill in both Qty(kg) and Pcs before it can be deducted.';return;
+  }
+  badge.textContent='🔗';badge.title='Linked to stock — will be deducted';
+}
+function rowDeductable(row){
+  if(!row.stockItemId)return false;
+  const item=stockItems.find(it=>it.id===row.stockItemId);
+  if(!item)return false;
+  if(item.dualTrack)return(parseFloat(row.q)||0)>0&&(parseFloat(row.p)||0)>0;
+  return(parseFloat(row.q)||0)>0;
+}
 function gc(id){return parseFloat(document.getElementById(id).value)||0;}
 function fmt(v){return''+Math.round(v).toLocaleString('en-IN');}
 function recalc(){
@@ -251,4 +311,5 @@ function reset(){
   document.getElementById('n2').disabled=true;
   recalc();go(2);
 }
+loadStockDatalist();
 </script></body></html>
