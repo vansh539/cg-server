@@ -126,7 +126,8 @@ input[type=number]{-moz-appearance:textfield}
   <div class="step" id="s4">
     <div class="print-note">✓ Ready · <strong>A6 · Margins: None · Scale: 100% · Backgrounds: ON</strong></div>
     <div class="doc-wrap" id="preview-wrap"></div>
-    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" onclick="reset()">New</button></div>
+    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" id="btn-deduct" onclick="deductStock()" style="display:none">📦 Deduct from Stock</button><button class="btn-s" onclick="reset()">New</button></div>
+    <div class="print-note" id="deduct-note" style="display:none"></div>
   </div>
   <div class="step" id="s5">
     <div class="card"><h3>Customer details</h3>
@@ -270,7 +271,92 @@ function generate(){
   let ph='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);ph+=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,others,tot,meta):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,others,tot,meta);});
   document.getElementById('preview-wrap').innerHTML=ph;
   let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,others,tot,meta):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,others,tot,meta);prh+=`<div class="print-slip"><div style="height:9mm"></div>${sh}</div>`;if(!il)prh+=`<div class="page-break"></div>`;});
-  document.getElementById('print-area').innerHTML=prh;go(4);
+  document.getElementById('print-area').innerHTML=prh;
+  rows.forEach(r=>{r._deducted=false;});
+  go(4);
+  updateDeductButton();
+}
+function updateDeductButton(){
+  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
+  note.style.display='none';
+  const matched=rows.filter(r=>r.stockItemId);
+  if(matched.length){
+    btn.style.display='inline-block';btn.disabled=false;btn.textContent='📦 Deduct from Stock';btn.dataset.deducted='';
+  }else{
+    btn.style.display='none';
+  }
+}
+async function performStockDeduction(){
+  const pending=rows.filter(r=>rowDeductable(r)&&!r._deducted);
+  const succeeded=[];let failure=null;
+  for(const r of pending){
+    const item=stockItems.find(it=>it.id===r.stockItemId);
+    const body={note:'Sale slip'};
+    let label;
+    if(item.dualTrack){
+      body.kg=parseFloat(r.q)||0;body.pcs=parseFloat(r.p)||0;
+      label=`${body.pcs} pcs / ${body.kg}kg ${r.name}`;
+    }else{
+      const qty=parseFloat(r.q)||0;
+      body.kg=qty;
+      label=`${qty}kg ${r.name}`;
+    }
+    try{
+      const res=await fetch(`/api/stock/items/${r.stockItemId}/deduct`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const resBody=await res.json();
+      if(!res.ok)throw new Error(resBody.error||'Deduct failed');
+      r._deducted=true;succeeded.push(label);
+    }catch(err){failure=err.message;break;}
+  }
+  return{succeeded,failure};
+}
+function projectedNegatives(freshItems){
+  const pending=rows.filter(r=>rowDeductable(r)&&!r._deducted);
+  const byId={};
+  pending.forEach(r=>{
+    const item=freshItems.find(it=>it.id===r.stockItemId);
+    if(!item)return;
+    const deductKg=parseFloat(r.q)||0;
+    const current=byId[r.stockItemId]?byId[r.stockItemId].projected:item.currentStockKg;
+    const projected=current-deductKg;
+    byId[r.stockItemId]={name:item.name,current:item.currentStockKg,deductKg,projected};
+  });
+  return Object.values(byId).filter(v=>v.projected<0);
+}
+async function runDeduction(){
+  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
+  btn.disabled=true;
+  const{succeeded,failure}=await performStockDeduction();
+  note.style.display='block';
+  if(failure){
+    btn.disabled=false;
+    note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';
+    note.textContent=`Error: ${failure}.${succeeded.length?` Already deducted: ${succeeded.join('; ')}.`:''} Click again to retry the rest.`;
+  }else{
+    btn.dataset.deducted='true';btn.textContent='✓ Stock Deducted';
+    note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';
+    note.textContent=`Deducted: ${succeeded.join('; ')}.`;
+  }
+}
+async function deductStock(){
+  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
+  if(btn.dataset.deducted==='true')return;
+  const hasPending=rows.some(r=>rowDeductable(r)&&!r._deducted);
+  if(!hasPending)return;
+  btn.disabled=true;
+  await loadStockDatalist();
+  const negatives=projectedNegatives(stockItems);
+  btn.disabled=false;
+  if(negatives.length){
+    note.style.display='block';
+    note.style.background='#fffbeb';note.style.borderColor='#fde68a';note.style.color='#92400e';
+    const lines=negatives.map(n=>`${n.name}: only ${n.current}kg left, this deducts ${n.deductKg}kg`).join('; ');
+    note.innerHTML=`⚠ Stock would go negative — ${lines}. `+
+      `<button class="btn-s" style="margin:4px 6px 0 0" onclick="runDeduction()">Deduct Anyway</button>`+
+      `<button class="btn-s" style="margin:4px 0 0 0" onclick="document.getElementById('deduct-note').style.display='none'">Cancel</button>`;
+    return;
+  }
+  await runDeduction();
 }
 
 function qAddRow(){qRows.push({desc:'',make:'',qty:'',rate:''});qRender();}
