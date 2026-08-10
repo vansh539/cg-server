@@ -74,7 +74,12 @@ No Old Balance / Advance / customer-select — those are ledger features already
 
 ## Output / Share Flow
 
-Generate opens the existing blob-print-tab pattern (same technique both tools already use), but the blob document now auto-fires `window.print()` shortly after its background image loads. On iOS Safari this immediately opens the native Print Preview. From there the user taps the Share icon to **Save to Files / send via WhatsApp / Mail as a PDF** — no PDF-generation library needed, no print requirement, matches how the tool will actually be used in the field.
+The two sections already use different print mechanisms in the source tool, and both are kept as-is (no need to unify them):
+
+- **Chitti:** renders directly into `#print-area` on the main page and already has a "🖨 Print / Save PDF" button calling `window.print()` directly. No change needed — on iOS Safari this opens the native Print Preview immediately, and the Share icon there gives Save to Files / WhatsApp / Mail as PDF.
+- **Quotation:** `qOpen()` opens the rendered `PAGE_TEMPLATE` in a new tab via `window.open(blobUrl,'_blank')`, with no built-in print trigger — today the user has to manually invoke print from there. This tool adds one small enhancement: the blob template's own script calls `window.print()` automatically once its background letterhead image has loaded, so the Print Preview (and from it, the Share-as-PDF option) appears immediately instead of requiring an extra manual step. If auto-print doesn't fire for any reason, the tab is still fully usable — the user can trigger print manually via Safari's own share/print UI, same as today.
+
+No PDF-generation library needed either way.
 
 ## Menu
 
