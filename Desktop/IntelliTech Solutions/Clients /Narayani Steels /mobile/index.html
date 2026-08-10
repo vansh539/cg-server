@@ -66,15 +66,13 @@ h3{font-size:12px;font-weight:600;color:#888;margin-bottom:.75rem;text-transform
 .dl-btn{background:#c45c00;color:#fff;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;border:none}
 .dl-btn:hover{filter:brightness(0.85)}
 @media print{
-  @page{size:A4 portrait;margin:0!important}
+  @page{size:105mm 148.5mm;margin:0!important}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   body,html{margin:0!important;padding:0!important;background:#fff!important}
   .wrap{display:none!important}
   #print-area{display:block!important}
-  .print-slip{display:flex;width:210mm;height:148.5mm;margin:0!important;padding:0!important;overflow:hidden}
-  .a5-half{width:105mm!important;height:148.5mm!important;overflow:hidden;flex:0 0 105mm}
-  .a5-tear{flex:0 0 0;width:0;height:148.5mm;border-left:1px dashed #000}
-  .print-slip .doc,.print-slip .doc-cont{width:105mm!important;height:137mm!important;margin:0!important;border:1px solid #000!important;display:block!important;padding:2.5mm 3.5mm 2mm 3.5mm!important}
+  .print-slip{display:block;width:105mm;height:148.5mm;margin:0!important;padding:0!important;overflow:hidden}
+  .print-slip .doc,.print-slip .doc-cont{width:105mm!important;height:137mm!important;margin:0!important;border:none!important;display:block!important;padding:2.5mm 3.5mm 2mm 3.5mm!important}
   .page-break{page-break-after:always!important;height:0;display:block}
 }
 #print-area{display:none;position:relative}
@@ -141,7 +139,7 @@ input[type=number]{-moz-appearance:textfield}
     <div class="acts"><button class="btn-s" onclick="go(2)">← Back</button><button class="btn-p" onclick="generate()">Generate Document</button></div>
   </div>
   <div class="step" id="s4">
-    <div class="print-note">✓ Ready · <strong>A5 (2 copies) · Margins: None · Scale: 100% · Backgrounds: ON</strong></div>
+    <div class="print-note">✓ Ready · <strong>A6 · Margins: None · Scale: 100% · Backgrounds: ON</strong></div>
     <div class="doc-wrap" id="preview-wrap"></div>
     <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" onclick="reset()">New</button></div>
   </div>
@@ -255,7 +253,7 @@ function generate(){
   const chunks=rows.length<=mp1?[{items:rows,cont:false}]:[{items:rows.slice(0,mp1),cont:false},{items:rows.slice(mp1),cont:true}];
   let ph='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);ph+=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note);});
   document.getElementById('preview-wrap').innerHTML=ph;
-  let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note);prh+=`<div class="print-slip"><div class="a5-half"><div style="height:9mm"></div>${sh}</div><div class="a5-tear"></div><div class="a5-half"><div style="height:9mm"></div>${sh}</div></div>`;if(!il)prh+=`<div class="page-break"></div>`;});
+  let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note);prh+=`<div class="print-slip"><div style="height:9mm"></div>${sh}</div>`;if(!il)prh+=`<div class="page-break"></div>`;});
   document.getElementById('print-area').innerHTML=prh;go(4);
 }
 
