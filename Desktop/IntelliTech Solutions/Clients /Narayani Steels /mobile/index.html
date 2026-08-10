@@ -84,7 +84,6 @@ input[type=number]{-moz-appearance:textfield}
 </head>
 <body>
 <div class="wrap">
-  <datalist id="stock-items-datalist"></datalist>
   <div class="app-title">🏭 Narayani Steels</div>
   <div class="app-sub">Nothing is saved · Instant print only</div>
   <div class="step active" id="s2"><div class="card"><h2>Document type</h2>
@@ -105,7 +104,6 @@ input[type=number]{-moz-appearance:textfield}
         <div class="fg"><label>Lorry No.</label><input id="f-lorry" type="text" placeholder="TS08AB1234"></div>
       </div>
     </div>
-    <div id="module-warn-banner" style="display:none;background:#fef2f2;border:1.5px solid #fecaca;color:#991b1b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600"></div>
     <div class="card"><h3>Items</h3>
       <table class="itbl"><thead><tr><th style="width:78px">Qty (kg)</th><th>Particulars</th><th style="width:50px">Pcs.</th><th style="width:82px">Rate</th><th style="width:90px;text-align:right">Amount</th><th style="width:28px"></th></tr></thead><tbody id="tbody"></tbody></table>
       <div style="font-size:11px;color:#888;margin:-6px 0 10px">Leave Qty (kg) blank and fill Pcs + Rate for items sold by piece (no kg stock kept) — amount = Pcs × Rate.</div>
@@ -145,8 +143,7 @@ input[type=number]{-moz-appearance:textfield}
   <div class="step" id="s4">
     <div class="print-note">✓ Ready · <strong>A5 (2 copies) · Margins: None · Scale: 100% · Backgrounds: ON</strong></div>
     <div class="doc-wrap" id="preview-wrap"></div>
-    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" id="btn-deduct" onclick="deductStock()" style="display:none">📦 Deduct from Stock</button><button class="btn-s" onclick="reset()">New</button></div>
-    <div class="print-note" id="deduct-note" style="display:none"></div>
+    <div class="acts"><button class="btn-s" onclick="go(3)">← Edit</button><button class="btn-p" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn-s" onclick="reset()">New</button></div>
   </div>
   <div class="step" id="s9"><div class="card"><h2>Quotation format</h2>
     <div class="grid3">
@@ -211,95 +208,18 @@ function go(n){
   if(n===3&&rows.length===0)addRow();
   window.scrollTo(0,0);
 }
-function addRow(){rows.push({q:'',name:'',p:'',r:'',stockItemId:null,_deducted:false});renderRows();}
+function addRow(){rows.push({q:'',name:'',p:'',r:''});renderRows();}
 function renderRows(){
   const tb=document.getElementById('tbody');tb.innerHTML='';
-  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td style="position:relative"><input type="text" list="stock-items-datalist" value="${row.name}" placeholder="Item" style="padding-right:20px" oninput="upd(${i},'name',this.value);matchStockItem(${i},this.value)"><span id="stockbadge-${i}" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:12px;pointer-events:none"></span></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});rows.forEach((row,i)=>updateStockBadge(i));recalc();
-}
-let stockCategories=[],stockItems=[];
-function stockDisplayName(item){const cat=stockCategories.find(c=>c.id===item.categoryId);const base=cat?`${item.name} (${cat.name})`:item.name;return item.unit==='pcs'?`${base} — sold by piece`:base;}
-let stockLoadFailed=false;
-function updateModuleWarnBanner(){
-  const banner=document.getElementById('module-warn-banner');
-  const msgs=[];
-  if(stockLoadFailed)msgs.push('Stock module failed to load — items will NOT be linked to stock or deducted this session. Reload the page to retry.');
-  banner.style.display=msgs.length?'block':'none';
-  banner.textContent=msgs.length?'⚠ '+msgs.join(' ⚠ '):'';
-}
-async function loadStockDatalist(){
-  try{
-    const [catsRes,itemsRes]=await Promise.all([fetch('/api/stock/categories'),fetch('/api/stock/items')]);
-    if(!catsRes.ok||!itemsRes.ok)throw new Error('Stock API returned an error');
-    stockCategories=await catsRes.json();
-    // Both kg and pcs stock items are offered here. Loading Charges/GST base
-    // are still computed from the kg total only (see rowAmount/recalc) — a
-    // pcs item (e.g. Covering Blocks) is billed as Pcs x Rate and simply
-    // contributes 0 to that kg total, same as any manually-typed pcs-only row.
-    stockItems=await itemsRes.json();
-    document.getElementById('stock-items-datalist').innerHTML=stockItems.map(it=>`<option value="${stockDisplayName(it)}">`).join('');
-    stockLoadFailed=false;
-  }catch(err){
-    // Previously this failed with zero indication anywhere — every item row
-    // would just show unmatched (now ⚠, before this session's fix nothing
-    // at all) with no way for the operator to tell "stock is down today" vs
-    // "these specific items aren't in stock." A whole-module failure gets
-    // its own banner instead of looking like 100% of items are unstocked.
-    stockLoadFailed=true;
-  }
-  updateModuleWarnBanner();
-}
-function matchStockItem(i,value){
-  const trimmed=value.trim().toLowerCase();
-  let match=stockItems.find(it=>stockDisplayName(it).toLowerCase()===trimmed);
-  // Fallback: if the operator typed/left the bare item name (no "(Category)"
-  // suffix — e.g. they didn't click the datalist suggestion), still link it
-  // to stock as long as that bare name is unambiguous across all items. This
-  // is what silently broke stock deduction before: a row that visibly named
-  // a real item but didn't hit the exact "Name (Category)" string just never
-  // got a stockItemId, so it was quietly excluded from performStockDeduction
-  // with nothing on screen indicating it — a 5-item Chitti could deduct only
-  // 3 with no error or warning shown.
-  if(!match){
-    const byBareName=stockItems.filter(it=>it.name.trim().toLowerCase()===trimmed);
-    if(byBareName.length===1)match=byBareName[0];
-  }
-  rows[i].stockItemId=match?match.id:null;
-  // Datalist options are shown as "Name (Category)" so the operator can tell
-  // items with the same name apart while picking — but the category suffix
-  // shouldn't leak into what gets printed on the Chitti. On any match,
-  // collapse the row's stored/displayed name back down to the bare item name.
-  if(match){
-    rows[i].name=match.name;
-    const inp=document.getElementById('tbody').children[i]?.children[1]?.querySelector('input');
-    if(inp)inp.value=match.name;
-  }
-  updateStockBadge(i);
-}
-function updateStockBadge(i){
-  const badge=document.getElementById('stockbadge-'+i);
-  if(!badge)return;
-  const row=rows[i];
-  const hasQty=(parseFloat(row.q)||0)>0||(parseFloat(row.p)||0)>0;
-  if(!row.name.trim()||!hasQty){badge.textContent='';badge.title='';return;}
-  if(!row.stockItemId){badge.textContent='⚠';badge.title='Not linked to a stock item — will NOT be deducted from stock. Pick the item from the dropdown suggestions to link it.';return;}
-  const item=stockItems.find(it=>it.id===row.stockItemId);
-  if(item&&item.dualTrack&&!rowDeductable(row)){
-    badge.textContent='⚠';badge.title='This item tracks both Pieces and Kg — fill in both Qty(kg) and Pcs before it can be deducted.';return;
-  }
-  badge.textContent='🔗';badge.title='Linked to stock — will be deducted';
+  rows.forEach((row,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input type="number" min="0" step="any" value="${row.q}" placeholder="0" oninput="upd(${i},'q',this.value)"></td><td style="position:relative"><input type="text" value="${row.name}" placeholder="Item" oninput="upd(${i},'name',this.value)"></td><td><input type="number" min="0" step="1" value="${row.p}" placeholder="0" oninput="upd(${i},'p',this.value)"></td><td><input type="number" min="0" step="any" value="${row.r}" placeholder="0.00" oninput="upd(${i},'r',this.value)"></td><td class="amt">${calcAmt(row)}</td><td><button class="rm" onclick="delRow(${i})">×</button></td>`;tb.appendChild(tr);});recalc();
 }
 // A row is billed as Pcs x Rate only when all three hold: no Qty(kg) was
 // entered, Pcs was entered, and Rate was entered — e.g. one-off items the
 // client sells without keeping kg stock of (a random casting, a covering
 // block). Otherwise it's the normal Qty(kg) x Rate billing.
 function rowAmount(row){const q=parseFloat(row.q)||0,p=parseFloat(row.p)||0,r=parseFloat(row.r)||0;if(q<=0&&p>0&&r>0)return p*r;return q*r;}
-function rowStockQty(row){
-  if(!row.stockItemId)return 0;
-  const item=stockItems.find(it=>it.id===row.stockItemId);
-  return item&&item.unit==='pcs'?(parseFloat(row.p)||0):(parseFloat(row.q)||0);
-}
 function calcAmt(row){const a=rowAmount(row);return a>0?''+Math.round(a).toLocaleString('en-IN'):'—';}
-function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);if(f==='q'||f==='p')updateStockBadge(i);recalc();}
+function upd(i,f,v){rows[i][f]=v;const t=document.getElementById('tbody').children[i]?.children;if(t)t[4].textContent=calcAmt(rows[i]);recalc();}
 function delRow(i){rows.splice(i,1);if(!rows.length)rows.push({q:'',name:'',p:'',r:''});renderRows();}
 function gc(id){return parseFloat(document.getElementById(id).value)||0;}
 function fmt(v){return''+Math.round(v).toLocaleString('en-IN');}
@@ -324,7 +244,6 @@ function buildFirstSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,bend,gst,other
 const CONT_TOTAL=19;
 function buildContSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note){let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,bend,gst,others].filter(v=>v>0).length+(note?note.split('\n').length:0):0;tbody+=emptyRows(Math.max(0,CONT_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note);return`<div class="doc-cont"><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
 function generate(){
-  rows.forEach(r=>{r._deducted=false;});
   let sub=0,tq=0;rows.forEach(r=>{sub+=rowAmount(r);tq+=parseFloat(r.q)||0;});
   const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),bend=gc('f-bend'),others=gc('f-others');
   const taxable=sub+lab+weigh+freight+unload+bend+others;
@@ -337,94 +256,7 @@ function generate(){
   let ph='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);ph+=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note);});
   document.getElementById('preview-wrap').innerHTML=ph;
   let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note);prh+=`<div class="print-slip"><div class="a5-half"><div style="height:9mm"></div>${sh}</div><div class="a5-tear"></div><div class="a5-half"><div style="height:9mm"></div>${sh}</div></div>`;if(!il)prh+=`<div class="page-break"></div>`;});
-  document.getElementById('print-area').innerHTML=prh;go(4);updateDeductButton();
-}
-function updateDeductButton(){
-  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
-  note.style.display='none';
-  const matched=rows.filter(r=>r.stockItemId);
-  if(dtype==='Invoice'&&matched.length){
-    btn.style.display='inline-block';btn.disabled=false;btn.textContent='📦 Deduct from Stock';btn.dataset.deducted='';
-  }else{
-    btn.style.display='none';
-  }
-}
-function rowDeductable(row){
-  if(!row.stockItemId)return false;
-  const item=stockItems.find(it=>it.id===row.stockItemId);
-  if(!item)return false;
-  if(item.dualTrack)return(parseFloat(row.q)||0)>0&&(parseFloat(row.p)||0)>0;
-  return rowStockQty(row)>0;
-}
-function unmatchedItemNames(){
-  // Rows that have a real name + quantity entered but either never got
-  // linked to a stock item, or ARE linked to a dual-track item missing one
-  // of its two required fields — both cases are silently excluded from
-  // performStockDeduction, so surface them explicitly wherever deduction
-  // results are reported instead of letting "Deducted: X, Y" quietly imply
-  // everything was deducted.
-  return rows.filter(r=>{
-    if(!r.name.trim())return false;
-    const hasAny=(parseFloat(r.q)||0)>0||(parseFloat(r.p)||0)>0;
-    if(!hasAny)return false;
-    if(!r.stockItemId)return true;
-    const item=stockItems.find(it=>it.id===r.stockItemId);
-    return item&&item.dualTrack&&!rowDeductable(r);
-  }).map(r=>{
-    const item=r.stockItemId&&stockItems.find(it=>it.id===r.stockItemId);
-    return item&&item.dualTrack?`${r.name} (needs both Qty(kg) and Pcs)`:r.name;
-  });
-}
-async function performStockDeduction(){
-  const pending=rows.filter(r=>rowDeductable(r)&&!r._deducted);
-  const succeeded=[];let failure=null;
-  for(const r of pending){
-    const item=stockItems.find(it=>it.id===r.stockItemId);
-    const isPcs=item&&item.unit==='pcs';
-    const body={note:'Chitti/Invoice'};
-    let label;
-    if(item.dualTrack){
-      body.kg=parseFloat(r.q)||0;body.pcs=parseFloat(r.p)||0;
-      label=`${body.pcs} pcs / ${body.kg}kg ${r.name}`;
-    }else{
-      // The stock API's kg field is a generic tracked-quantity field — for
-      // pcs items it holds piece count, same convention as stockStore.js.
-      const qty=rowStockQty(r);
-      body.kg=qty;
-      label=`${qty}${isPcs?' pcs':'kg'} ${r.name}`;
-    }
-    try{
-      const res=await fetch(`/api/stock/items/${r.stockItemId}/deduct`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      const resBody=await res.json();
-      if(!res.ok)throw new Error(resBody.error||'Deduct failed');
-      r._deducted=true;succeeded.push(label);
-    }catch(err){failure=err.message;break;}
-  }
-  return{succeeded,failure};
-}
-async function deductStock(){
-  const btn=document.getElementById('btn-deduct'),note=document.getElementById('deduct-note');
-  if(btn.dataset.deducted==='true')return;
-  const hasPending=rows.some(r=>rowDeductable(r)&&!r._deducted);
-  if(!hasPending)return;
-  btn.disabled=true;
-  const{succeeded,failure}=await performStockDeduction();
-  const unmatched=unmatchedItemNames();
-  const unmatchedNote=unmatched.length?` NOT deducted (no stock match — pick from the item dropdown to link): ${unmatched.join('; ')}.`:'';
-  note.style.display='block';
-  if(failure){
-    btn.disabled=false;
-    note.style.background='#fef2f2';note.style.borderColor='#fecaca';note.style.color='#991b1b';
-    note.textContent=`Error: ${failure}.${succeeded.length?` Already deducted: ${succeeded.join('; ')}.`:''} Click again to retry the rest.${unmatchedNote}`;
-  }else if(unmatched.length){
-    btn.dataset.deducted='true';btn.textContent='✓ Stock Deducted';
-    note.style.background='#fffbeb';note.style.borderColor='#fde68a';note.style.color='#92400e';
-    note.textContent=`Deducted: ${succeeded.join('; ')||'none'}.${unmatchedNote}`;
-  }else{
-    btn.dataset.deducted='true';btn.textContent='✓ Stock Deducted';
-    note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#166534';
-    note.textContent=`Deducted: ${succeeded.join('; ')}.`;
-  }
+  document.getElementById('print-area').innerHTML=prh;go(4);
 }
 
 function pickFormat(f,el){qFormat=f;document.querySelectorAll('#s9 .type-btn').forEach(function(b){b.classList.remove('on');});el.classList.add('on');document.getElementById('n9').disabled=false;}
@@ -556,5 +388,4 @@ function reset(){
   document.getElementById('n9').disabled=true;
   recalc();go(2);
 }
-loadStockDatalist();
 </script></body></html>
