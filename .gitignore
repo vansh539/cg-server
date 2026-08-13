@@ -26,3 +26,10 @@ Desktop/IntelliTech Solutions/Clients /Narayani Steels /app/data/
 Desktop/IntelliTech Solutions/Clients /Narayani Steels /whatsapp-bot/.wwebjs_auth/
 Desktop/IntelliTech Solutions/Clients /Narayani Steels /whatsapp-bot/.wwebjs_cache/
 Desktop/IntelliTech Solutions/Clients /Narayani Steels /whatsapp-bot/node_modules/
+
+# Real environment/secret files anywhere in the tree — never committed.
+# Template files (.env.example, .env.test.example, etc.) stay trackable.
+.env
+.env.*
+!.env.example
+!.env.*.example
