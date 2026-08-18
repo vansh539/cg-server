@@ -135,6 +135,7 @@ input[type=number]{-moz-appearance:textfield}
         <input id="f-gst" type="checkbox" style="width:16px;height:16px" onchange="recalc()">
         <label for="f-gst" style="margin:0">Apply GST @ 18%</label>
       </div>
+      <div class="fg"><label>Advance Received</label><input id="f-advance" type="number" min="0" placeholder="0" oninput="recalc()"></div>
       <div class="fg"><label>Note (optional)</label><textarea id="f-note" rows="2" placeholder="Any additional note"></textarea></div>
       <div class="sumbox">
         <div class="sr"><span>Items subtotal</span><span id="d-sub">0</span></div>
@@ -145,6 +146,7 @@ input[type=number]{-moz-appearance:textfield}
         <div class="sr muted"><span>Bending Charges</span><span id="d-bend">0</span></div>
         <div class="sr muted"><span>Others</span><span id="d-others">0</span></div>
         <div class="sr muted"><span>GST @18%</span><span id="d-gst">0</span></div>
+        <div class="sr muted"><span>Advance</span><span id="d-advance">0</span></div>
         <div class="sr tot"><span>Grand Total</span><span id="d-tot">0</span></div>
       </div>
     </div>
@@ -263,31 +265,33 @@ function recalc(){
   const weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),bend=gc('f-bend'),others=gc('f-others');
   const taxable=sub+lab+weigh+freight+unload+bend+others;
   const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
-  const tot=taxable+gst;
-  document.getElementById('d-sub').textContent=fmt(sub);document.getElementById('d-lab').textContent=fmt(lab);document.getElementById('d-weigh').textContent=fmt(weigh);document.getElementById('d-freight').textContent=fmt(freight);document.getElementById('d-unload').textContent=fmt(unload);document.getElementById('d-bend').textContent=fmt(bend);document.getElementById('d-others').textContent=fmt(others);document.getElementById('d-gst').textContent=fmt(gst);document.getElementById('d-tot').textContent=fmt(tot);
+  const advance=gc('f-advance');
+  const tot=taxable+gst-advance;
+  document.getElementById('d-sub').textContent=fmt(sub);document.getElementById('d-lab').textContent=fmt(lab);document.getElementById('d-weigh').textContent=fmt(weigh);document.getElementById('d-freight').textContent=fmt(freight);document.getElementById('d-unload').textContent=fmt(unload);document.getElementById('d-bend').textContent=fmt(bend);document.getElementById('d-others').textContent=fmt(others);document.getElementById('d-gst').textContent=fmt(gst);document.getElementById('d-advance').textContent=advance>0?'-'+fmt(advance):fmt(0);document.getElementById('d-tot').textContent=fmt(tot);
 }
 function tableRows(c){return c.map(r=>{const rt=parseFloat(r.r)||0,a=rowAmount(r);return`<tr><td class="c">${r.q||''}</td><td class="lbl">${r.name||''}</td><td class="c">${r.p||''}</td><td class="r">${rt?''+rt:''}</td><td class="r">${a>0?''+Math.round(a).toLocaleString('en-IN'):''}</td></tr>`;}).join('');}
-function colgroup(){return`<colgroup><col style="width:17%"><col style="width:36%"><col style="width:11%"><col style="width:17%"><col style="width:19%"></colgroup>`;}
+function colgroup(){return`<colgroup><col style="width:17%"><col style="width:42%"><col style="width:11%"><col style="width:11%"><col style="width:19%"></colgroup>`;}
 function thead(){return`<thead><tr><th>Qty.</th><th>Particulars</th><th>Pcs.</th><th>Rate</th><th>Amount</th></tr></thead>`;}
 function emptyRows(n){let r='';for(let i=0;i<n;i++)r+=`<tr class="empty"><td></td><td></td><td></td><td></td><td></td></tr>`;return r;}
-function totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note){const qs=tq%1===0?tq:tq.toFixed(2);let r=`<tr class="sep"><td class="c">${qs}</td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2" style="font-weight:bold">Subtotal</td><td class="r">${fmt(sub)}</td></tr>`;[['Loading Charges',lab],['Kanta Charges',weigh],['Freight',freight],['Unloading',unload],['Bending Charges',bend],['GST @18%',gst],['Others',others]].forEach(([l,v])=>{if(v>0)r+=`<tr class="charge"><td></td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2">${l}</td><td class="r">${fmt(v)}</td></tr>`;});if(note)r+=`<tr class="charge"><td colspan="4" class="note-row">Note: ${escHtml(note)}</td><td class="r"></td></tr>`;r+=`<tr class="grand"><td colspan="4" style="text-align:right;padding-right:2mm">TOTAL</td><td class="r">${fmt(tot)}</td></tr>`;return r;}
+function totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note){const qs=tq%1===0?tq:tq.toFixed(2);let r=`<tr class="sep"><td class="c">${qs}</td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2" style="font-weight:bold">Subtotal</td><td class="r">${fmt(sub)}</td></tr>`;[['Loading Charges',lab],['Kanta Charges',weigh],['Freight',freight],['Unloading',unload],['Bending Charges',bend],['GST @18%',gst],['Others',others]].forEach(([l,v])=>{if(v>0)r+=`<tr class="charge"><td></td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2">${l}</td><td class="r">${fmt(v)}</td></tr>`;});if(advance>0)r+=`<tr class="charge"><td></td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2">Advance</td><td class="r">-${fmt(advance)}</td></tr>`;if(note)r+=`<tr class="charge"><td colspan="4" class="note-row">Note: ${escHtml(note)}</td><td class="r"></td></tr>`;r+=`<tr class="grand"><td colspan="4" style="text-align:right;padding-right:2mm">TOTAL</td><td class="r">${fmt(tot)}</td></tr>`;return r;}
 const FIRST_TOTAL=19;
-function buildFirstSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note){const{name,date,mobile,lorry}=meta;let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,bend,gst,others].filter(v=>v>0).length+(note?note.split('\n').length:0):0;tbody+=emptyRows(Math.max(0,FIRST_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note);return`<div class="doc"><div class="d-hdr"><div class="d-shri">||श्री||</div><div class="d-title">QUOTATION</div><div class="d-valid">Valid for 2 Hours</div></div><div class="d-meta"><span>M/s.&nbsp;<b style="font-size:11pt">${name}</b></span><span>Dt.&nbsp;<b style="font-size:11pt">${date}</b></span></div><div class="d-meta"><span>Mobile No.&nbsp;<b style="font-size:11pt">${mobile}</b></span><span style="margin-right:12mm">Lorry No.&nbsp;<b style="font-size:11pt">${lorry}</b></span></div><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
+function buildFirstSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,meta,note){const{name,date,mobile,lorry}=meta;let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,bend,gst,others,advance].filter(v=>v>0).length+(note?note.split('\n').length:0):0;tbody+=emptyRows(Math.max(0,FIRST_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note);return`<div class="doc"><div class="d-hdr"><div class="d-shri">||श्री||</div><div class="d-title">QUOTATION</div><div class="d-valid">Valid for 2 Hours</div></div><div class="d-meta"><span>M/s.&nbsp;<b style="font-size:11pt">${name}</b></span><span>Dt.&nbsp;<b style="font-size:11pt">${date}</b></span></div><div class="d-meta"><span>Mobile No.&nbsp;<b style="font-size:11pt">${mobile}</b></span><span style="margin-right:12mm">Lorry No.&nbsp;<b style="font-size:11pt">${lorry}</b></span></div><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
 const CONT_TOTAL=19;
-function buildContSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note){let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,bend,gst,others].filter(v=>v>0).length+(note?note.split('\n').length:0):0;tbody+=emptyRows(Math.max(0,CONT_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note);return`<div class="doc-cont"><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
+function buildContSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note){let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,bend,gst,others,advance].filter(v=>v>0).length+(note?note.split('\n').length:0):0;tbody+=emptyRows(Math.max(0,CONT_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note);return`<div class="doc-cont"><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
 function generate(){
   let sub=0,tq=0;rows.forEach(r=>{sub+=rowAmount(r);tq+=parseFloat(r.q)||0;});
   const lab=gc('f-labour'),weigh=gc('f-weigh'),freight=gc('f-freight'),unload=gc('f-unload'),bend=gc('f-bend'),others=gc('f-others');
   const taxable=sub+lab+weigh+freight+unload+bend+others;
   const gst=document.getElementById('f-gst').checked?Math.round(taxable*0.18):0;
-  const tot=taxable+gst;
+  const advance=gc('f-advance');
+  const tot=taxable+gst-advance;
   const meta={name:document.getElementById('f-name').value||'_______________________',date:document.getElementById('f-date').value||'________',mobile:document.getElementById('f-mobile').value||'___________',lorry:document.getElementById('f-lorry').value||'___________'};
   const note=document.getElementById('f-note').value.trim();
-  const cc=[lab,weigh,freight,unload,bend,gst,others].filter(v=>v>0).length+(note?note.split('\n').length:0),tr2=2+cc,mp1=FIRST_TOTAL-tr2;
+  const cc=[lab,weigh,freight,unload,bend,gst,others,advance].filter(v=>v>0).length+(note?note.split('\n').length:0),tr2=2+cc,mp1=FIRST_TOTAL-tr2;
   const chunks=rows.length<=mp1?[{items:rows,cont:false}]:[{items:rows.slice(0,mp1),cont:false},{items:rows.slice(mp1),cont:true}];
-  let ph='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);ph+=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note);});
+  let ph='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);ph+=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,meta,note);});
   document.getElementById('preview-wrap').innerHTML=ph;
-  let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,tot,meta,note);prh+=`<div class="print-slip"><div style="height:9mm"></div>${sh}</div>`;if(!il)prh+=`<div class="page-break"></div>`;});
+  let prh='';chunks.forEach((c,idx)=>{const il=(idx===chunks.length-1);const sh=c.cont?buildContSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note):buildFirstSlip(c.items,il,sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,meta,note);prh+=`<div class="print-slip"><div style="height:9mm"></div>${sh}</div>`;if(!il)prh+=`<div class="page-break"></div>`;});
   document.getElementById('print-area').innerHTML=prh;go(4);
 }
 
@@ -411,7 +415,7 @@ function qOpen(){
 function reset(){
   rows=[];dtype='';qRows=[];qFormat='';
   document.getElementById('tbody').innerHTML='';
-  ['f-name','f-date','f-mobile','f-lorry','f-labour','f-weigh','f-freight','f-unload','f-bend','f-others','f-note'].forEach(function(id){document.getElementById(id).value='';});
+  ['f-name','f-date','f-mobile','f-lorry','f-labour','f-weigh','f-freight','f-unload','f-bend','f-others','f-advance','f-note'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('f-gst').checked=false;
   document.getElementById('f-no-loading').checked=false;
   ['q-to','q-date','q-addr','q-gstin','q-subject','q-kanta','q-transport','q-unload','q-note'].forEach(function(id){document.getElementById(id).value='';});
