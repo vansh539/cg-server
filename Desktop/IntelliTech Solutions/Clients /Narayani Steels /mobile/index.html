@@ -120,8 +120,8 @@ input[type=number]{-moz-appearance:textfield}
       <button class="add-row" onclick="addRow()">+ Add item</button>
       <h3>Additional charges</h3>
       <div class="charges-grid">
-        <div class="fg"><label>Loading Charges (₹400/1000kg)</label><input id="f-labour" type="number" min="0" placeholder="0" readonly style="background:#f0f0f0;color:#666"></div>
-        <div class="fg"><label>Kanta Charges</label><input id="f-weigh" type="number" min="0" placeholder="0" oninput="recalc()"></div>
+        <div class="fg"><label>Loading (₹400/1000kg)</label><input id="f-labour" type="number" min="0" placeholder="0" readonly style="background:#f0f0f0;color:#666"></div>
+        <div class="fg"><label>Kanta</label><input id="f-weigh" type="number" min="0" placeholder="0" oninput="recalc()"></div>
         <div class="fg"><label>Freight</label><input id="f-freight" type="number" min="0" placeholder="0" oninput="recalc()"></div>
         <div class="fg"><label>Unloading</label><input id="f-unload" type="number" min="0" placeholder="0" oninput="recalc()"></div>
         <div class="fg"><label>Bending Charges</label><input id="f-bend" type="number" min="0" placeholder="0" oninput="recalc()"></div>
@@ -139,8 +139,8 @@ input[type=number]{-moz-appearance:textfield}
       <div class="fg"><label>Note (optional)</label><textarea id="f-note" rows="2" placeholder="Any additional note"></textarea></div>
       <div class="sumbox">
         <div class="sr"><span>Items subtotal</span><span id="d-sub">0</span></div>
-        <div class="sr muted"><span>Loading Charges</span><span id="d-lab">0</span></div>
-        <div class="sr muted"><span>Kanta Charges</span><span id="d-weigh">0</span></div>
+        <div class="sr muted"><span>Loading</span><span id="d-lab">0</span></div>
+        <div class="sr muted"><span>Kanta</span><span id="d-weigh">0</span></div>
         <div class="sr muted"><span>Freight</span><span id="d-freight">0</span></div>
         <div class="sr muted"><span>Unloading</span><span id="d-unload">0</span></div>
         <div class="sr muted"><span>Bending Charges</span><span id="d-bend">0</span></div>
@@ -273,7 +273,7 @@ function tableRows(c){return c.map(r=>{const rt=parseFloat(r.r)||0,a=rowAmount(r
 function colgroup(){return`<colgroup><col style="width:17%"><col style="width:42%"><col style="width:11%"><col style="width:11%"><col style="width:19%"></colgroup>`;}
 function thead(){return`<thead><tr><th>Qty.</th><th>Particulars</th><th>Pcs.</th><th>Rate</th><th>Amount</th></tr></thead>`;}
 function emptyRows(n){let r='';for(let i=0;i<n;i++)r+=`<tr class="empty"><td></td><td></td><td></td><td></td><td></td></tr>`;return r;}
-function totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note){const qs=tq%1===0?tq:tq.toFixed(2);let r=`<tr class="sep"><td class="c">${qs}</td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2" style="font-weight:bold">Subtotal</td><td class="r">${fmt(sub)}</td></tr>`;[['Loading Charges',lab],['Kanta Charges',weigh],['Freight',freight],['Unloading',unload],['Bending Charges',bend],['GST @18%',gst],['Others',others]].forEach(([l,v])=>{if(v>0)r+=`<tr class="charge"><td></td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2">${l}</td><td class="r">${fmt(v)}</td></tr>`;});if(advance>0)r+=`<tr class="charge"><td></td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2">Advance</td><td class="r">-${fmt(advance)}</td></tr>`;if(note)r+=`<tr class="charge"><td colspan="4" class="note-row">Note: ${escHtml(note)}</td><td class="r"></td></tr>`;r+=`<tr class="grand"><td colspan="4" style="text-align:right;padding-right:2mm">TOTAL</td><td class="r">${fmt(tot)}</td></tr>`;return r;}
+function totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note){const qs=tq%1===0?tq:tq.toFixed(2);let r=`<tr class="sep"><td class="c">${qs}</td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2" style="font-weight:bold">Subtotal</td><td class="r">${fmt(sub)}</td></tr>`;[['Loading',lab],['Kanta',weigh],['Freight',freight],['Unloading',unload],['Bending Charges',bend],['GST @18%',gst],['Others',others]].forEach(([l,v])=>{if(v>0)r+=`<tr class="charge"><td></td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2">${l}</td><td class="r">${fmt(v)}</td></tr>`;});if(advance>0)r+=`<tr class="charge"><td></td><td style="border-right:0.75px solid #000"></td><td class="lbl" colspan="2">Advance</td><td class="r">-${fmt(advance)}</td></tr>`;if(note)r+=`<tr class="charge"><td colspan="4" class="note-row">Note: ${escHtml(note)}</td><td class="r"></td></tr>`;r+=`<tr class="grand"><td colspan="4" style="text-align:right;padding-right:2mm">TOTAL</td><td class="r">${fmt(tot)}</td></tr>`;return r;}
 const FIRST_TOTAL=19;
 function buildFirstSlip(ic,isLast,sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,meta,note){const{name,date,mobile,lorry}=meta;let tbody=tableRows(ic);const tc=isLast?2+[lab,weigh,freight,unload,bend,gst,others,advance].filter(v=>v>0).length+(note?note.split('\n').length:0):0;tbody+=emptyRows(Math.max(0,FIRST_TOTAL-ic.length-tc));if(isLast)tbody+=totalsBlock(sub,tq,lab,weigh,freight,unload,bend,gst,others,advance,tot,note);return`<div class="doc"><div class="d-hdr"><div class="d-shri">||श्री||</div><div class="d-title">QUOTATION</div><div class="d-valid">Valid for 2 Hours</div></div><div class="d-meta"><span>M/s.&nbsp;<b style="font-size:11pt">${name}</b></span><span>Dt.&nbsp;<b style="font-size:11pt">${date}</b></span></div><div class="d-meta"><span>Mobile No.&nbsp;<b style="font-size:11pt">${mobile}</b></span><span style="margin-right:12mm">Lorry No.&nbsp;<b style="font-size:11pt">${lorry}</b></span></div><table class="d-tbl">${colgroup()}${thead()}<tbody>${tbody}</tbody></table></div>`;}
 const CONT_TOTAL=19;
