@@ -3,7 +3,7 @@ const { pool } = require('payment-ledger-core/db');
 
 async function resetDb() {
   await pool.query(
-    'TRUNCATE invoice_items, invoices, payment_claims, dues, dues_imports, customers, admins, dashboard_users RESTART IDENTITY CASCADE'
+    'TRUNCATE invoice_items, invoices, payment_claims, dues, dues_imports, customers, admins, dashboard_users, steel_movements, steel_items RESTART IDENTITY CASCADE'
   );
 }
 

@@ -12,49 +12,82 @@
 <link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
 <link rel="stylesheet" href="/styles.css">
 <style>
-  body { display: flex; align-items: center; justify-content: center; background: linear-gradient(155deg, var(--navy) 0%, var(--navy-deep) 100%); }
-  .login-wrap { position: relative; z-index: 1; width: 100%; max-width: 380px; padding: 1.5rem; }
-  .login-brand { display: flex; align-items: center; gap: 0.9rem; justify-content: center; margin-bottom: 1.8rem; }
-  .login-brand img { height: 48px; width: auto; filter: brightness(0) invert(1); opacity: 0.96; }
-  .login-brand h1 { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; font-weight: 700; color: #fff; margin: 0; letter-spacing: -0.01em; }
-  .login-brand p { margin: 2px 0 0; font-size: 0.72rem; color: var(--cyan-soft); letter-spacing: 0.08em; text-transform: uppercase; }
-  .login-card { background: var(--paper); border-radius: var(--radius); box-shadow: 0 20px 60px -20px rgba(0,0,0,0.5); padding: 1.8rem; }
-  .login-card h2 { font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem; color: var(--navy); margin: 0 0 1.3rem; }
-  .field-group { margin-bottom: 1.1rem; }
-  .field-group label { display: block; font-size: 0.85rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
-  .field-group input { width: 100%; padding: 0.75rem 1rem; font-size: 0.95rem; font-family: inherit; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); outline: none; }
-  .field-group input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.18); }
-  #loginBtn { width: 100%; justify-content: center; padding: 0.8rem; font-size: 0.9rem; margin-top: 0.4rem; }
+  body { margin: 0; }
+  .login-shell { display: grid; grid-template-columns: 1.05fr 1fr; min-height: 100vh; }
+  .login-left {
+    position: relative; overflow: hidden; background: linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
+    display: flex; flex-direction: column; justify-content: space-between; padding: 56px;
+  }
+  .login-left::before {
+    content: ''; position: absolute; inset: 0; opacity: 0.5; pointer-events: none;
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0);
+    background-size: 15px 15px;
+  }
+  .login-left::after {
+    content: ''; position: absolute; top: -90px; left: -60px; width: 340px; height: 340px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,174,239,0.32), transparent 70%); filter: blur(6px); pointer-events: none;
+  }
+  .login-wave { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: auto; opacity: 0.95; }
+  .login-mark { position: relative; z-index: 2; display: flex; align-items: center; }
+  .login-mark img { height: 56px; width: auto; filter: brightness(0) invert(1); opacity: 0.97; }
+  .login-headline-wrap { position: relative; z-index: 2; max-width: 440px; }
+  .login-eyebrow { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan-soft); margin-bottom: 14px; }
+  .login-headline { font-family: var(--font-display); font-size: 2.5rem; line-height: 1.14; font-weight: 700; color: #fff; letter-spacing: -0.02em; margin: 0; }
+  .login-sub { font-size: 0.95rem; color: rgba(255,255,255,0.62); margin-top: 16px; line-height: 1.6; max-width: 38ch; }
+  .login-foot { position: relative; z-index: 2; font-size: 0.78rem; color: rgba(255,255,255,0.4); }
+
+  .login-right { display: flex; align-items: center; justify-content: center; padding: 40px; background: var(--concrete); }
+  .login-card { width: 100%; max-width: 380px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 42px 38px; }
+  .login-card-eyebrow { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-muted); }
+  .login-card-title { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 8px 0 28px; }
+  #loginBtn { width: 100%; justify-content: center; margin-top: 6px; padding: 0.8rem; font-size: 0.9rem; }
   #loginError { color: var(--rust); font-size: 0.85rem; margin-bottom: 0.6rem; min-height: 1.1em; }
-  .login-hint { text-align: center; font-size: 0.78rem; color: rgba(255,255,255,0.5); margin-top: 1.4rem; }
+  .login-help { font-size: 0.78rem; color: var(--ink-muted); text-align: center; margin-top: 20px; }
+
+  @media (max-width: 900px) {
+    .login-shell { grid-template-columns: 1fr; }
+    .login-left { min-height: 280px; padding: 36px; }
+    .login-headline { font-size: 2rem; }
+  }
 </style>
 </head>
 <body>
 
-<div class="login-wrap">
-  <div class="login-brand">
-    <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
-    <div>
-      <h1>Aaral Marketing</h1>
-      <p>Ledger Dashboard</p>
+<div class="login-shell">
+  <div class="login-left">
+    <div class="login-mark">
+      <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
     </div>
+    <div class="login-headline-wrap">
+      <div class="login-eyebrow">Secured dashboard</div>
+      <h1 class="login-headline">Built on cement,<br>run on trust.</h1>
+      <p class="login-sub">Every slip, quotation and payment across your yard — tracked in one ledger your whole team can trust.</p>
+    </div>
+    <div class="login-foot">© Aaral Marketing · Powered by IntelliTech Solutions</div>
+    <svg class="login-wave" viewBox="0 0 1440 220" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0,120 C240,180 480,60 720,120 C960,180 1200,60 1440,120 L1440,220 L0,220 Z" fill="#00aeef" opacity="0.16"/>
+      <path d="M0,150 C240,100 480,200 720,150 C960,100 1200,200 1440,150 L1440,220 L0,220 Z" fill="#7fd8f7" opacity="0.16"/>
+      <path d="M0,180 C240,150 480,210 720,180 C960,150 1200,210 1440,180 L1440,220 L0,220 Z" fill="#0c0828" opacity="0.55"/>
+    </svg>
   </div>
 
-  <div class="login-card">
-    <h2>Sign in</h2>
-    <div class="field-group">
-      <label>Username</label>
-      <input type="text" id="username" autocomplete="username" autocapitalize="off">
+  <div class="login-right">
+    <div class="login-card">
+      <div class="login-card-eyebrow">Welcome back</div>
+      <div class="login-card-title">Sign in to your ledger</div>
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="username" autocomplete="username" autocapitalize="off">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="password" autocomplete="current-password">
+      </div>
+      <div id="loginError"></div>
+      <button class="btn-primary" id="loginBtn" type="button">Sign In</button>
+      <div class="login-help">Forgotten your password? Ask an admin to reset it from Users.</div>
     </div>
-    <div class="field-group">
-      <label>Password</label>
-      <input type="password" id="password" autocomplete="current-password">
-    </div>
-    <div id="loginError"></div>
-    <button class="btn-primary" id="loginBtn" type="button">Sign in</button>
   </div>
-
-  <div class="login-hint">Forgotten your password? Ask an admin to reset it from Users.</div>
 </div>
 
 <script>
@@ -80,7 +113,7 @@ async function attemptLogin() {
   });
   const data = await res.json().catch(() => ({ ok: false, error: 'Unexpected response from server' }));
   loginBtn.disabled = false;
-  loginBtn.textContent = 'Sign in';
+  loginBtn.textContent = 'Sign In';
   if (!data.ok) {
     errorEl.textContent = data.error || 'Could not sign in.';
     return;

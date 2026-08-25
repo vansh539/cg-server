@@ -1,0 +1,446 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Steel Stock — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aaral Marketing">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#191048">
+<link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
+<link rel="stylesheet" href="/styles.css">
+<style>
+
+  .cat-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.2rem; }
+  .cat-pill { background: var(--paper); border: 1.5px solid var(--line); border-radius: 999px; padding: 0.5rem 1rem; font-size: 0.82rem; font-weight: 600; color: var(--ink); cursor: pointer; }
+  .cat-pill:hover { border-color: var(--cyan); }
+  .cat-pill.on { border-color: var(--navy); background: var(--navy); color: #fff; }
+  .cat-pill.add { border-style: dashed; color: var(--ink-muted); background: none; }
+  .cat-pill.add:hover { border-color: var(--navy); color: var(--navy); }
+  .search-wrap { margin-bottom: 1.2rem; max-width: 420px; }
+  td.r { text-align: right; font-variant-numeric: tabular-nums; }
+  td.neg { color: var(--rust); font-weight: 700; }
+  .actions-cell { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .btn-tiny { padding: 0.35rem 0.7rem; font-size: 0.76rem; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+  .btn-tiny:hover { background: var(--concrete); }
+  .btn-tiny.danger { color: var(--rust); border-color: var(--rust); }
+  .hist-row td { background: var(--concrete); font-size: 0.8rem; }
+  .hist-row ul { list-style: none; padding: 0; margin: 0; }
+  .hist-row li { padding: 0.25rem 0; border-bottom: 1px solid var(--line); }
+  .hist-row li:last-child { border-bottom: none; }
+  .empty-note { color: var(--ink-muted); font-size: 0.85rem; padding: 1.2rem 0; text-align: center; }
+  .pieces-note { font-size: 0.78rem; color: var(--ink-muted); }
+
+</style>
+</head>
+<body>
+<script src="/auth-nav.js"></script>
+
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand-row" href="/dashboard.html">
+      <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+      <div>
+        <div class="brand-name">Aaral Marketing</div>
+        <div class="brand-sub">Ledger &amp; billing</div>
+      </div>
+    </a>
+
+    <a class="nav-item" href="/dashboard.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 10 4l7 6.5"/><path d="M5 9v7a1 1 0 0 0 1 1h3v-5h2v5h3a1 1 0 0 0 1-1V9"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="nav-item" href="/customers.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/><path d="M12.6 13.1c1.7.2 3 1.7 3.4 3.9"/></svg>
+      <span>Customers</span>
+    </a>
+    <a class="nav-item" href="/quotation.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg>
+      <span>New Quotation</span>
+    </a>
+    <a class="nav-item" href="/chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>New Slip</span>
+    </a>
+    <a class="nav-item" href="/payment.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>New Payment</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Iron &amp; Steel</div>
+    <a class="nav-item" href="/steel-chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>Steel Chitti</span>
+    </a>
+    <a class="nav-item active" href="/steel-stock.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 17 6.2v7.6L10 17.5 3 13.8V6.2z"/><path d="M3 6.2 10 10l7-3.8M10 10v7.5"/></svg>
+      <span>Steel Stock</span>
+    </a>
+    <a class="nav-item" href="/steel-reports.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17V9M9.5 17V3M15.5 17v-6"/><path d="M2.5 17h15"/></svg>
+      <span>Steel Reports</span>
+    </a>
+
+    <div class="nav-divider" data-admin-only></div>
+    <div class="nav-section-label" data-admin-only>Admin</div>
+    <a class="nav-item" href="/updates.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3"/><path d="M14.2 5.7H17V3"/><path d="M5.8 14.3H3V17"/></svg>
+      <span>Updates</span>
+    </a>
+    <a class="nav-item" href="/users.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16 5v5c0 4-2.7 6.5-6 7.5-3.3-1-6-3.5-6-7.5V5z"/><path d="M7.3 9.8l1.9 1.9 3.5-3.9"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item" href="/personnel-tracking.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M7.5 3h5v1.6h-5z"/><path d="M7 8h6M7 11h6M7 14h3.5"/></svg>
+      <span>Personnel Tracking</span>
+    </a>
+
+    <a class="nav-item" href="/backup.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v10.5M6.5 9.5 10 13l3.5-3.5"/><path d="M4 13.5v2A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      <span>Backup</span>
+    </a>
+
+    <div class="profile-card" id="profileCard" style="display:none;">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div class="profile-meta">
+        <div class="profile-name" id="profileName">—</div>
+        <div class="profile-role" id="profileRole">—</div>
+      </div>
+      <button class="profile-logout" id="navLogoutBtn" type="button" title="Log out">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/><path d="M13 14l4-4-4-4"/><path d="M17 10H7"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="content-inner">
+      <div class="topbar">
+        <div>
+          <div class="page-eyebrow">Iron & Steel</div>
+          <h1 class="page-title">Stock</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn-secondary" id="openAddCategory" type="button">+ Category</button>
+          <button class="btn-primary" id="openAddItem" type="button">+ Add Item</button>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <input type="text" id="searchBox" placeholder="Search items across all categories…" style="width:100%;padding:0.7rem 0.9rem;border:1px solid var(--line);border-radius:10px;font-family:inherit;">
+      </div>
+      <div class="cat-bar" id="catBar"></div>
+
+      <div class="table-panel">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Item</th><th>Category</th><th>Unit</th><th class="r">Current Stock</th><th class="r">Pieces</th><th>Actions</th></tr></thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="emptyNote" class="empty-note" style="display:none;">No items yet — add one to get started.</div>
+
+    </div>
+  </main>
+</div>
+<div class="modal-backdrop" id="addCategoryModal">
+  <div class="modal-box">
+    <h3>Add Category</h3>
+    <div class="field-group"><label>Name</label><input type="text" id="newCategoryName" autocomplete="off"></div>
+    <div id="addCategoryError" style="color:var(--rust);font-size:0.85rem;margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelAddCategory" type="button">Cancel</button>
+      <button class="btn-primary" id="saveAddCategory" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="addItemModal">
+  <div class="modal-box">
+    <h3>Add Item</h3>
+    <div class="field-group"><label>Category</label><select id="newItemCategory"></select></div>
+    <div class="field-group"><label>Name</label><input type="text" id="newItemName" autocomplete="off"></div>
+    <div class="field-group"><label>Unit</label>
+      <select id="newItemUnit">
+        <option value="kg">Kilograms (kg)</option>
+        <option value="pcs">Pieces (pcs)</option>
+      </select>
+    </div>
+    <div class="field-group" id="weightField"><label>Weight per piece (kg, optional)</label><input type="number" id="newItemWeight" min="0" step="0.001"></div>
+    <div class="field-group" style="flex-direction:row;align-items:center;gap:0.5rem;display:flex;">
+      <input type="checkbox" id="newItemDualTrack" style="width:1.1em;height:1.1em;">
+      <label for="newItemDualTrack" style="margin:0;">Also track Pieces separately (e.g. bundled TMT)</label>
+    </div>
+    <div class="field-group"><label>Initial stock (kg / count)</label><input type="number" id="newItemInitialKg" min="0" value="0"></div>
+    <div class="field-group" id="initialPcsField" style="display:none;"><label>Initial pieces</label><input type="number" id="newItemInitialPcs" min="0" value="0"></div>
+    <div id="addItemError" style="color:var(--rust);font-size:0.85rem;margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelAddItem" type="button">Cancel</button>
+      <button class="btn-primary" id="saveAddItem" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="stockInModal">
+  <div class="modal-box">
+    <h3>Stock In — <span id="stockInItemName"></span></h3>
+    <div class="field-group"><label id="stockInKgLabel">Kg received</label><input type="number" id="stockInKg" min="0"></div>
+    <div class="field-group" id="stockInPcsField" style="display:none;"><label>Pieces received</label><input type="number" id="stockInPcs" min="0"></div>
+    <div class="field-group"><label>Note (optional)</label><input type="text" id="stockInNote"></div>
+    <div id="stockInError" style="color:var(--rust);font-size:0.85rem;margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelStockIn" type="button">Cancel</button>
+      <button class="btn-primary" id="saveStockIn" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="adjustModal">
+  <div class="modal-box">
+    <h3>Adjust Stock — <span id="adjustItemName"></span></h3>
+    <div class="field-group"><label id="adjustKgLabel">New total (kg)</label><input type="number" id="adjustKg" min="0"></div>
+    <div class="field-group" id="adjustPcsField" style="display:none;"><label>New total pieces</label><input type="number" id="adjustPcs" min="0"></div>
+    <div class="field-group"><label>Reason (optional)</label><input type="text" id="adjustNote" placeholder="e.g. physical count correction"></div>
+    <div id="adjustError" style="color:var(--rust);font-size:0.85rem;margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelAdjust" type="button">Cancel</button>
+      <button class="btn-primary" id="saveAdjust" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+let categories = [];
+let items = [];
+let activeCategory = null;
+let searchTerm = '';
+let expandedItemId = null;
+let historyByItem = {};
+
+async function loadAll() {
+  const [cats, its] = await Promise.all([
+    fetch('/api/steel/categories').then((r) => r.json()),
+    fetch('/api/steel/items').then((r) => r.json()),
+  ]);
+  categories = cats;
+  items = its;
+  renderCatBar();
+  renderItems();
+  populateCategorySelect();
+}
+
+function renderCatBar() {
+  const bar = document.getElementById('catBar');
+  const pills = categories.map((c) => `<div class="cat-pill ${activeCategory === c.id ? 'on' : ''}" data-cat="${c.id}">${c.name}</div>`);
+  pills.unshift(`<div class="cat-pill ${activeCategory === null ? 'on' : ''}" data-cat="">All</div>`);
+  bar.innerHTML = pills.join('');
+  bar.querySelectorAll('.cat-pill').forEach((el) => {
+    el.addEventListener('click', () => {
+      activeCategory = el.dataset.cat || null;
+      renderCatBar();
+      renderItems();
+    });
+  });
+}
+
+function catName(id) {
+  return (categories.find((c) => c.id === id) || {}).name || '—';
+}
+
+function stockLine(item) {
+  if (item.dualTrack) return `${item.currentStockKg.toLocaleString('en-IN')} kg / ${item.stockPcs.toLocaleString('en-IN')} pcs`;
+  return `${item.currentStockKg.toLocaleString('en-IN')} ${item.unit}`;
+}
+
+function renderItems() {
+  const term = searchTerm.trim().toLowerCase();
+  const filtered = items.filter((it) => {
+    if (activeCategory && it.categoryId !== activeCategory) return false;
+    if (term && !it.name.toLowerCase().includes(term)) return false;
+    return true;
+  });
+  document.getElementById('emptyNote').style.display = filtered.length ? 'none' : 'block';
+
+  const body = document.getElementById('itemsBody');
+  body.innerHTML = filtered.map((it) => {
+    const neg = it.currentStockKg < 0 || it.stockPcs < 0;
+    const rows = [`<tr data-item="${it.id}">
+      <td>${it.name}</td>
+      <td>${catName(it.categoryId)}</td>
+      <td>${it.unit}</td>
+      <td class="r ${neg ? 'neg' : ''}">${stockLine(it)}</td>
+      <td class="r pieces-note">${it.pieces !== null && it.pieces !== undefined ? it.pieces.toLocaleString('en-IN') : '—'}</td>
+      <td class="actions-cell">
+        <button class="btn-tiny" data-act="stock-in" data-item="${it.id}">Stock In</button>
+        <button class="btn-tiny" data-act="adjust" data-item="${it.id}">Adjust</button>
+        <button class="btn-tiny" data-act="history" data-item="${it.id}">History</button>
+        <button class="btn-tiny danger" data-act="delete" data-item="${it.id}">Delete</button>
+      </td>
+    </tr>`];
+    if (expandedItemId === it.id) {
+      const moves = historyByItem[it.id] || [];
+      const list = moves.length
+        ? `<ul>${moves.map((m) => `<li>${new Date(m.at).toLocaleString('en-IN')} — <b>${m.reason}</b> ${m.deltaKg > 0 ? '+' : ''}${m.deltaKg}kg${m.deltaPcs !== undefined ? ` (${m.deltaPcs > 0 ? '+' : ''}${m.deltaPcs} pcs)` : ''}${m.note ? ` — ${m.note}` : ''}</li>`).join('')}</ul>`
+        : '<div class="empty-note">No movements yet.</div>';
+      rows.push(`<tr class="hist-row"><td colspan="6">${list}</td></tr>`);
+    }
+    return rows.join('');
+  }).join('');
+
+  body.querySelectorAll('button[data-act]').forEach((btn) => {
+    btn.addEventListener('click', () => onAction(btn.dataset.act, btn.dataset.item));
+  });
+}
+
+function populateCategorySelect() {
+  const sel = document.getElementById('newItemCategory');
+  sel.innerHTML = categories.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+document.getElementById('searchBox').addEventListener('input', (e) => {
+  searchTerm = e.target.value;
+  renderItems();
+});
+
+// --- Add Category ---
+const addCategoryModal = document.getElementById('addCategoryModal');
+document.getElementById('openAddCategory').addEventListener('click', () => {
+  document.getElementById('newCategoryName').value = '';
+  document.getElementById('addCategoryError').textContent = '';
+  addCategoryModal.classList.add('open');
+});
+document.getElementById('cancelAddCategory').addEventListener('click', () => addCategoryModal.classList.remove('open'));
+document.getElementById('saveAddCategory').addEventListener('click', async () => {
+  const name = document.getElementById('newCategoryName').value;
+  const res = await fetch('/api/steel/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('addCategoryError').textContent = data.error; return; }
+  addCategoryModal.classList.remove('open');
+  await loadAll();
+});
+
+// --- Add Item ---
+const addItemModal = document.getElementById('addItemModal');
+function updateAddItemFieldVisibility() {
+  const isKg = document.getElementById('newItemUnit').value === 'kg';
+  document.getElementById('weightField').style.display = isKg ? '' : 'none';
+  document.getElementById('initialPcsField').style.display = document.getElementById('newItemDualTrack').checked ? '' : 'none';
+}
+document.getElementById('newItemUnit').addEventListener('change', updateAddItemFieldVisibility);
+document.getElementById('newItemDualTrack').addEventListener('change', updateAddItemFieldVisibility);
+document.getElementById('openAddItem').addEventListener('click', () => {
+  document.getElementById('newItemName').value = '';
+  document.getElementById('newItemUnit').value = 'kg';
+  document.getElementById('newItemWeight').value = '';
+  document.getElementById('newItemDualTrack').checked = false;
+  document.getElementById('newItemInitialKg').value = 0;
+  document.getElementById('newItemInitialPcs').value = 0;
+  document.getElementById('addItemError').textContent = '';
+  updateAddItemFieldVisibility();
+  addItemModal.classList.add('open');
+});
+document.getElementById('cancelAddItem').addEventListener('click', () => addItemModal.classList.remove('open'));
+document.getElementById('saveAddItem').addEventListener('click', async () => {
+  const body = {
+    categoryId: document.getElementById('newItemCategory').value,
+    name: document.getElementById('newItemName').value,
+    unit: document.getElementById('newItemUnit').value,
+    weightPerPieceKg: document.getElementById('newItemWeight').value || null,
+    dualTrack: document.getElementById('newItemDualTrack').checked,
+    initialStockKg: document.getElementById('newItemInitialKg').value,
+    initialStockPcs: document.getElementById('newItemInitialPcs').value,
+  };
+  const res = await fetch('/api/steel/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('addItemError').textContent = data.error; return; }
+  addItemModal.classList.remove('open');
+  await loadAll();
+});
+
+// --- Row actions ---
+let actionItem = null;
+
+async function onAction(act, itemId) {
+  actionItem = items.find((it) => it.id === itemId);
+  if (act === 'stock-in') {
+    document.getElementById('stockInItemName').textContent = actionItem.name;
+    document.getElementById('stockInKgLabel').textContent = actionItem.unit === 'pcs' ? 'Pieces received' : 'Kg received';
+    document.getElementById('stockInKg').value = '';
+    document.getElementById('stockInPcs').value = '';
+    document.getElementById('stockInPcsField').style.display = actionItem.dualTrack ? '' : 'none';
+    document.getElementById('stockInNote').value = '';
+    document.getElementById('stockInError').textContent = '';
+    document.getElementById('stockInModal').classList.add('open');
+  } else if (act === 'adjust') {
+    document.getElementById('adjustItemName').textContent = actionItem.name;
+    document.getElementById('adjustKgLabel').textContent = actionItem.unit === 'pcs' ? 'New total (pieces)' : 'New total (kg)';
+    document.getElementById('adjustKg').value = actionItem.currentStockKg;
+    document.getElementById('adjustPcs').value = actionItem.stockPcs;
+    document.getElementById('adjustPcsField').style.display = actionItem.dualTrack ? '' : 'none';
+    document.getElementById('adjustNote').value = '';
+    document.getElementById('adjustError').textContent = '';
+    document.getElementById('adjustModal').classList.add('open');
+  } else if (act === 'history') {
+    if (expandedItemId === itemId) {
+      expandedItemId = null;
+    } else {
+      expandedItemId = itemId;
+      if (!historyByItem[itemId]) {
+        historyByItem[itemId] = await fetch(`/api/steel/items/${itemId}/movements`).then((r) => r.json());
+      }
+    }
+    renderItems();
+  } else if (act === 'delete') {
+    if (!confirm(`Delete "${actionItem.name}"? This also deletes its movement history.`)) return;
+    const res = await fetch(`/api/steel/items/${itemId}`, { method: 'DELETE' });
+    if (!res.ok) { const data = await res.json().catch(() => ({})); alert(data.error || 'Could not delete item'); return; }
+    await loadAll();
+  }
+}
+
+document.getElementById('cancelStockIn').addEventListener('click', () => document.getElementById('stockInModal').classList.remove('open'));
+document.getElementById('saveStockIn').addEventListener('click', async () => {
+  const isPcsUnit = actionItem.unit === 'pcs';
+  const body = {
+    kg: document.getElementById('stockInKg').value,
+    pcs: actionItem.dualTrack ? document.getElementById('stockInPcs').value : undefined,
+    note: document.getElementById('stockInNote').value,
+  };
+  const res = await fetch(`/api/steel/items/${actionItem.id}/stock-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('stockInError').textContent = data.error; return; }
+  document.getElementById('stockInModal').classList.remove('open');
+  delete historyByItem[actionItem.id];
+  await loadAll();
+});
+
+document.getElementById('cancelAdjust').addEventListener('click', () => document.getElementById('adjustModal').classList.remove('open'));
+document.getElementById('saveAdjust').addEventListener('click', async () => {
+  const body = {
+    newTotalKg: document.getElementById('adjustKg').value,
+    newTotalPcs: actionItem.dualTrack ? document.getElementById('adjustPcs').value : undefined,
+    note: document.getElementById('adjustNote').value,
+  };
+  const res = await fetch(`/api/steel/items/${actionItem.id}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('adjustError').textContent = data.error; return; }
+  document.getElementById('adjustModal').classList.remove('open');
+  delete historyByItem[actionItem.id];
+  await loadAll();
+});
+
+loadAll();
+
+</script>
+<script>
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

@@ -11,121 +11,151 @@
 <meta name="theme-color" content="#191048">
 <link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
 <link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/chitti-print.css" media="print">
 <style>
   .toolbar-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.6rem; }
   .toolbar-row .actions { display: flex; gap: 0.6rem; }
 
-  #itemsTable { table-layout: fixed; }
-  col.c-sl { width: 5%; }
-  col.c-particulars { width: 27%; }
-  col.c-grade { width: 12%; }
-  col.c-vch { width: 10%; }
-  col.c-qty { width: 12%; }
-  col.c-rate { width: 13%; }
-  col.c-amount { width: 21%; }
-
-  .only-print { display: none; }
-
+  /* The slip is sized in vw by src/chittiStyles.js so it fills whatever paper
+     it lands on. On screen that made it size against the whole window while
+     sitting in a 620px box -- ~3x too big, so the columns crammed. Giving it
+     its own viewport (an iframe) makes vw resolve against the slip's own
+     width, which is what the design always meant. Printing still uses the
+     real page, via #printHost below, exactly like chitti.html. */
+  .chitti-frame { display: flex; justify-content: center; padding: 0.5rem 0 1.5rem; }
+  #chittiFrame {
+    width: 100%;
+    max-width: 880px;
+    border: 0;
+    display: block;
+    /* Replaced by the measured content height once the slip has laid out. */
+    height: 320px;
+  }
+  #printHost { display: none; }
   @media print {
-    .hero, .no-print { display: none !important; }
-    body { background: #fff; }
-    body::before { display: none; }
-    .page { padding: 0; max-width: none; margin: 0; }
-    .card { background: none; box-shadow: none; border: none; border-radius: 0; padding: 0; }
-
-    #itemsTable { border-collapse: collapse; border: 2px solid #000; }
-    #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem 0.65rem; font-size: 1.05rem; }
-    #itemsTable thead tr.col-headers th { text-transform: none; font-weight: 700; background: #fff; font-size: 0.95rem; }
-    #itemsTable tbody td { font-weight: 600; font-size: 1.05rem; }
-    #itemsTable .only-print { display: table-row; }
-
-    #itemsTable thead tr.print-title-row th { background: #ffe600; text-align: center; font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 1.7rem; text-transform: uppercase; padding: 0.7rem; letter-spacing: 0.02em; }
-    #itemsTable thead tr.print-date-row th, #itemsTable thead tr.print-destination-row th { background: #fff; text-align: left; font-weight: 500; font-size: 1.15rem; text-transform: none; padding: 0.55rem 0.8rem; }
-    #itemsTable thead tr.print-date-row .print-date-value, #itemsTable thead tr.print-destination-row .print-date-value { font-weight: 800; font-size: 1.25rem; float: right; }
-
-    #itemsTable tr.total-row td { font-weight: 800; font-size: 1.35rem; border-top: 2px solid #000; }
-    .footer-total-label { text-align: right; }
+    body > *:not(#printHost) { display: none !important; }
+    #printHost { display: block !important; }
   }
 </style>
 </head>
 <body>
 <script src="/auth-nav.js"></script>
 
-<div class="hero">
-  <div class="hero-inner">
-    <div class="hero-top">
-      <div class="brand-mark">
-        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
-        <div class="brand-text">
-          <h1>Aaral Marketing</h1>
-          <p>Cement &amp; Building Materials Ledger</p>
+<div class="shell">
+  <aside class="sidebar no-print">
+    <a class="brand-row" href="/dashboard.html">
+      <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+      <div>
+        <div class="brand-name">Aaral Marketing</div>
+        <div class="brand-sub">Ledger &amp; billing</div>
+      </div>
+    </a>
+
+    <a class="nav-item" href="/dashboard.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 10 4l7 6.5"/><path d="M5 9v7a1 1 0 0 0 1 1h3v-5h2v5h3a1 1 0 0 0 1-1V9"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="nav-item" href="/customers.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/><path d="M12.6 13.1c1.7.2 3 1.7 3.4 3.9"/></svg>
+      <span>Customers</span>
+    </a>
+    <a class="nav-item" href="/quotation.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg>
+      <span>New Quotation</span>
+    </a>
+    <a class="nav-item" href="/chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>New Slip</span>
+    </a>
+    <a class="nav-item" href="/payment.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>New Payment</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Iron &amp; Steel</div>
+    <a class="nav-item" href="/steel-chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>Steel Chitti</span>
+    </a>
+    <a class="nav-item" href="/steel-stock.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 17 6.2v7.6L10 17.5 3 13.8V6.2z"/><path d="M3 6.2 10 10l7-3.8M10 10v7.5"/></svg>
+      <span>Steel Stock</span>
+    </a>
+    <a class="nav-item" href="/steel-reports.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17V9M9.5 17V3M15.5 17v-6"/><path d="M2.5 17h15"/></svg>
+      <span>Steel Reports</span>
+    </a>
+
+    <div class="nav-divider" data-admin-only></div>
+    <div class="nav-section-label" data-admin-only>Admin</div>
+    <a class="nav-item" href="/updates.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3"/><path d="M14.2 5.7H17V3"/><path d="M5.8 14.3H3V17"/></svg>
+      <span>Updates</span>
+    </a>
+    <a class="nav-item" href="/users.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16 5v5c0 4-2.7 6.5-6 7.5-3.3-1-6-3.5-6-7.5V5z"/><path d="M7.3 9.8l1.9 1.9 3.5-3.9"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item" href="/personnel-tracking.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M7.5 3h5v1.6h-5z"/><path d="M7 8h6M7 11h6M7 14h3.5"/></svg>
+      <span>Personnel Tracking</span>
+    </a>
+
+    <a class="nav-item" href="/backup.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v10.5M6.5 9.5 10 13l3.5-3.5"/><path d="M4 13.5v2A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      <span>Backup</span>
+    </a>
+
+    <div class="profile-card" id="profileCard" style="display:none;">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div class="profile-meta">
+        <div class="profile-name" id="profileName">—</div>
+        <div class="profile-role" id="profileRole">—</div>
+      </div>
+      <button class="profile-logout" id="navLogoutBtn" type="button" title="Log out">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/><path d="M13 14l4-4-4-4"/><path d="M17 10H7"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="content-inner">
+      <div class="toolbar-row no-print">
+        <a class="back-link" href="/customers.html" id="backLink" style="margin:0;">&larr; All customers</a>
+        <div class="actions">
+          <a class="btn-secondary" id="editBtn" href="#" style="display:none;">Edit</a>
+          <button class="btn-primary" id="printBtn" type="button">Print</button>
+          <button class="btn-primary" id="downloadPdfBtn" type="button">Download PDF</button>
         </div>
       </div>
-      <nav class="hero-nav">
-        <a href="/">Home</a>
-        <a href="/customers.html">Customers</a>
-        <a href="/quotation.html">New Quotation</a>
-        <a href="/chitti.html">New Slip</a>
-        <a href="/payment.html">New Payment</a>
-        <a href="/updates.html" data-admin-only>Updates</a>
-        <a href="/users.html" data-admin-only>Users</a>
-      </nav>
-    </div>
-    <div class="hero-heading">
-      <div class="eyebrow" id="invoiceMeta">Invoice</div>
-      <h2 id="invoiceTitle">Loading…</h2>
-    </div>
-    <div class="stat-row">
-      <div class="stat-tile">
-        <div class="label">Total</div>
-        <div class="value" id="invoiceTotal">—</div>
+
+      <div class="topbar no-print" style="margin-bottom:14px;">
+        <div>
+          <div class="page-eyebrow" id="invoiceMeta">Invoice</div>
+          <h1 class="page-title" id="invoiceTitle">Loading…</h1>
+        </div>
       </div>
-      <div class="stat-tile">
-        <div class="label">Status</div>
-        <div class="value" id="invoiceStatus" style="font-size:1rem;">—</div>
+
+      <div class="stat-grid invoice-stats no-print">
+        <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="invoiceTotal">—</div></div>
+        <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value" id="invoiceStatus" style="font-size:1.1rem;">—</div></div>
+        <div class="stat-card" id="destinationTile" style="display:none;"><div class="stat-label">Destination</div><div class="stat-value" id="invoiceDestination" style="font-size:1.1rem;">—</div></div>
       </div>
-      <div class="stat-tile" id="destinationTile" style="display:none;">
-        <div class="label">Destination</div>
-        <div class="value" id="invoiceDestination" style="font-size:1rem;">—</div>
+
+      <!-- The real chitti, rendered by the server from the same template the
+           PDF and JPEG use, so this preview IS the document. -->
+      <div class="chitti-frame">
+        <iframe id="chittiFrame" title="Chitti preview"></iframe>
       </div>
+
     </div>
-  </div>
-  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
-    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
-    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
-  </svg>
+  </main>
 </div>
 
-<div class="page">
-  <div class="toolbar-row no-print">
-    <a class="back-link" href="/customers.html" id="backLink" style="margin:0;">&larr; All customers</a>
-    <div class="actions">
-      <button class="btn-primary" id="printBtn" type="button">Print</button>
-      <button class="btn-primary" id="downloadPdfBtn" type="button">Download PDF</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="table-scroll">
-      <table id="itemsTable">
-        <colgroup>
-          <col class="c-sl"><col class="c-particulars"><col class="c-grade"><col class="c-vch">
-          <col class="c-qty"><col class="c-rate"><col class="c-amount">
-        </colgroup>
-        <thead>
-          <tr class="only-print print-title-row"><th colspan="7" id="printCustomerName"></th></tr>
-          <tr class="only-print print-date-row"><th colspan="7"><span>Date:</span> <span class="print-date-value" id="printDateValue"></span></th></tr>
-          <tr class="only-print print-destination-row" id="printDestinationRow"><th colspan="7"><span>Destination:</span> <span class="print-date-value" id="printDestinationValue"></span></th></tr>
-          <tr class="col-headers"><th>S No.</th><th>Particulars</th><th>Grade</th><th>Vch</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<footer class="footer-credit no-print">Powered by IntelliTech Solutions</footer>
+<!-- Printing renders the very same server fragment as the preview, so there is
+     still exactly one chitti design in play. -->
+<div id="printHost"></div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
@@ -143,42 +173,74 @@ async function load() {
   const date = new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   document.getElementById('invoiceMeta').textContent = date;
   document.getElementById('invoiceTotal').textContent = `₹${Number(invoice.total).toLocaleString('en-IN')}`;
-  document.getElementById('invoiceStatus').textContent = invoice.paid_now ? 'Paid' : 'On account';
+  // A voided invoice can't be edited (same rule the customer ledger's row
+  // actions already enforce) -- surfaced here too, since this page never
+  // showed voided status at all before.
+  if (invoice.voided_at) {
+    document.getElementById('invoiceStatus').textContent = 'Voided';
+    document.getElementById('invoiceStatus').style.color = 'var(--rust)';
+  } else {
+    document.getElementById('invoiceStatus').textContent = invoice.paid_now ? 'Paid' : 'On account';
+    const editBtn = document.getElementById('editBtn');
+    editBtn.href = `/edit-invoice.html?id=${invoiceId}`;
+    editBtn.style.display = '';
+  }
   if (invoice.destination) {
     document.getElementById('destinationTile').style.display = '';
     document.getElementById('invoiceDestination').textContent = invoice.destination;
   }
-
-  const createdDate = new Date(invoice.created_at);
-  const printDate = [createdDate.getDate(), createdDate.getMonth() + 1, createdDate.getFullYear()]
-    .map((n, i) => (i < 2 ? String(n).padStart(2, '0') : n)).join('-');
-
-  document.getElementById('printCustomerName').textContent = invoice.customer_name || 'WALK-IN / CASH SALE';
-  document.getElementById('printDateValue').textContent = printDate;
-  document.getElementById('printDestinationValue').textContent = invoice.destination || '';
-  document.getElementById('printDestinationRow').style.display = invoice.destination ? '' : 'none';
 
   if (invoice.customer_id) {
     document.getElementById('backLink').href = `/customer.html?id=${invoice.customer_id}`;
     document.getElementById('backLink').innerHTML = '&larr; Back to ledger';
   }
 
-  const rowsEl = document.getElementById('rows');
-  rowsEl.innerHTML = '';
-  items.forEach((item) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${item.s_no}</td><td>${item.particulars}</td><td>${item.grade || ''}</td><td>${item.vch || ''}</td><td class="num">${Number(item.qty)}</td><td class="num">₹${Number(item.rate).toFixed(2)}</td><td class="num">₹${Number(item.amount).toFixed(2)}</td>`;
-    rowsEl.appendChild(tr);
-  });
-  if (invoice.unloading_charge) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td></td><td colspan="4">Unloading charges</td><td></td><td class="num">₹${Number(invoice.unloading_charge).toFixed(2)}</td>`;
-    rowsEl.appendChild(tr);
+  // Ask the server for the slip rather than rebuilding it here. Every value in
+  // the fragment is escaped by src/chittiTemplate.js before it is sent.
+  const slipRes = await fetch(`/api/invoices/${invoiceId}/chitti`);
+  const frame = document.getElementById('chittiFrame');
+  if (!slipRes.ok) {
+    frame.replaceWith(Object.assign(document.createElement('p'), {
+      textContent: 'Could not load the slip.',
+    }));
+    return;
   }
-  const totalTr = document.createElement('tr');
-  totalTr.className = 'total-row';
-  totalTr.innerHTML = `<td></td><td colspan="4" class="footer-total-label" style="font-weight:700;">Total</td><td></td><td class="num" style="font-weight:700;font-size:1.1rem;">₹${Number(invoice.total).toFixed(2)}</td>`;
-  rowsEl.appendChild(totalTr);
+  const slip = await slipRes.json();
+
+  // The print copy lives in the page itself -- an iframe is not reliably
+  // paginated by the browser's print path, and print needs the paper as its
+  // viewport anyway. Same HTML string, so both stay one design.
+  document.getElementById('printHost').innerHTML = slip.html;
+  renderPreview(slip.html);
+}
+
+// The slip gets its own document so that its vw units resolve against the
+// preview width instead of the browser window. Hairline borders stay at their
+// true px widths, which is why this is not just a transform: scale().
+function renderPreview(html) {
+  const frame = document.getElementById('chittiFrame');
+  const doc = frame.contentDocument;
+  doc.open();
+  doc.write(
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    '<link rel="stylesheet" href="/chitti-print.css">' +
+    '<style>html,body{margin:0;padding:0;background:#fff;}</style>' +
+    '</head><body>' + html + '</body></html>'
+  );
+  doc.close();
+
+  // ResizeObserver, not the iframe's 'load' event: 'load' fired before the
+  // stylesheet had actually finished applying, measuring the slip at
+  // roughly half its real height every time -- reproduced live, not
+  // theoretical. Observing the slip's own <html> re-measures whenever its
+  // rendered size actually changes, which self-corrects once the real
+  // layout settles and also covers the width shrinking/growing when the
+  // window resizes (vw units make a narrower slip taller).
+  const ro = new ResizeObserver(() => {
+    const h = frame.contentDocument.documentElement.scrollHeight;
+    if (h > 0) frame.style.height = h + 'px';
+  });
+  ro.observe(frame.contentDocument.documentElement);
 }
 
 load();

@@ -11,6 +11,7 @@
 <meta name="theme-color" content="#191048">
 <link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
 <link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/chitti-print.css" media="print">
 <style>
   .form-card { padding: 1.6rem; }
   .form-card label { display: block; font-size: 0.95rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
@@ -67,27 +68,15 @@
      Needs its own display value. */
   tfoot.only-print { display: none; }
 
+  /* Printing renders the shared chitti template into #printHost -- the same
+     markup and CSS the PDF and JPEG use -- rather than restyling the editable
+     table. That is what keeps the printed slip and the downloaded file
+     identical; they used to be two separate designs. */
+  #printHost { display: none; }
   @media print {
-    .hero, .no-print, #selectedCustomer, #status, .totals { display: none !important; }
-    body { background: #fff; }
-    body::before { display: none; }
-    .page { padding: 0; max-width: none; margin: 0; }
-    .card { background: none; box-shadow: none; border: none; border-radius: 0; padding: 0; }
-
-    #itemsTable { border: 2px solid #000; }
-    #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem 0.65rem; font-size: 1.05rem; }
-    #itemsTable thead tr.col-headers th { text-transform: none; font-weight: 700; background: #fff; font-size: 0.95rem; }
-    #itemsTable tbody td { font-weight: 600; font-size: 1.05rem; }
-    #itemsTable tbody td input { font-weight: 600; font-size: 1.05rem; }
-    #itemsTable .only-print { display: table-row; }
-    #itemsTable tfoot.only-print { display: table-footer-group; }
-
-    #itemsTable thead tr.print-title-row th { background: #ffe600; text-align: center; font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 1.7rem; text-transform: uppercase; padding: 0.7rem; letter-spacing: 0.02em; }
-    #itemsTable thead tr.print-date-row th, #itemsTable thead tr.print-destination-row th { background: #fff; text-align: left; font-weight: 500; font-size: 1.15rem; text-transform: none; padding: 0.55rem 0.8rem; }
-    #itemsTable thead tr.print-date-row .print-date-value, #itemsTable thead tr.print-destination-row .print-date-value { font-weight: 800; font-size: 1.25rem; float: right; }
-
-    #itemsTable tfoot td { font-weight: 800; font-size: 1.35rem; border-top: 2px solid #000; }
-    .footer-total-label { text-align: right; }
+    body > *:not(#printHost) { display: none !important; }
+    #printHost { display: block !important; }
+    html, body { background: #fff; margin: 0; padding: 0; }
   }
 </style>
 </head>
@@ -96,121 +85,185 @@
 
 <style id="pageSizeStyle"></style>
 
-<div class="hero">
-  <div class="hero-inner">
-    <div class="hero-top">
-      <div class="brand-mark">
-        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
-        <div class="brand-text">
-          <h1>Aaral Marketing</h1>
-          <p>Cement &amp; Building Materials Ledger</p>
+<div class="shell">
+  <aside class="sidebar no-print">
+    <a class="brand-row" href="/dashboard.html">
+      <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+      <div>
+        <div class="brand-name">Aaral Marketing</div>
+        <div class="brand-sub">Ledger &amp; billing</div>
+      </div>
+    </a>
+
+    <a class="nav-item" href="/dashboard.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 10 4l7 6.5"/><path d="M5 9v7a1 1 0 0 0 1 1h3v-5h2v5h3a1 1 0 0 0 1-1V9"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="nav-item" href="/customers.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/><path d="M12.6 13.1c1.7.2 3 1.7 3.4 3.9"/></svg>
+      <span>Customers</span>
+    </a>
+    <a class="nav-item" href="/quotation.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg>
+      <span>New Quotation</span>
+    </a>
+    <a class="nav-item active" href="/chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>New Slip</span>
+    </a>
+    <a class="nav-item" href="/payment.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>New Payment</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Iron &amp; Steel</div>
+    <a class="nav-item" href="/steel-chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>Steel Chitti</span>
+    </a>
+    <a class="nav-item" href="/steel-stock.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 17 6.2v7.6L10 17.5 3 13.8V6.2z"/><path d="M3 6.2 10 10l7-3.8M10 10v7.5"/></svg>
+      <span>Steel Stock</span>
+    </a>
+    <a class="nav-item" href="/steel-reports.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17V9M9.5 17V3M15.5 17v-6"/><path d="M2.5 17h15"/></svg>
+      <span>Steel Reports</span>
+    </a>
+
+    <div class="nav-divider" data-admin-only></div>
+    <div class="nav-section-label" data-admin-only>Admin</div>
+    <a class="nav-item" href="/updates.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3"/><path d="M14.2 5.7H17V3"/><path d="M5.8 14.3H3V17"/></svg>
+      <span>Updates</span>
+    </a>
+    <a class="nav-item" href="/users.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16 5v5c0 4-2.7 6.5-6 7.5-3.3-1-6-3.5-6-7.5V5z"/><path d="M7.3 9.8l1.9 1.9 3.5-3.9"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item" href="/personnel-tracking.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M7.5 3h5v1.6h-5z"/><path d="M7 8h6M7 11h6M7 14h3.5"/></svg>
+      <span>Personnel Tracking</span>
+    </a>
+
+    <a class="nav-item" href="/backup.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v10.5M6.5 9.5 10 13l3.5-3.5"/><path d="M4 13.5v2A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      <span>Backup</span>
+    </a>
+
+    <div class="profile-card" id="profileCard" style="display:none;">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div class="profile-meta">
+        <div class="profile-name" id="profileName">—</div>
+        <div class="profile-role" id="profileRole">—</div>
+      </div>
+      <button class="profile-logout" id="navLogoutBtn" type="button" title="Log out">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/><path d="M13 14l4-4-4-4"/><path d="M17 10H7"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="content-inner">
+      <a class="back-link no-print" href="/customers.html">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-5-5 5-5"/></svg>
+        All customers
+      </a>
+
+      <div class="topbar no-print" style="margin-bottom:14px;">
+        <div>
+          <div class="page-eyebrow">Sales voucher</div>
+          <h1 class="page-title">New Slip</h1>
         </div>
       </div>
-      <nav class="hero-nav">
-        <a href="/">Home</a>
-        <a href="/customers.html">Customers</a>
-        <a href="/quotation.html">New Quotation</a>
-        <a class="active" href="/chitti.html">New Slip</a>
-        <a href="/payment.html">New Payment</a>
-        <a href="/updates.html" data-admin-only>Updates</a>
-        <a href="/users.html" data-admin-only>Users</a>
-      </nav>
-    </div>
-    <div class="hero-heading">
-      <div class="eyebrow">Sales voucher</div>
-      <h2>New Slip</h2>
-    </div>
-  </div>
-  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
-    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
-    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
-  </svg>
-</div>
 
-<div class="page">
-  <a class="back-link no-print" href="/customers.html">&larr; All customers</a>
+      <div class="card form-card">
+        <div class="paper-size-box no-print">
+          <label>Print paper size</label>
+          <select id="paperPreset">
+            <option value="a4">A4 (210 × 297 mm)</option>
+            <option value="a5">A5 (148 × 210 mm)</option>
+            <option value="a6">A6 (105 × 148 mm)</option>
+            <option value="letter">Letter (216 × 279 mm)</option>
+            <option value="custom">Custom size…</option>
+          </select>
+          <div class="custom-dims" id="customDims">
+            <div><label>Width (mm)</label><input type="number" id="customWidth" min="10" step="1" value="148"></div>
+            <div><label>Height (mm)</label><input type="number" id="customHeight" min="10" step="1" value="210"></div>
+          </div>
+          <div class="custom-dims" id="savePresetRow">
+            <div><label>Save this size as</label><input type="text" id="presetName" placeholder="e.g. ACC notepad" autocomplete="off"></div>
+            <div style="flex:0 0 auto;display:flex;align-items:flex-end;">
+              <button type="button" id="savePresetBtn" class="add-row" style="margin-top:0;">Save size</button>
+            </div>
+          </div>
+        </div>
 
-  <div class="card form-card">
-    <div class="paper-size-box no-print">
-      <label>Print paper size</label>
-      <select id="paperPreset">
-        <option value="a4">A4 (210 × 297 mm)</option>
-        <option value="a5">A5 (148 × 210 mm)</option>
-        <option value="a6">A6 (105 × 148 mm)</option>
-        <option value="letter">Letter (216 × 279 mm)</option>
-        <option value="custom">Custom size…</option>
-      </select>
-      <div class="custom-dims" id="customDims">
-        <div><label>Width (mm)</label><input type="number" id="customWidth" min="10" step="1" value="148"></div>
-        <div><label>Height (mm)</label><input type="number" id="customHeight" min="10" step="1" value="210"></div>
+        <div class="field-group no-print">
+          <label>Date</label>
+          <input type="date" id="invoiceDate">
+        </div>
+
+        <div class="field-group no-print">
+          <label>Destination</label>
+          <input type="text" id="destination" placeholder="e.g. site / delivery location" autocomplete="off">
+        </div>
+
+        <div class="field-group no-print" id="customerSearchWrap">
+          <label>Customer (leave blank for a walk-in / cash sale)</label>
+          <input type="text" id="customerSearch" placeholder="Search by name or phone…" autocomplete="off">
+          <div id="customerResults"></div>
+        </div>
+        <div id="selectedCustomer" class="no-print"></div>
+
+        <datalist id="particularsOptions"></datalist>
+        <datalist id="gradeOptions"></datalist>
+
+        <div class="table-scroll">
+          <table id="itemsTable">
+            <colgroup>
+              <col class="c-sl"><col class="c-particulars"><col class="c-grade"><col class="c-vch">
+              <col class="c-qty"><col class="c-rate"><col class="c-amount">
+            </colgroup>
+            <thead>
+              <tr class="only-print print-title-row"><th colspan="7" id="printCustomerName"></th></tr>
+              <tr class="only-print print-date-row"><th colspan="7"><span>Date:</span> <span class="print-date-value" id="printDateValue"></span></th></tr>
+              <tr class="only-print print-destination-row" id="printDestinationRow"><th colspan="7"><span>Destination:</span> <span class="print-date-value" id="printDestinationValue"></span></th></tr>
+              <tr class="col-headers"><th>Sl</th><th>Particulars</th><th>Grade</th><th>Vch</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot class="only-print">
+              <tr><td colspan="6" class="footer-total-label">Total</td><td id="footerTotal" class="row-amount"></td></tr>
+            </tfoot>
+          </table>
+        </div>
+        <button id="addRow" class="add-row no-print" type="button">+ Add line</button>
+
+        <div class="totals">
+          <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
+          <div class="no-print">
+            <label style="display:inline;">Unloading charges: ₹</label>
+            <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
+          </div>
+          <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
+        </div>
+
+        <div class="toggle-row no-print">
+          <input type="checkbox" id="paidNow" checked><label style="margin:0;">Paid now</label>
+        </div>
+
+        <div class="no-print" style="margin-top:1.4rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
+          <button id="saveBtn" class="btn-primary" type="button">Save</button>
+          <button id="printBtn" class="btn-primary" type="button">Print</button>
+          <button id="savePdfBtn" class="btn-primary" type="button">Save as PDF</button>
+          <button id="saveJpgBtn" class="btn-primary" type="button">Save as JPEG</button>
+          <button id="sendWhatsappBtn" class="btn-primary" type="button" disabled title="Save the slip for a selected customer first">Send PDF to Customer on WhatsApp</button>
+        </div>
+        <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
       </div>
     </div>
-
-    <div class="field-group no-print">
-      <label>Date</label>
-      <input type="date" id="invoiceDate">
-    </div>
-
-    <div class="field-group no-print">
-      <label>Destination</label>
-      <input type="text" id="destination" placeholder="e.g. site / delivery location" autocomplete="off">
-    </div>
-
-    <div class="field-group no-print" id="customerSearchWrap">
-      <label>Customer (leave blank for a walk-in / cash sale)</label>
-      <input type="text" id="customerSearch" placeholder="Search by name or phone…" autocomplete="off">
-      <div id="customerResults"></div>
-    </div>
-    <div id="selectedCustomer" class="no-print"></div>
-
-    <datalist id="particularsOptions"></datalist>
-    <datalist id="gradeOptions"></datalist>
-
-    <div class="table-scroll">
-      <table id="itemsTable">
-        <colgroup>
-          <col class="c-sl"><col class="c-particulars"><col class="c-grade"><col class="c-vch">
-          <col class="c-qty"><col class="c-rate"><col class="c-amount">
-        </colgroup>
-        <thead>
-          <tr class="only-print print-title-row"><th colspan="7" id="printCustomerName"></th></tr>
-          <tr class="only-print print-date-row"><th colspan="7"><span>Date:</span> <span class="print-date-value" id="printDateValue"></span></th></tr>
-          <tr class="only-print print-destination-row" id="printDestinationRow"><th colspan="7"><span>Destination:</span> <span class="print-date-value" id="printDestinationValue"></span></th></tr>
-          <tr class="col-headers"><th>Sl</th><th>Particulars</th><th>Grade</th><th>Vch</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
-        </thead>
-        <tbody></tbody>
-        <tfoot class="only-print">
-          <tr><td colspan="6" class="footer-total-label">Total</td><td id="footerTotal" class="row-amount"></td></tr>
-        </tfoot>
-      </table>
-    </div>
-    <button id="addRow" class="add-row no-print" type="button">+ Add line</button>
-
-    <div class="totals">
-      <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
-      <div class="no-print">
-        <label style="display:inline;">Unloading charges: ₹</label>
-        <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
-      </div>
-      <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
-    </div>
-
-    <div class="toggle-row no-print">
-      <input type="checkbox" id="paidNow" checked><label style="margin:0;">Paid now</label>
-    </div>
-
-    <div class="no-print" style="margin-top:1.4rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
-      <button id="saveBtn" class="btn-primary" type="button">Save</button>
-      <button id="printBtn" class="btn-primary" type="button">Print</button>
-      <button id="savePdfBtn" class="btn-primary" type="button">Save as PDF</button>
-      <button id="sendWhatsappBtn" class="btn-primary" type="button" disabled title="Save the slip for a selected customer first">Send PDF to Customer on WhatsApp</button>
-    </div>
-    <div id="status" style="margin-top:0.6rem;font-size:0.9rem;"></div>
-  </div>
+  </main>
 </div>
-
-<footer class="footer-credit no-print">Powered by IntelliTech Solutions</footer>
 
 <script>
 let selectedCustomerId = null;
@@ -312,6 +365,31 @@ document.getElementById('destination').addEventListener('input', updatePrintDest
 updatePrintDestination();
 
 const PAPER_PRESETS = { a4: [210, 297], a5: [148, 210], a6: [105, 148], letter: [215.9, 279.4] };
+
+// The shop prints on whatever free notepad the cement companies handed out
+// that week, so the paper size genuinely changes and re-measuring it every
+// time was the real complaint. Saved sizes live per-machine in localStorage.
+const PRESET_STORE = 'aaral_paper_presets_v1';
+const LAST_PAPER_STORE = 'aaral_paper_last_v1';
+
+function loadSavedPresets() {
+  try { return JSON.parse(localStorage.getItem(PRESET_STORE)) || []; } catch (e) { return []; }
+}
+function storeSavedPresets(list) {
+  try { localStorage.setItem(PRESET_STORE, JSON.stringify(list)); } catch (e) { /* private mode */ }
+}
+function renderSavedPresets() {
+  const select = document.getElementById('paperPreset');
+  [...select.querySelectorAll('option[data-saved]')].forEach((o) => o.remove());
+  const customOption = select.querySelector('option[value="custom"]');
+  loadSavedPresets().forEach((preset, i) => {
+    const opt = document.createElement('option');
+    opt.value = `saved:${i}`;
+    opt.dataset.saved = '1';
+    opt.textContent = `${preset.name} (${preset.w}×${preset.h} mm)`;
+    select.insertBefore(opt, customOption);
+  });
+}
 const paperPresetSelect = document.getElementById('paperPreset');
 const customDims = document.getElementById('customDims');
 const customWidthInput = document.getElementById('customWidth');
@@ -326,19 +404,63 @@ function updatePageSize() {
   if (preset === 'custom') {
     w = Number(customWidthInput.value) || 148;
     h = Number(customHeightInput.value) || 210;
+  } else if (preset.startsWith('saved:')) {
+    const saved = loadSavedPresets()[Number(preset.slice(6))];
+    if (saved) { w = saved.w; h = saved.h; } else { [w, h] = PAPER_PRESETS.a5; }
   } else {
     [w, h] = PAPER_PRESETS[preset];
   }
   currentPaperSize = { w, h };
-  pageSizeStyle.textContent = `@page { size: ${w}mm ${h}mm; margin: 5mm; }`;
+  // margin 0: the slip runs edge to edge like a pre-printed pad, and the
+  // server renderer uses zero margins too, so the two match exactly.
+  pageSizeStyle.textContent = `@page { size: ${w}mm ${h}mm; margin: 0; }`;
+  try {
+    localStorage.setItem(LAST_PAPER_STORE, JSON.stringify({ preset, w, h }));
+  } catch (e) { /* private mode */ }
+}
+
+function restoreLastPaper() {
+  renderSavedPresets();
+  let last;
+  try { last = JSON.parse(localStorage.getItem(LAST_PAPER_STORE)); } catch (e) { last = null; }
+  if (last && [...paperPresetSelect.options].some((o) => o.value === last.preset)) {
+    paperPresetSelect.value = last.preset;
+    if (last.preset === 'custom') {
+      customWidthInput.value = last.w;
+      customHeightInput.value = last.h;
+    }
+  }
+  customDims.style.display = paperPresetSelect.value === 'custom' ? 'flex' : 'none';
+  document.getElementById('savePresetRow').style.display = paperPresetSelect.value === 'custom' ? 'flex' : 'none';
 }
 
 paperPresetSelect.addEventListener('change', () => {
-  customDims.style.display = paperPresetSelect.value === 'custom' ? 'flex' : 'none';
+  const isCustom = paperPresetSelect.value === 'custom';
+  customDims.style.display = isCustom ? 'flex' : 'none';
+  document.getElementById('savePresetRow').style.display = isCustom ? 'flex' : 'none';
   updatePageSize();
 });
 customWidthInput.addEventListener('input', updatePageSize);
 customHeightInput.addEventListener('input', updatePageSize);
+
+document.getElementById('savePresetBtn').addEventListener('click', () => {
+  const nameInput = document.getElementById('presetName');
+  const name = nameInput.value.trim();
+  if (!name) { nameInput.focus(); return; }
+  const list = loadSavedPresets();
+  list.push({ name, w: currentPaperSize.w, h: currentPaperSize.h });
+  storeSavedPresets(list);
+  nameInput.value = '';
+  renderSavedPresets();
+  paperPresetSelect.value = `saved:${list.length - 1}`;
+  document.getElementById('savePresetRow').style.display = 'none';
+  customDims.style.display = 'none';
+  updatePageSize();
+  statusEl.textContent = `Saved "${name}" — pick it from the paper list next time.`;
+  statusEl.style.color = 'var(--moss)';
+});
+
+restoreLastPaper();
 updatePageSize();
 
 const searchInput = document.getElementById('customerSearch');
@@ -346,6 +468,7 @@ const resultsBox = document.getElementById('customerResults');
 let searchTimer = null;
 const sendWhatsappBtn = document.getElementById('sendWhatsappBtn');
 let savedInvoiceId = null;
+let savedInvoiceNumber = null;
 
 function updateSendWhatsappBtn() {
   sendWhatsappBtn.disabled = !(selectedCustomerId && savedInvoiceId);
@@ -430,6 +553,7 @@ saveBtn.addEventListener('click', async () => {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saved';
   savedInvoiceId = data.invoiceId;
+  savedInvoiceNumber = data.invoiceNumber || null;
   updateSendWhatsappBtn();
   statusEl.textContent = data.invoiceNumber
     ? `Saved as Invoice #${data.invoiceNumber}. You can Print or Save as PDF as many times as you need.`
@@ -458,8 +582,105 @@ sendWhatsappBtn.addEventListener('click', async () => {
   statusEl.style.color = 'var(--moss)';
 });
 
-document.getElementById('printBtn').addEventListener('click', () => {
+// Reads the filename the server chose, preferring the RFC 5987 form so names
+// with non-ASCII characters (Telugu/Hindi customer names) survive intact.
+function filenameFromDisposition(header) {
+  if (!header) return null;
+  const utf8 = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8) { try { return decodeURIComponent(utf8[1]); } catch (e) { /* fall through */ } }
+  const plain = header.match(/filename="([^"]+)"/i);
+  return plain ? plain[1] : null;
+}
+
+function pdfBaseName() {
+  // Mirrors buildInvoiceFilenameBase() in src/invoiceFilename.js. Duplicated
+  // deliberately: the print path has no server round-trip to ask, and it must
+  // stay synchronous inside the click handler.
+  const name = (searchInput.value || '')
+    .replace(/[<>:"/\\|?*]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/ /g, '-');
+  const parts = [name || 'Invoice'];
+  if (savedInvoiceNumber) parts.push(String(savedInvoiceNumber));
+  return parts.join('-');
+}
+
+// Builds the payload every render path shares.
+function slipPayload() {
+  return {
+    items: collectItems(),
+    unloadingCharge: document.getElementById('unloading').value || null,
+    invoiceDate: document.getElementById('invoiceDate').value || null,
+    destination: document.getElementById('destination').value.trim() || null,
+    customerName: searchInput.value.trim() || null,
+    invoiceNumber: savedInvoiceNumber,
+    paperWidthMm: currentPaperSize.w,
+    paperHeightMm: currentPaperSize.h,
+  };
+}
+
+// Chrome and Edge seed the "Save as PDF" filename from document.title, so
+// setting it just before printing is the only way to control what the browser
+// offers to save this slip as. Restored afterwards so the tab title stays sane.
+document.getElementById('printBtn').addEventListener('click', async () => {
+  statusEl.textContent = 'Preparing slip…';
+  statusEl.style.color = 'var(--ink-muted)';
+  let res;
+  try {
+    res = await fetch('/api/invoices/chitti', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(slipPayload()),
+    });
+  } catch (e) {
+    statusEl.textContent = 'Could not prepare the slip for printing.';
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    statusEl.textContent = `Could not prepare the slip: ${data.error || 'unknown error'}`;
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  const { html } = await res.json();
+  document.getElementById('printHost').innerHTML = html;
+  statusEl.textContent = '';
+
+  const previousTitle = document.title;
+  document.title = pdfBaseName();
+  const restore = () => {
+    document.title = previousTitle;
+    window.removeEventListener('afterprint', restore);
+  };
+  window.addEventListener('afterprint', restore);
   window.print();
+  setTimeout(restore, 60000);
+});
+
+document.getElementById('saveJpgBtn').addEventListener('click', async () => {
+  statusEl.textContent = 'Generating image…';
+  statusEl.style.color = 'var(--ink-muted)';
+  const res = await fetch('/api/invoices/image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(slipPayload()),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    statusEl.textContent = `Error: ${data.error || 'Could not generate image'}`;
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filenameFromDisposition(res.headers.get('Content-Disposition')) || `${pdfBaseName()}.jpg`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  statusEl.textContent = 'Image saved at the exact paper size you picked.';
+  statusEl.style.color = 'var(--moss)';
 });
 
 document.getElementById('savePdfBtn').addEventListener('click', async () => {
@@ -471,6 +692,7 @@ document.getElementById('savePdfBtn').addEventListener('click', async () => {
     paperWidthMm: currentPaperSize.w,
     paperHeightMm: currentPaperSize.h,
     customerName: searchInput.value.trim() || null,
+    invoiceNumber: savedInvoiceNumber,
   };
   statusEl.textContent = 'Generating PDF…';
   statusEl.style.color = 'var(--ink-muted)';
@@ -489,7 +711,11 @@ document.getElementById('savePdfBtn').addEventListener('click', async () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Slip-${new Date().toISOString().slice(0, 10)}.pdf`;
+  // For a blob URL the download attribute WINS over Content-Disposition, so
+  // this has to be set explicitly or every slip saves as the same name. Take it
+  // from the server's header so there is one source of truth for the naming.
+  a.download = filenameFromDisposition(res.headers.get('Content-Disposition'))
+    || `${pdfBaseName()}.pdf`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -503,5 +729,6 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 </script>
+<div id="printHost"></div>
 </body>
 </html>

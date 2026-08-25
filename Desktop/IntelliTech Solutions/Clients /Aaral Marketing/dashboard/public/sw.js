@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aaral-static-v1';
+const CACHE_NAME = 'aaral-static-v4';
 const STATIC_PATHS = ['/styles.css', '/manifest.json'];
 
 self.addEventListener('install', (event) => {

@@ -7,6 +7,10 @@ const os = require('os');
 const { execSync, spawn } = require('child_process');
 const cron = require('node-cron');
 const { logger } = require('../utils/logger');
+const { createConnection } = require('./connection');
+const { createHealthMonitor } = require('./healthMonitor');
+const { isFatalSessionError, withTimeout } = require('./sessionErrors');
+const { clearSessionCache } = require('./sessionCacheClean');
 const { query } = require('payment-ledger-core/db');
 const customers = require('payment-ledger-core/ledger/customers');
 const claims = require('payment-ledger-core/ledger/claims');
@@ -60,23 +64,125 @@ const http = require('http');
 const NOTIFY_SERVICE_PORT = process.env.NOTIFY_SERVICE_PORT || 5002;
 let notifyServerStarted = false;
 
+// Bumped whenever the request/response shape between this service and the
+// dashboard changes. The dashboard compares it against its own copy, so a
+// half-finished deploy (one app updated, the other not) announces itself as a
+// version mismatch instead of presenting as a mysterious runtime bug.
+const WA_CONTRACT = 1;
+const WA_SEND_TIMEOUT_MS = 90000;
+
+// Every await below talks to a Chrome that may already be half-dead. Without a
+// deadline a stalled page never rejects, the HTTP request never responds, and
+// the dashboard's Send button spins forever with no error anywhere — which is
+// indistinguishable from "the service is down".
+async function sendWhatsApp(chatId, payload, caption) {
+  const c = client;
+  if (!c) throw new Error('session closed: WhatsApp client is not available');
+  return withTimeout(
+    caption ? c.sendMessage(chatId, payload, { caption }) : c.sendMessage(chatId, payload),
+    WA_SEND_TIMEOUT_MS,
+    'WhatsApp send'
+  );
+}
+
 function startNotifyServer() {
-  // client.on('ready') can refire after a brief reconnect without a full
-  // re-auth (observed live) — guard against trying to bind the port twice.
+  // Guard against binding twice — this is now called once at boot rather than
+  // from client.on('ready'), but keep the guard so a stray call is harmless.
   if (notifyServerStarted) return;
   notifyServerStarted = true;
 
   const server = http.createServer((req, res) => {
+    // Per-request logging. Its absence is exactly why the equivalent failure on
+    // the SMSA deployment needed an on-site visit to diagnose: an unchanging
+    // log is NOT evidence that a request never arrived, but with no per-request
+    // line there was no way to tell the two apart from the logs alone.
+    const startedAt = Date.now();
+    res.on('finish', () => {
+      logger.info(`[Notify] ${req.method} ${req.url} -> ${res.statusCode} (${Date.now() - startedAt}ms)`);
+    });
+
     if (req.method === 'GET' && req.url === '/health') {
+      // Deliberately 200 whenever the PROCESS is alive, with the WhatsApp state
+      // reported in the body rather than encoded in the status code.
+      //
+      // The watchdog treats a non-200 as "restart this app", and the updater
+      // treats it as "roll the deploy back". Both of those are wrong responses
+      // to "WhatsApp is reconnecting" — restarting mid-reconnect is actively
+      // harmful, and it previously caused good deploys to be rolled back
+      // (which is why the health timeout had to be stretched to 210s).
+      // Anything that cares about WhatsApp specifically reads .wa.state.
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({
+        ok: true,
+        contract: WA_CONTRACT,
+        uptimeSec: Math.floor(process.uptime()),
+        wa: connection ? connection.getStatus() : { state: 'starting', number: null, lastError: null, recovering: false },
+      }));
       return;
     }
-    if (req.method !== 'POST' || (req.url !== '/notify' && req.url !== '/notify-admins')) {
+
+    // Read-only status for the dashboard's WhatsApp panel.
+    if (req.method === 'GET' && req.url === '/wa/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        contract: WA_CONTRACT,
+        ...(connection ? connection.getStatus() : { state: 'starting' }),
+      }));
+      return;
+    }
+
+    // The pairing QR as a data URL, so staff can re-link the phone from the
+    // dashboard instead of someone reading a terminal over remote desktop.
+    if (req.method === 'GET' && req.url === '/wa/qr') {
+      const qr = connection ? connection.getQr() : null;
+      if (!qr) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, reason: 'no QR pending', state: connection ? connection.getStatus().state : 'starting' }));
+        return;
+      }
+      qrToDataUrl(qr)
+        .then((dataUrl) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, dataUrl }));
+        })
+        .catch((e) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, reason: e.message }));
+        });
+      return;
+    }
+
+    if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+
+    // Repair (keeps the pairing, no phone needed) and Re-pair (purges
+    // credentials, needs a QR scan). Offered in that order in the UI so the
+    // destructive one is never the first thing anybody reaches for.
+    if (req.url === '/wa/recover' || req.url === '/wa/reset') {
+      const isReset = req.url === '/wa/reset';
+      if (!connection) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'connection not initialised yet' }));
+        return;
+      }
+      (isReset ? connection.reset() : connection.recover('requested from dashboard'))
+        .then((result) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ...result, ...connection.getStatus() }));
+        })
+        .catch((e) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        });
+      return;
+    }
+
+    if (req.url !== '/notify' && req.url !== '/notify-admins') {
       res.writeHead(404);
       res.end();
       return;
     }
+
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
     req.on('end', async () => {
@@ -107,16 +213,22 @@ function startNotifyServer() {
         const chatId = flows.toWhatsAppChatId(phone);
         if (pdfBase64) {
           const media = new MessageMedia('application/pdf', pdfBase64, filename || 'invoice.pdf');
-          await client.sendMessage(chatId, media, { caption: message });
+          await sendWhatsApp(chatId, media, message);
         } else {
-          await client.sendMessage(chatId, message);
+          await sendWhatsApp(chatId, message);
         }
         res.writeHead(200);
         res.end(JSON.stringify({ sent: true }));
       } catch (e) {
-        logger.error('[Notify] Failed to send message', { error: e.message });
+        // A dead-session error used to be returned as a string and then
+        // forgotten, leaving the bot permanently "connected" while every
+        // subsequent send failed identically until someone restarted it by
+        // hand. Now it triggers a background rebuild, so the retry the user is
+        // about to attempt anyway stands a real chance of working.
+        const recovering = connection ? connection.noteSendFailure(e.message) : false;
+        logger.error('[Notify] SEND FAILED', { error: e.message, recovering });
         res.writeHead(200);
-        res.end(JSON.stringify({ sent: false, reason: e.message }));
+        res.end(JSON.stringify({ sent: false, reason: e.message, recovering }));
       }
     });
   });
@@ -124,10 +236,10 @@ function startNotifyServer() {
     // A failure here (e.g. port already in use) must never take down the
     // WhatsApp bot itself — the dashboard's notify calls just get "failed
     // to reach bot" and degrade gracefully, same as an OCR outage.
-    logger.error('[Notify] Server failed to start', { error: err.message });
+    logger.error('[Notify] Server failed to start', { error: err.message, port: NOTIFY_SERVICE_PORT });
   });
   server.listen(NOTIFY_SERVICE_PORT, '127.0.0.1', () => {
-    logger.info(`[Notify] Listening on 127.0.0.1:${NOTIFY_SERVICE_PORT}`);
+    logger.info(`[Notify] Listening on 127.0.0.1:${NOTIFY_SERVICE_PORT} (contract ${WA_CONTRACT})`);
   });
 }
 const OCR_VENV_PYTHON = process.platform === 'win32'
@@ -234,106 +346,30 @@ if (require.main === module) {
   process.on('SIGQUIT', () => { logger.info('[WhatsApp] SIGQUIT — clean exit'); stopOcrService().then(() => process.exit(0)); });
 }
 
-// ── Reconnect backoff state ─────────────────────────────────────
-// WhatsApp Web silently soft-throttles reconnects attempted too close
-// together: client.initialize() just never resolves or rejects (confirmed
-// live — no 'ready', 'disconnected', 'auth_failure', or unhandled
-// rejection ever fires, only this startup watchdog after 3 min). PM2's own
-// restart delay can't reliably back this off, because each failed attempt
-// runs the full 3 minutes — well past min_uptime — so PM2 sees a "stable"
-// run, not a crash loop, and won't grow its restart delay the way a
-// tight crash-loop would. This file-persisted counter survives across
-// PM2-restarted processes and grows the pre-connect delay exponentially
-// (10min, 20min, 30min capped) until a real cooldown emerges on its own —
-// the goal being a bot that self-heals after a power cut or ISP outage
-// without anyone having to notice and manually wait it out. Base starts
-// at 10 min, not something small like 15s: live testing on 2026-07-11
-// showed every reconnect attempted within a ~15 min gap of a prior one
-// failed (3/3), while gaps of 20+ min succeeded every time observed — so
-// a fast initial retry would just burn cycles on an attempt already known
-// to be very likely doomed.
+// ── Session lock ────────────────────────────────────────────────
+// Two whatsapp-web.js clients on one LocalAuth session is not a benign local
+// race — it has caused a real WhatsApp-side forced LOGOUT on a previous
+// project. This bot previously had no lock at all: "PM2 is the only launcher"
+// was the entire safety story, so one manual `node src/whatsapp/bot.js` while
+// PM2 had it running was enough to put the client's number at risk.
+const LOCK_PATH = path.join(SESSION_DIR, '.bot.lock');
 const BACKOFF_STATE_FILE = path.join(SESSION_DIR, '.reconnect-backoff.json');
-const BACKOFF_BASE_MS = 10 * 60 * 1000;
-const BACKOFF_MAX_MS = 30 * 60 * 1000;
+const SESSION_PROFILE_DIR = path.resolve(SESSION_DIR, 'session');
 
-function readBackoffState() {
-  try {
-    return JSON.parse(fs.readFileSync(BACKOFF_STATE_FILE, 'utf8'));
-  } catch (e) {
-    return { failCount: 0, lastAttemptAt: 0 };
-  }
+// Renders the pairing QR for the dashboard panel, so staff can re-link the
+// phone themselves instead of someone reading a terminal over remote desktop.
+// Loaded lazily so a missing optional dependency degrades to "no QR in the
+// dashboard" rather than preventing the bot from starting at all.
+async function qrToDataUrl(qr) {
+  const qrcode = require('qrcode');
+  return qrcode.toDataURL(qr, { margin: 1, width: 320 });
 }
 
-function writeBackoffState(state) {
-  try {
-    fs.mkdirSync(path.dirname(BACKOFF_STATE_FILE), { recursive: true });
-    fs.writeFileSync(BACKOFF_STATE_FILE, JSON.stringify(state));
-  } catch (e) {
-    logger.warn('[WhatsApp] Failed to persist reconnect backoff state', { error: e.message });
-  }
-}
-
-function recordConnectFailure() {
-  const state = readBackoffState();
-  writeBackoffState({ failCount: state.failCount + 1, lastAttemptAt: Date.now() });
-}
-
-function recordConnectSuccess() {
-  writeBackoffState({ failCount: 0, lastAttemptAt: Date.now() });
-}
-
-async function waitForBackoffCooldown() {
-  const state = readBackoffState();
-  if (state.failCount === 0) return;
-  const delay = Math.min(BACKOFF_BASE_MS * 2 ** (state.failCount - 1), BACKOFF_MAX_MS);
-  const remaining = delay - (Date.now() - state.lastAttemptAt);
-  if (remaining <= 0) return;
-  logger.warn(`[WhatsApp] Backing off ${Math.round(remaining / 1000)}s before reconnecting (after ${state.failCount} consecutive failed attempt(s))`);
-  await new Promise((resolve) => setTimeout(resolve, remaining));
-}
-
-// Armed explicitly right before client.initialize() is actually called
-// (see bottom of file) — NOT at module load. The backoff wait above can
-// now run for minutes before we ever attempt a connection; if this timer
-// started at module load instead, it would fire mid-wait and force-exit
-// before initialize() was even called, falsely counting as a failure and
-// making the backoff grow forever without ever attempting a real connect.
-// Diagnostic-only: whatsapp-web.js calls page.goto(WhatsWebURL, { timeout: 0 })
-// internally, so if that hangs we get zero library-level signal — no error,
-// no event, nothing — until our own watchdog fires. This polls the
-// underlying Puppeteer page directly so that when a hang happens, the logs
-// show whether navigation ever actually started (page still blank vs. sat
-// on web.whatsapp.com) instead of pure silence for 3 minutes.
-let connectHeartbeat = null;
-function startConnectHeartbeat() {
-  const startedAt = Date.now();
-  connectHeartbeat = setInterval(async () => {
-    const elapsed = Math.round((Date.now() - startedAt) / 1000);
-    try {
-      const url = client.pupPage ? await client.pupPage.url() : null;
-      const readyState = client.pupPage
-        ? await client.pupPage.evaluate(() => document.readyState).catch(() => 'eval-failed')
-        : null;
-      logger.info(`[WhatsApp] Still connecting (${elapsed}s)`, { url, readyState });
-    } catch (e) {
-      logger.info(`[WhatsApp] Still connecting (${elapsed}s) — page not queryable`, { error: e.message });
-    }
-  }, 20000);
-}
-function stopConnectHeartbeat() {
-  if (connectHeartbeat) clearInterval(connectHeartbeat);
-  connectHeartbeat = null;
-}
-
-let startupWatchdog = null;
-function armStartupWatchdog() {
-  startConnectHeartbeat();
-  startupWatchdog = setTimeout(() => {
-    logger.error('[WhatsApp] Startup watchdog: not ready after 3 min — exiting for PM2 restart');
-    stopConnectHeartbeat();
-    recordConnectFailure();
-    stopOcrService().then(() => process.exit(1));
-  }, 3 * 60 * 1000);
+// Removes stored credentials so the next start issues a fresh QR. The scripted
+// equivalent of the manual "rename the session dir and restart" recovery that
+// previously required a remote-desktop session.
+function purgeSession(profileDir) {
+  fs.rmSync(profileDir, { recursive: true, force: true });
 }
 
 // ── Bot State ──────────────────────────────────────────────────
@@ -431,15 +467,23 @@ function detectChromeVersion() {
 }
 const CHROME_VERSION = detectChromeVersion();
 
-const client = new Client({
+// The live client, replaced wholesale on every repair. It is a `let` (was a
+// module-level `const`) because recovering from a dead Puppeteer frame means
+// building a brand-new Client — the old one cannot be revived. Every consumer
+// below reads this variable at call time, so they all follow the swap.
+let client = null;
+let connection = null;
+let healthMonitor = null;
+
+function makeClient() {
+  client = new Client({
   authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
   // false, not true: whatsapp-web.js's own in-process restart-on-auth-fail
   // reuses the existing Puppeteer page without fully tearing it down, which
   // throws "Failed to add page binding ... already exists" on reinit and
-  // crashes anyway. We exit cleanly on disconnect instead (see
-  // client.on('disconnected', ...) below) and let an external supervisor
-  // (PM2, or a manual restart) launch a fresh browser — same philosophy as
-  // the unhandledRejection handler further down.
+  // crashes anyway. connection.js rebuilds the whole Client instead, which is
+  // the same idea done properly — a genuinely fresh browser and page, without
+  // taking the whole process down to get one.
   restartOnAuthFail: false,
   puppeteer: {
     executablePath: CHROME_EXECUTABLE,
@@ -475,7 +519,10 @@ const client = new Client({
     ],
   },
   webVersionCache: { type: 'local', strict: false },
-});
+  });
+  attachBotHandlers(client);
+  return client;
+}
 
 // ── Resolve real phone number from an incoming message ─────────
 async function resolveWaNumber(msg) {
@@ -498,20 +545,24 @@ async function resolveWaNumber(msg) {
 }
 
 // ── Safe send: sendMessage (not reply) avoids LID-address hangs ────
+// Previously a 60s timeout here called process.exit(1) — killing the whole
+// bot, the notify server, the admin alert channel and the daily digest,
+// because one customer reply was slow. Now a stalled send is classified: a
+// dead-session error triggers a background browser rebuild (the connection
+// repairs itself and the next message goes through), while anything else just
+// fails this one send and is surfaced to the caller.
 async function safeSend(msg, text) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      logger.error('[WhatsApp] safeSend timeout — exiting for PM2 restart');
-      stopOcrService().then(() => process.exit(1));
-    }, 60000);
-    client.sendMessage(msg.from, text)
-      .then((r) => { clearTimeout(timer); resolve(r); })
-      .catch(() => {
-        msg.reply(text)
-          .then((r) => { clearTimeout(timer); resolve(r); })
-          .catch((e) => { clearTimeout(timer); reject(e); });
-      });
-  });
+  try {
+    return await withTimeout(client.sendMessage(msg.from, text), 60000, 'safeSend');
+  } catch (first) {
+    try {
+      return await withTimeout(msg.reply(text), 60000, 'safeSend reply fallback');
+    } catch (second) {
+      if (connection) connection.noteSendFailure(second.message || first.message);
+      logger.error('[WhatsApp] safeSend failed', { error: second.message, firstError: first.message });
+      throw second;
+    }
+  }
 }
 
 async function isAdmin(waNumber) {
@@ -548,43 +599,38 @@ async function notifyAdmins(text, mediaPath) {
   }
 }
 
-client.on('qr', (qr) => {
-  logger.info('[WhatsApp] Scan QR code to connect:');
-  qrcode.generate(qr, { small: true });
-});
-
-// Diagnostic only — these only fire if we got past the initial page load
-// and inject() succeeded, so seeing (or not seeing) them tells us whether
-// a hang is happening before or after that point.
-client.on('loading_screen', (percent, message) => {
-  logger.info(`[WhatsApp] Loading screen: ${percent}% — ${message}`);
-});
-client.on('change_state', (state) => {
-  logger.info(`[WhatsApp] State changed: ${state}`);
-});
-
-client.on('ready', () => {
-  clearTimeout(startupWatchdog);
-  stopConnectHeartbeat();
-  recordConnectSuccess();
-  logger.info('[WhatsApp] Bot connected and ready!');
-  startNotifyServer();
-  setInterval(async () => {
-    try { await client.getState(); } catch (_) {}
-  }, 15000);
-});
-
-client.on('disconnected', (reason) => {
-  logger.warn(`[WhatsApp] Disconnected: ${reason} — exiting for a clean restart with a fresh browser`);
-  stopOcrService().then(() => process.exit(1));
-});
-
-client.on('auth_failure', (msg) => {
-  logger.error('[WhatsApp] Auth failure:', msg);
-});
+// Attaches this bot's *business* handlers to a freshly built client. The
+// connection lifecycle handlers (qr / ready / disconnected / auth_failure)
+// are attached separately by connection.js, which owns staying connected.
+//
+// These must be (re)attached on every rebuild — a repaired connection with no
+// message handlers would look perfectly healthy while silently ignoring every
+// customer, which is a worse failure than being visibly down.
+function attachBotHandlers(c) {
+  // Diagnostic only — these only fire if we got past the initial page load
+  // and inject() succeeded, so seeing (or not seeing) them tells us whether
+  // a hang is happening before or after that point.
+  c.on('loading_screen', (percent, message) => {
+    logger.info(`[WhatsApp] Loading screen: ${percent}% — ${message}`);
+  });
+  c.on('change_state', (state) => {
+    logger.info(`[WhatsApp] State changed: ${state}`);
+  });
+  c.on('message', handleIncomingMessage);
+  c.on('message_create', handleSelfSentMessage);
+}
 
 process.on('unhandledRejection', (reason) => {
-  logger.error('[WhatsApp] Unhandled rejection — exiting for PM2 restart:', { error: reason?.message || String(reason) });
+  const message = reason?.message || String(reason);
+  // A dead Puppeteer frame surfacing as an unhandled rejection used to take
+  // the entire process down. Repair the connection in place instead — the
+  // notify server, admin alerts and daily digest all stay up meanwhile.
+  if (isFatalSessionError(message) && connection) {
+    logger.error('[WhatsApp] Unhandled rejection looks like a dead session — repairing', { error: message });
+    connection.noteSendFailure(message);
+    return;
+  }
+  logger.error('[WhatsApp] Unhandled rejection — exiting for PM2 restart:', { error: message });
   stopOcrService().then(() => process.exit(1));
 });
 
@@ -593,7 +639,7 @@ process.on('uncaughtException', (err) => {
   stopOcrService().then(() => process.exit(1));
 });
 
-client.on('message', async (msg) => {
+async function handleIncomingMessage(msg) {
   try {
     if (msg.from.includes('@g.us') || msg.isStatus) return;
     if (!msg.timestamp || msg.timestamp < BOT_START_TIME) return;
@@ -645,8 +691,9 @@ client.on('message', async (msg) => {
     await safeSend(msg, `Hi ${customer.name}! Reply *PAID* any time you make a payment to Aaral Marketing, or *HELP* for instructions.`);
   } catch (e) {
     logger.error('[WhatsApp] message handler error', { error: e.message });
+    if (connection) connection.noteSendFailure(e.message);
   }
-});
+}
 
 // When the admin's WhatsApp account IS the bot's own linked number (the
 // common case while developing/testing on a personal number), a command an
@@ -657,7 +704,7 @@ client.on('message', async (msg) => {
 // library drops it before 'message' ever fires. 'message_create' fires for
 // every message including self-sent ones, so admin commands sent to
 // yourself are handled here instead.
-client.on('message_create', async (msg) => {
+async function handleSelfSentMessage(msg) {
   try {
     if (!msg.fromMe) return; // messages from others are handled by 'message' above
     if (msg.from.includes('@g.us') || msg.isStatus) return;
@@ -671,8 +718,9 @@ client.on('message_create', async (msg) => {
     await handleAdminCommand(msg, waNumber, parsed);
   } catch (e) {
     logger.error('[WhatsApp] message_create handler error', { error: e.message });
+    if (connection) connection.noteSendFailure(e.message);
   }
-});
+}
 
 async function handlePendingReply(msg, waNumber, pending, text) {
   if (pending.type === 'registration_name') {
@@ -907,17 +955,65 @@ if (require.main === module) {
   }, { timezone: 'Asia/Kolkata' });
 }
 
+function buildConnection() {
+  return createConnection({
+    buildClient: makeClient,
+    sessionProfileDir: SESSION_PROFILE_DIR,
+    lockPath: LOCK_PATH,
+    backoffPath: BACKOFF_STATE_FILE,
+    clearCache: clearSessionCache,
+    purgeSession,
+    log: (m) => logger.info(`[WhatsApp] ${m}`),
+    onQr: async (qr) => {
+      // Still printed to the log for whoever is on the machine, but the
+      // dashboard's WhatsApp panel is now the primary way to scan it — that is
+      // what lets staff re-pair without anyone remoting in.
+      logger.info('[WhatsApp] Scan QR code to connect (also available in the dashboard):');
+      qrcode.generate(qr, { small: true });
+    },
+    onReady: () => {
+      if (healthMonitor) healthMonitor.start();
+    },
+  });
+}
+
 if (require.main === module) {
+  connection = buildConnection();
+  healthMonitor = createHealthMonitor({
+    connection,
+    log: (m) => logger.warn(`[WhatsApp] ${m}`),
+  });
+
+  // Order matters, and this is the single most important change in this file.
+  //
+  // startNotifyServer() used to be called from inside client.on('ready'), so
+  // port 5002 only ever bound once WhatsApp was fully connected. That meant a
+  // WhatsApp outage ALSO took down:
+  //   - the dashboard's only channel for sending invoices/receipts,
+  //   - the watchdog's health check for this app, and
+  //   - /notify-admins, which is the very channel the watchdog uses to report
+  //     that something is wrong.
+  // The system could not report its own most common failure. Binding first,
+  // unconditionally, is what makes the WhatsApp state observable at all.
+  startNotifyServer();
+
   waitForOcrService()
     .catch((e) => logger.error('[OCR] Unexpected error waiting for OCR service', { error: e.message }))
-    .then(() => waitForBackoffCooldown())
-    .then(() => {
-      armStartupWatchdog();
-      return client.initialize();
-    });
+    .then(() => connection.start())
+    .then((result) => {
+      if (!result.ok) {
+        // Deliberately NOT process.exit(1). Everything above stays up, and
+        // connection.start() has already scheduled its own retry on the
+        // escalating backoff.
+        logger.error('[WhatsApp] Initial connect failed — service stays up, retry scheduled', { error: result.error });
+      }
+    })
+    .catch((e) => logger.error('[WhatsApp] Startup threw unexpectedly', { error: e.message }));
 }
 
 module.exports = {
-  client, safeSend, resolveWaNumber, isAdmin, notifyAdmins,
+  makeClient, safeSend, resolveWaNumber, isAdmin, notifyAdmins,
   pendingConfirmations, setPending, clearPending, PROOFS_DIR,
+  buildConnection, startNotifyServer, WA_CONTRACT,
+  getConnection: () => connection,
 };

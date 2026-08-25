@@ -108,13 +108,15 @@ async function applyUpdate({
   npmDirs = DEFAULT_NPM_DIRS,
   migrateDirs = DEFAULT_MIGRATE_DIRS,
   watchedApps = DEFAULT_WATCHED_APPS,
-  // aaral-bridge's own /health endpoint doesn't come up until WhatsApp Web
-  // fully connects, which has taken up to ~3 minutes on this machine (its
-  // own internal startup watchdog gives it that long before self-killing
-  // for PM2 to retry) -- 60s here was declaring it unhealthy and rolling
-  // back a restart that just needed more time, confirmed live. Comfortably
-  // clears that 3-minute ceiling; aaral-dashboard boots in seconds
-  // regardless, so this only adds wait time in the slow-bridge case.
+  // Historically aaral-bridge's /health did not bind until WhatsApp Web had
+  // fully connected (up to ~3 min on this machine), so 60s here was rolling
+  // back perfectly good deploys that just needed more time -- hence 210s.
+  //
+  // The bridge now binds its HTTP server at boot, independent of WhatsApp, and
+  // /health returns 200 whenever the PROCESS is healthy with the WhatsApp state
+  // reported in the body. So this no longer has to wait for WhatsApp at all.
+  // Kept generous anyway: it only costs wall-clock time on the failure path,
+  // and this machine is genuinely slow to start Chrome.
   healthTimeoutMs = 210000,
   healthPollMs = 3000,
 }) {

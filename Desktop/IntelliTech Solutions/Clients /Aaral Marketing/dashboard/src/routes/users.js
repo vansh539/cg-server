@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { query } = require('payment-ledger-core/db');
 const { requireAdmin } = require('../sessionAuth');
+const { logActivity } = require('../activityLog');
 
 const router = express.Router();
 const MIN_PASSWORD_LENGTH = 6;
@@ -28,6 +29,7 @@ router.post('/users', requireAdmin, async (req, res) => {
        VALUES ($1, $2, $3, $4) RETURNING id, username, display_name, role, active, created_at`,
       [username.trim().toLowerCase(), hash, displayName.trim(), role]
     );
+    await logActivity(req, 'added user', `${displayName.trim()} (${role})`);
     res.json({ ok: true, user: rows[0] });
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ ok: false, error: 'That username is already taken' });
@@ -41,8 +43,12 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res) => {
     return res.status(400).json({ ok: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
   }
   const hash = await bcrypt.hash(password, 10);
-  const { rowCount } = await query('UPDATE dashboard_users SET password_hash = $1 WHERE id = $2', [hash, req.params.id]);
-  if (!rowCount) return res.status(404).json({ ok: false, error: 'User not found' });
+  const { rows } = await query(
+    'UPDATE dashboard_users SET password_hash = $1 WHERE id = $2 RETURNING display_name',
+    [hash, req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+  await logActivity(req, 'reset password for', rows[0].display_name);
   res.json({ ok: true });
 });
 
@@ -50,7 +56,7 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res) => {
 // last admin able to log back in and undo it, so that specific case is
 // refused outright rather than trusting whoever's clicking to notice.
 router.post('/users/:id/toggle-active', requireAdmin, async (req, res) => {
-  const { rows } = await query('SELECT role, active FROM dashboard_users WHERE id = $1', [req.params.id]);
+  const { rows } = await query('SELECT role, active, display_name FROM dashboard_users WHERE id = $1', [req.params.id]);
   if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
   const target = rows[0];
 
@@ -64,6 +70,7 @@ router.post('/users/:id/toggle-active', requireAdmin, async (req, res) => {
   }
 
   await query('UPDATE dashboard_users SET active = $1 WHERE id = $2', [!target.active, req.params.id]);
+  await logActivity(req, target.active ? 'deactivated user' : 'activated user', target.display_name);
   res.json({ ok: true, active: !target.active });
 });
 

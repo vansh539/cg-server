@@ -117,6 +117,24 @@ app.use('/api', require('./src/routes/quotations'));
 app.use('/api', require('./src/routes/payments'));
 app.use('/api', require('./src/routes/updates'));
 app.use('/api', require('./src/routes/users'));
+app.use('/api', require('./src/routes/cementFeed'));
+app.use('/api', require('./src/routes/activityLog'));
+app.use('/api', require('./src/routes/whatsapp'));
+app.use('/api', require('./src/routes/steel'));
+app.use('/api', require('./src/routes/backup'));
+
+// The chitti stylesheet, served from the same module the PDF and JPEG
+// renderers use. chitti.html links it with media="print" (so it only applies
+// to the printed slip, not the editing form) and invoice.html links it
+// normally. Serving rather than duplicating is what stops the printed slip and
+// the PDF drifting into two different designs again.
+app.get('/chitti-print.css', (req, res) => {
+  res.type('text/css');
+  // Content changes only on deploy, but a stale copy would show a stale slip
+  // design, and this file is tiny.
+  res.set('Cache-Control', 'no-cache');
+  res.send(require('./src/chittiStyles').CHITTI_CSS);
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 

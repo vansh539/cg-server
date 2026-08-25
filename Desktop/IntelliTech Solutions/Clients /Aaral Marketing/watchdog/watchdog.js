@@ -70,12 +70,35 @@ async function notifyAdmins(message) {
   }
 }
 
+// The bridge's /health now reports the real WhatsApp state (it used to report
+// nothing, because the whole HTTP server only bound once WhatsApp had already
+// connected — so a WhatsApp outage made the service look completely dead and
+// silenced the very channel used to report it).
+async function readWaState() {
+  try {
+    const res = await fetch(HEALTH_URLS['aaral-bridge'], { signal: AbortSignal.timeout(3000) });
+    const body = await res.json();
+    return body && body.wa ? body.wa : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function sendHeartbeat() {
   try {
+    // Riding the WhatsApp state along on the heartbeat gives an OUT-OF-BAND
+    // signal. Alerting about a dead WhatsApp over WhatsApp is circular; the
+    // heartbeat lands on a different machine entirely, so this is the one
+    // channel that still works when WhatsApp here is the thing that is broken.
+    const wa = await readWaState();
     await fetch(HEARTBEAT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hostname: require('os').hostname(), uptimeSec: Math.floor(process.uptime()) }),
+      body: JSON.stringify({
+        hostname: require('os').hostname(),
+        uptimeSec: Math.floor(process.uptime()),
+        whatsapp: wa ? { state: wa.state, recovering: wa.recovering, lastError: wa.lastError } : { state: 'unknown' },
+      }),
     });
   } catch (err) {
     // Expected during a real network/power outage — heartbeatMonitor.js on

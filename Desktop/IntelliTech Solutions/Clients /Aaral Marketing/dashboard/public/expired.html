@@ -4,11 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>License Issue — Aaral Marketing Ledger Dashboard</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #191048; --navy-deep: #0c0828; --cyan: #00aeef; --cyan-soft: #7fd8f7;
+      --concrete: #ece7dc; --paper: #fcfaf6; --ink: #1d1a2b; --ink-muted: #6f6a5c; --line: #e2dccb;
+    }
     body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      background: #f4f4f4;
+      font-family: 'IBM Plex Sans', system-ui, sans-serif;
+      background: linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -16,42 +21,51 @@
       padding: 24px;
     }
     .card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+      background: var(--paper);
+      border-radius: 20px;
+      box-shadow: 0 32px 60px -22px rgba(25,16,72,0.4);
       max-width: 480px;
       width: 100%;
-      padding: 40px 36px;
+      padding: 44px 38px;
       text-align: center;
+      border: 1px solid var(--line);
     }
-    .icon { font-size: 52px; margin-bottom: 16px; }
-    h1 { font-size: 1.4rem; color: #1a1a1a; margin-bottom: 10px; }
-    p  { font-size: 0.95rem; color: #555; line-height: 1.6; margin-bottom: 20px; }
+    .icon-wrap {
+      width: 56px; height: 56px; border-radius: 16px; background: var(--concrete);
+      display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;
+      color: var(--navy);
+    }
+    h1 { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+    p  { font-size: 0.95rem; color: var(--ink-muted); line-height: 1.6; margin-bottom: 20px; }
     .contact {
-      background: #f8f8f8;
-      border: 1px solid #ddd;
-      border-radius: 8px;
+      background: var(--concrete);
+      border: 1px solid var(--line);
+      border-radius: 12px;
       padding: 16px 20px;
       font-size: 0.9rem;
-      color: #333;
+      color: var(--ink);
       line-height: 1.8;
+      text-align: left;
     }
-    .contact strong { color: #1a5c38; }
+    .contact strong { color: var(--navy); font-family: 'Space Grotesk', sans-serif; }
     .reason {
       display: inline-block;
-      background: #fff3cd;
-      border: 1px solid #ffc107;
-      color: #856404;
-      border-radius: 6px;
-      padding: 6px 14px;
-      font-size: 0.82rem;
+      background: #fbf1d6;
+      border: 1px solid #e9bb3f;
+      color: #6b5310;
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 0.8rem;
+      font-weight: 600;
       margin-bottom: 20px;
     }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="icon">🔒</div>
+    <div class="icon-wrap">
+      <svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="12" height="8" rx="2"/><path d="M6.5 9V6a3.5 3.5 0 0 1 7 0v3"/></svg>
+    </div>
     <h1>Software License Issue</h1>
     <div class="reason" id="reason">License expired or invalid</div>
     <p>
@@ -61,8 +75,8 @@
     <div class="contact">
       <strong>IntelliTech Solutions</strong><br>
       Vansh Jalan<br>
-      📞 Contact your representative<br>
-      🌐 intellitechsolutions.in
+      Contact your representative<br>
+      intellitechsolutions.in
     </div>
   </div>
   <script>

@@ -1,0 +1,238 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Aaral Marketing — Home</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aaral Marketing">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#191048">
+<link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .dash-columns { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .dash-columns { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<script src="/auth-nav.js"></script>
+
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand-row" href="/dashboard.html">
+      <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+      <div>
+        <div class="brand-name">Aaral Marketing</div>
+        <div class="brand-sub">Ledger &amp; billing</div>
+      </div>
+    </a>
+
+    <a class="nav-item active" href="/dashboard.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 10 4l7 6.5"/><path d="M5 9v7a1 1 0 0 0 1 1h3v-5h2v5h3a1 1 0 0 0 1-1V9"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="nav-item" href="/customers.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/><path d="M12.6 13.1c1.7.2 3 1.7 3.4 3.9"/></svg>
+      <span>Customers</span>
+    </a>
+    <a class="nav-item" href="/quotation.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg>
+      <span>New Quotation</span>
+    </a>
+    <a class="nav-item" href="/chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>New Slip</span>
+    </a>
+    <a class="nav-item" href="/payment.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>New Payment</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Iron &amp; Steel</div>
+    <a class="nav-item" href="/steel-chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>Steel Chitti</span>
+    </a>
+    <a class="nav-item" href="/steel-stock.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 17 6.2v7.6L10 17.5 3 13.8V6.2z"/><path d="M3 6.2 10 10l7-3.8M10 10v7.5"/></svg>
+      <span>Steel Stock</span>
+    </a>
+    <a class="nav-item" href="/steel-reports.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17V9M9.5 17V3M15.5 17v-6"/><path d="M2.5 17h15"/></svg>
+      <span>Steel Reports</span>
+    </a>
+
+    <div class="nav-divider" data-admin-only></div>
+    <div class="nav-section-label" data-admin-only>Admin</div>
+    <a class="nav-item" href="/updates.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3"/><path d="M14.2 5.7H17V3"/><path d="M5.8 14.3H3V17"/></svg>
+      <span>Updates</span>
+    </a>
+    <a class="nav-item" href="/users.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16 5v5c0 4-2.7 6.5-6 7.5-3.3-1-6-3.5-6-7.5V5z"/><path d="M7.3 9.8l1.9 1.9 3.5-3.9"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item" href="/personnel-tracking.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M7.5 3h5v1.6h-5z"/><path d="M7 8h6M7 11h6M7 14h3.5"/></svg>
+      <span>Personnel Tracking</span>
+    </a>
+
+    <a class="nav-item" href="/backup.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v10.5M6.5 9.5 10 13l3.5-3.5"/><path d="M4 13.5v2A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      <span>Backup</span>
+    </a>
+
+    <div class="profile-card" id="profileCard" style="display:none;">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div class="profile-meta">
+        <div class="profile-name" id="profileName">—</div>
+        <div class="profile-role" id="profileRole">—</div>
+      </div>
+      <button class="profile-logout" id="navLogoutBtn" type="button" title="Log out">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/><path d="M13 14l4-4-4-4"/><path d="M17 10H7"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="content-inner">
+      <div class="topbar">
+        <div>
+          <div class="page-eyebrow" id="todayLabel">Today</div>
+          <h1 class="page-title" id="greeting">Built on cement, run on trust.</h1>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="statGrid">
+        <div class="stat-card">
+          <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15c1-6 3-9 6-9s5 3 6 9"/><path d="M3 15h14"/></svg></div></div>
+          <div class="stat-label">Outstanding</div>
+          <div class="stat-value rust" id="statOutstanding">—</div>
+          <div class="stat-caption" id="statOutstandingCaption">&nbsp;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l4 4 10-10"/></svg></div></div>
+          <div class="stat-label">In Credit</div>
+          <div class="stat-value moss" id="statCredit">—</div>
+          <div class="stat-caption">&nbsp;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/></svg></div></div>
+          <div class="stat-label">Active Customers</div>
+          <div class="stat-value" id="statCustomers">—</div>
+          <div class="stat-caption">&nbsp;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15V9M8 15V5M13 15v-7M17 15V3"/></svg></div></div>
+          <div class="stat-label">This Month</div>
+          <div class="stat-value cyan" id="statMonth">—</div>
+          <div class="stat-caption" id="statMonthCaption">&nbsp;</div>
+        </div>
+      </div>
+
+      <div class="action-grid">
+        <a class="action-card" href="/chitti.html">
+          <div class="action-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg></div>
+          <div><h4 class="action-title">New Slip</h4><p class="action-desc">Write up a sale and print it.</p></div>
+        </a>
+        <a class="action-card" href="/quotation.html">
+          <div class="action-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg></div>
+          <div><h4 class="action-title">New Quotation</h4><p class="action-desc">Quote a price — nothing goes in the ledger.</p></div>
+        </a>
+        <a class="action-card" href="/payment.html">
+          <div class="action-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg></div>
+          <div><h4 class="action-title">New Payment</h4><p class="action-desc">Record a payment against an account.</p></div>
+        </a>
+      </div>
+
+      <div class="dash-columns">
+        <div class="panel">
+          <div class="panel-header">Recent activity</div>
+          <div id="activityList">
+            <div class="empty-state">Loading…</div>
+          </div>
+        </div>
+        <div class="panel fact-panel">
+          <div class="fact-badge">Did you know</div>
+          <p class="fact-text">Water aside, concrete is the most-used man-made material on Earth by volume — more than steel, plastic and aluminium put together.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+
+function fmt(n) {
+  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.abs(Number(n)));
+}
+function timeAgo(iso) {
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const isToday = new Date().toDateString() === d.toDateString();
+  const timeStr = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  if (isToday) return `Today, ${timeStr}`;
+  const yest = new Date(); yest.setDate(yest.getDate() - 1);
+  if (yest.toDateString() === d.toDateString()) return `Yesterday, ${timeStr}`;
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+async function loadSummary() {
+  try {
+    const res = await fetch('/api/dashboard/summary');
+    const s = await res.json();
+    document.getElementById('statOutstanding').textContent = `₹${fmt(s.outstanding)}`;
+    document.getElementById('statCredit').textContent = `₹${fmt(s.credit)}`;
+    document.getElementById('statCustomers').textContent = s.customerCount;
+    document.getElementById('statMonth').textContent = `₹${fmt(s.monthSales)}`;
+    document.getElementById('statMonthCaption').textContent = `${s.monthSlipCount} slip${s.monthSlipCount === 1 ? '' : 's'} issued`;
+  } catch (err) {
+    console.error('Failed to load dashboard summary', err);
+  }
+}
+
+async function loadActivity() {
+  const listEl = document.getElementById('activityList');
+  try {
+    const res = await fetch('/api/dashboard/activity');
+    const rows = await res.json();
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="empty-state">No activity yet.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map((r) => {
+      const isInvoice = r.type === 'invoice';
+      const dotClass = isInvoice ? 'rust' : 'moss';
+      const amountColor = isInvoice ? 'var(--rust)' : 'var(--moss)';
+      const title = isInvoice ? `${r.customer_name} — New Slip` : `${r.customer_name} — Payment received`;
+      return `<div class="activity-row">
+        <div class="activity-dot ${dotClass}"></div>
+        <div><div class="activity-title">${title}</div><div class="activity-meta">${timeAgo(r.occurred_at)}</div></div>
+        <div class="activity-amount" style="color:${amountColor};">₹${fmt(r.amount)}</div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    listEl.innerHTML = '<div class="empty-state">Couldn’t load activity.</div>';
+    console.error('Failed to load activity', err);
+  }
+}
+
+loadSummary();
+loadActivity();
+</script>
+<script>
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

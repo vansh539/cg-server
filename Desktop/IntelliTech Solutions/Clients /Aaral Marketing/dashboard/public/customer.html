@@ -16,94 +16,154 @@
   tr.payment td.num { color: var(--moss); }
   a.invoice-link { color: var(--navy); font-weight: 600; text-decoration: none; }
   a.invoice-link:hover { color: var(--cyan); text-decoration: underline; }
-  .type-badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0.55rem; border-radius: 6px; }
+  .type-badge { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0.55rem; border-radius: 6px; }
   tr.invoice .type-badge { color: var(--rust); background: var(--rust-bg); }
   tr.payment .type-badge { color: var(--moss); background: var(--moss-bg); }
 
-  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; gap: 1rem; flex-wrap: wrap; }
-
-  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(12,8,40,0.45); z-index: 20; align-items: center; justify-content: center; }
-  .modal-backdrop.open { display: flex; }
-  .modal-box { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.6rem; width: 100%; max-width: 360px; }
-  .modal-box h3 { margin: 0 0 1.1rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
-  .modal-box label { display: block; font-size: 0.9rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
-  .modal-box .field-group { margin-bottom: 1.1rem; }
-  .modal-box .hint { font-size: 0.78rem; color: var(--ink-muted); margin-top: -0.7rem; margin-bottom: 1.1rem; }
-  .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; }
-  .btn-secondary { background: none; border: 1px solid var(--line); color: var(--ink-muted); border-radius: 999px; padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
-  .btn-secondary:hover { background: var(--concrete); }
-  .btn-danger { background: var(--rust-bg); border: 1px solid var(--rust); color: var(--rust); border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+  .btn-danger { background: var(--rust-bg); border: 1px solid var(--rust); color: var(--rust); border-radius: 999px; padding: 0.5rem 1rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
   .btn-danger:hover { background: var(--rust); color: #fff; }
   .row-actions { display: flex; gap: 0.5rem; align-items: center; white-space: nowrap; }
   .row-actions a { color: var(--navy); font-weight: 600; font-size: 0.78rem; text-decoration: none; }
   .row-actions a:hover { text-decoration: underline; }
-  .voided-badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); background: var(--concrete); padding: 0.2rem 0.55rem; border-radius: 6px; }
+  .row-actions .btn-danger { padding: 0.3rem 0.7rem; font-size: 0.75rem; }
+  .voided-badge { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); background: var(--concrete); padding: 0.2rem 0.55rem; border-radius: 6px; }
   tr.voided td { opacity: 0.55; }
   tr.voided td.num { text-decoration: line-through; }
+
+  .cust-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 22px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 26px 28px; margin-bottom: 22px; flex-wrap: wrap; }
+  .cust-header-left { display: flex; gap: 17px; align-items: center; }
+  .cust-avatar-lg { width: 62px; height: 62px; border-radius: 16px; background: linear-gradient(135deg, var(--navy), var(--navy-2)); color: var(--cyan-soft); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; box-shadow: inset 0 0 0 1px rgba(0,174,239,0.25); flex-shrink: 0; }
+  .cust-header-name { font-family: var(--font-display); font-weight: 700; font-size: 1.28rem; color: var(--navy); }
+  .cust-header-phone { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink-muted); margin-top: 4px; }
+  .cust-header-sub { font-size: 0.78rem; color: var(--ink-muted); margin-top: 6px; }
+  .cust-header-right { text-align: right; }
+  .cust-balance-label { font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .cust-balance-value { font-family: var(--font-display); font-size: 1.9rem; font-weight: 700; margin-top: 4px; }
+  .cust-actions { display: flex; gap: 9px; margin-top: 14px; justify-content: flex-end; flex-wrap: wrap; }
 </style>
 </head>
 <body>
 <script src="/auth-nav.js"></script>
 
-<div class="hero">
-  <div class="hero-inner">
-    <div class="hero-top">
-      <div class="brand-mark">
-        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
-        <div class="brand-text">
-          <h1>Aaral Marketing</h1>
-          <p>Cement &amp; Building Materials Ledger</p>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand-row" href="/dashboard.html">
+      <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+      <div>
+        <div class="brand-name">Aaral Marketing</div>
+        <div class="brand-sub">Ledger &amp; billing</div>
+      </div>
+    </a>
+
+    <a class="nav-item" href="/dashboard.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 10 4l7 6.5"/><path d="M5 9v7a1 1 0 0 0 1 1h3v-5h2v5h3a1 1 0 0 0 1-1V9"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="nav-item active" href="/customers.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/><path d="M12.6 13.1c1.7.2 3 1.7 3.4 3.9"/></svg>
+      <span>Customers</span>
+    </a>
+    <a class="nav-item" href="/quotation.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg>
+      <span>New Quotation</span>
+    </a>
+    <a class="nav-item" href="/chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>New Slip</span>
+    </a>
+    <a class="nav-item" href="/payment.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>New Payment</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Iron &amp; Steel</div>
+    <a class="nav-item" href="/steel-chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>Steel Chitti</span>
+    </a>
+    <a class="nav-item" href="/steel-stock.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 17 6.2v7.6L10 17.5 3 13.8V6.2z"/><path d="M3 6.2 10 10l7-3.8M10 10v7.5"/></svg>
+      <span>Steel Stock</span>
+    </a>
+    <a class="nav-item" href="/steel-reports.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17V9M9.5 17V3M15.5 17v-6"/><path d="M2.5 17h15"/></svg>
+      <span>Steel Reports</span>
+    </a>
+
+    <div class="nav-divider" data-admin-only></div>
+    <div class="nav-section-label" data-admin-only>Admin</div>
+    <a class="nav-item" href="/updates.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3"/><path d="M14.2 5.7H17V3"/><path d="M5.8 14.3H3V17"/></svg>
+      <span>Updates</span>
+    </a>
+    <a class="nav-item" href="/users.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16 5v5c0 4-2.7 6.5-6 7.5-3.3-1-6-3.5-6-7.5V5z"/><path d="M7.3 9.8l1.9 1.9 3.5-3.9"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item" href="/personnel-tracking.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M7.5 3h5v1.6h-5z"/><path d="M7 8h6M7 11h6M7 14h3.5"/></svg>
+      <span>Personnel Tracking</span>
+    </a>
+
+    <a class="nav-item" href="/backup.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v10.5M6.5 9.5 10 13l3.5-3.5"/><path d="M4 13.5v2A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      <span>Backup</span>
+    </a>
+
+    <div class="profile-card" id="profileCard" style="display:none;">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div class="profile-meta">
+        <div class="profile-name" id="profileName">—</div>
+        <div class="profile-role" id="profileRole">—</div>
+      </div>
+      <button class="profile-logout" id="navLogoutBtn" type="button" title="Log out">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/><path d="M13 14l4-4-4-4"/><path d="M17 10H7"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="content-inner">
+      <a class="back-link" href="/customers.html">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-5-5 5-5"/></svg>
+        All customers
+      </a>
+
+      <div class="cust-header">
+        <div class="cust-header-left">
+          <div class="cust-avatar-lg" id="customerAvatar">—</div>
+          <div>
+            <div class="cust-header-name" id="customerName">Loading…</div>
+            <div class="cust-header-phone" id="customerPhone">—</div>
+            <div class="cust-header-sub"><span id="statEntries">—</span> ledger entries</div>
+          </div>
+        </div>
+        <div>
+          <div class="cust-header-right">
+            <div class="cust-balance-label">Balance</div>
+            <div class="cust-balance-value" id="customerBalance">—</div>
+          </div>
+          <div class="cust-actions">
+            <button class="btn-ghost" id="openOldBalance" type="button">+ Opening Balance</button>
+            <button class="btn-ghost" id="sendLedgerWhatsapp" type="button">Send Ledger on WhatsApp</button>
+            <button class="btn-danger" id="openDeleteCustomer" type="button" data-admin-only>Delete Customer</button>
+          </div>
         </div>
       </div>
-      <nav class="hero-nav">
-        <a href="/">Home</a>
-        <a href="/customers.html">Customers</a>
-        <a href="/quotation.html">New Quotation</a>
-        <a href="/chitti.html">New Slip</a>
-        <a href="/payment.html">New Payment</a>
-        <a href="/updates.html" data-admin-only>Updates</a>
-        <a href="/users.html" data-admin-only>Users</a>
-      </nav>
-    </div>
-    <div class="hero-heading">
-      <div class="eyebrow" id="customerPhone">Customer Ledger</div>
-      <h2 id="customerName">Loading…</h2>
-    </div>
-    <div class="stat-row">
-      <div class="stat-tile">
-        <div class="label">Balance</div>
-        <div class="value" id="customerBalance">—</div>
-      </div>
-      <div class="stat-tile">
-        <div class="label">Entries</div>
-        <div class="value" id="statEntries">—</div>
+
+      <div id="ledgerSendStatus" style="font-size:0.85rem; margin-bottom:1rem;"></div>
+
+      <div class="table-panel">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Amount</th><th class="num">Balance</th><th>Actions</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
       </div>
     </div>
-  </div>
-  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
-    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
-    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
-  </svg>
-</div>
-
-<div class="page">
-  <div class="toolbar">
-    <a class="back-link" href="/customers.html" style="margin:0;">&larr; All customers</a>
-    <div style="display:flex; gap:0.6rem;">
-      <button class="btn-primary" id="openOldBalance" type="button">+ Add Opening Balance</button>
-      <button class="btn-danger" id="openDeleteCustomer" type="button" style="padding:0.6rem 1.1rem;" data-admin-only>Delete Customer</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Amount</th><th class="num">Balance</th><th>Actions</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </div>
+  </main>
 </div>
 
 <div class="modal-backdrop" id="oldBalanceModal">
@@ -113,7 +173,7 @@
       <label>Amount</label>
       <input type="number" id="oldBalanceAmount" step="0.01" placeholder="e.g. 15000">
     </div>
-    <div class="hint">Positive = customer owed this before this system was set up. Negative = they were in credit.</div>
+    <div class="hint" style="font-size:0.78rem;color:var(--ink-muted);margin-top:-0.7rem;margin-bottom:1.1rem;">Positive = customer owed this before this system was set up. Negative = they were in credit.</div>
     <div class="field-group">
       <label>As of date</label>
       <input type="date" id="oldBalanceDate">
@@ -133,11 +193,11 @@
 <div class="modal-backdrop" id="voidModal">
   <div class="modal-box">
     <h3 id="voidModalTitle">Void Entry</h3>
-    <div class="hint" style="margin-top:-0.3rem;">This keeps it visible in the history but removes it from the balance. It can't be undone from here.</div>
+    <div class="hint" style="font-size:0.78rem;color:var(--ink-muted);margin-top:-0.3rem;margin-bottom:1.1rem;">This keeps it visible in the history but removes it from the balance. It can't be undone from here.</div>
     <div id="voidError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelVoid" type="button">Cancel</button>
-      <button class="btn-danger" id="confirmVoid" type="button" style="padding:0.6rem 1.1rem;">Void</button>
+      <button class="btn-danger" id="confirmVoid" type="button">Void</button>
     </div>
   </div>
 </div>
@@ -145,11 +205,11 @@
 <div class="modal-backdrop" id="deleteModal">
   <div class="modal-box">
     <h3 id="deleteModalTitle">Delete Entry</h3>
-    <div class="hint" style="margin-top:-0.3rem;">This permanently removes it and adjusts the balance. It cannot be undone.</div>
+    <div class="hint" style="font-size:0.78rem;color:var(--ink-muted);margin-top:-0.3rem;margin-bottom:1.1rem;">This permanently removes it and adjusts the balance. It cannot be undone.</div>
     <div id="deleteError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelDelete" type="button">Cancel</button>
-      <button class="btn-danger" id="confirmDelete" type="button" style="padding:0.6rem 1.1rem;">Delete Permanently</button>
+      <button class="btn-danger" id="confirmDelete" type="button">Delete Permanently</button>
     </div>
   </div>
 </div>
@@ -157,7 +217,7 @@
 <div class="modal-backdrop" id="deleteCustomerModal">
   <div class="modal-box">
     <h3>Delete Customer</h3>
-    <div class="hint" style="margin-top:-0.3rem;">This permanently deletes <strong id="deleteCustomerName"></strong> and every invoice, item, due, and payment ever recorded for them. There is no undo.</div>
+    <div class="hint" style="font-size:0.78rem;color:var(--ink-muted);margin-top:-0.3rem;margin-bottom:1.1rem;">This permanently deletes <strong id="deleteCustomerName"></strong> and every invoice, item, due, and payment ever recorded for them. There is no undo.</div>
     <div class="field-group">
       <label>Type the customer's name to confirm</label>
       <input type="text" id="deleteCustomerConfirmName" autocomplete="off">
@@ -165,12 +225,10 @@
     <div id="deleteCustomerError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelDeleteCustomer" type="button">Cancel</button>
-      <button class="btn-danger" id="confirmDeleteCustomer" type="button" style="padding:0.6rem 1.1rem;" disabled>Delete Customer Permanently</button>
+      <button class="btn-danger" id="confirmDeleteCustomer" type="button" disabled>Delete Customer Permanently</button>
     </div>
   </div>
 </div>
-
-<footer class="footer-credit">Powered by IntelliTech Solutions</footer>
 
 <script>
 const params = new URLSearchParams(window.location.search);
@@ -182,6 +240,13 @@ function balanceColor(balance) {
   if (Number(balance) > 0) return 'var(--rust)';
   if (Number(balance) < 0) return 'var(--moss)';
   return 'var(--ink-muted)';
+}
+
+function initials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '—';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 async function load() {
@@ -207,12 +272,15 @@ async function load() {
     const deleteBtn = (type, id) => (isAdmin ? `<button class="btn-danger" data-delete-type="${type}" data-delete-id="${id}">Delete</button>` : '');
 
     let actions;
+    // Void was removed from these rows on request. Existing voided entries are
+    // still shown as such -- there are real voided rows in the data and hiding
+    // that would misrepresent the ledger -- but nothing new can be voided from
+    // here. Delete (admin-only) remains the way to remove an entry.
     if (e.type === 'invoice' && e.invoice_id) {
       // Real invoice-backed row.
       actions = e.voided
         ? `${viewInvoice}<span class="voided-badge">Voided</span>${deleteBtn('invoice', e.invoice_id)}`
         : `${viewInvoice}<a href="/edit-invoice.html?id=${e.invoice_id}">Edit</a>
-           <button class="btn-danger" data-void-type="invoice" data-void-id="${e.invoice_id}">Void</button>
            ${deleteBtn('invoice', e.invoice_id)}`;
     } else if (e.type === 'invoice' && !e.invoice_id) {
       // Standalone due (Opening Balance) -- never voided, delete-only.
@@ -225,8 +293,7 @@ async function load() {
       // Standalone payment.
       actions = e.voided
         ? `<span class="voided-badge">Voided</span>${deleteBtn('payment', e.id)}`
-        : `<button class="btn-danger" data-void-type="payment" data-void-id="${e.id}">Void</button>
-           ${deleteBtn('payment', e.id)}`;
+        : `${deleteBtn('payment', e.id)}`;
     }
     actions = `<div class="row-actions">${actions}</div>`;
 
@@ -235,6 +302,7 @@ async function load() {
   });
   document.getElementById('customerName').textContent = customer.name;
   document.getElementById('customerPhone').textContent = customer.phone_number;
+  document.getElementById('customerAvatar').textContent = initials(customer.name);
   currentCustomerName = customer.name;
   document.getElementById('statEntries').textContent = entries.length;
   const balEl = document.getElementById('customerBalance');
@@ -263,6 +331,25 @@ function closeOldBalanceModal() { oldBalanceModal.classList.remove('open'); }
 document.getElementById('openOldBalance').addEventListener('click', openOldBalanceModal);
 document.getElementById('cancelOldBalance').addEventListener('click', closeOldBalanceModal);
 oldBalanceModal.addEventListener('click', (e) => { if (e.target === oldBalanceModal) closeOldBalanceModal(); });
+
+const sendLedgerBtn = document.getElementById('sendLedgerWhatsapp');
+const ledgerSendStatus = document.getElementById('ledgerSendStatus');
+
+sendLedgerBtn.addEventListener('click', async () => {
+  sendLedgerBtn.disabled = true;
+  ledgerSendStatus.textContent = 'Sending ledger PDF on WhatsApp…';
+  ledgerSendStatus.style.color = 'var(--ink-muted)';
+  const res = await fetch(`/api/customers/${customerId}/send-ledger-whatsapp`, { method: 'POST' });
+  const data = await res.json().catch(() => ({ ok: false, error: 'Unexpected response from server' }));
+  sendLedgerBtn.disabled = false;
+  if (!data.ok) {
+    ledgerSendStatus.textContent = `Could not send ledger: ${data.error}`;
+    ledgerSendStatus.style.color = 'var(--rust)';
+    return;
+  }
+  ledgerSendStatus.textContent = 'Ledger and invoice details sent to the customer on WhatsApp.';
+  ledgerSendStatus.style.color = 'var(--moss)';
+});
 
 document.getElementById('saveOldBalance').addEventListener('click', async () => {
   const amount = oldBalanceAmount.value;

@@ -13,86 +13,129 @@
 <link rel="stylesheet" href="/styles.css">
 <style>
   .search-wrap { margin-bottom: 1.2rem; max-width: 420px; }
-
-  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(12,8,40,0.45); z-index: 20; align-items: center; justify-content: center; }
-  .modal-backdrop.open { display: flex; }
-  .modal-box { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.6rem; width: 100%; max-width: 360px; }
-  .modal-box h3 { margin: 0 0 1.1rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
-  .modal-box label { display: block; font-size: 0.9rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
-  .modal-box .field-group { margin-bottom: 1.1rem; }
-  .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; }
-  .btn-secondary { background: none; border: 1px solid var(--line); color: var(--ink-muted); border-radius: 999px; padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
-  .btn-secondary:hover { background: var(--concrete); }
 </style>
 </head>
 <body>
 <script src="/auth-nav.js"></script>
 
-<div class="hero">
-  <div class="hero-inner">
-    <div class="hero-top">
-      <div class="brand-mark">
-        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
-        <div class="brand-text">
-          <h1>Aaral Marketing</h1>
-          <p>Cement &amp; Building Materials Ledger</p>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand-row" href="/dashboard.html">
+      <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+      <div>
+        <div class="brand-name">Aaral Marketing</div>
+        <div class="brand-sub">Ledger &amp; billing</div>
+      </div>
+    </a>
+
+    <a class="nav-item" href="/dashboard.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 10 4l7 6.5"/><path d="M5 9v7a1 1 0 0 0 1 1h3v-5h2v5h3a1 1 0 0 0 1-1V9"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="nav-item active" href="/customers.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/><path d="M12.6 13.1c1.7.2 3 1.7 3.4 3.9"/></svg>
+      <span>Customers</span>
+    </a>
+    <a class="nav-item" href="/quotation.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg>
+      <span>New Quotation</span>
+    </a>
+    <a class="nav-item" href="/chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>New Slip</span>
+    </a>
+    <a class="nav-item" href="/payment.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>New Payment</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Iron &amp; Steel</div>
+    <a class="nav-item" href="/steel-chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>Steel Chitti</span>
+    </a>
+    <a class="nav-item" href="/steel-stock.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 17 6.2v7.6L10 17.5 3 13.8V6.2z"/><path d="M3 6.2 10 10l7-3.8M10 10v7.5"/></svg>
+      <span>Steel Stock</span>
+    </a>
+    <a class="nav-item" href="/steel-reports.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17V9M9.5 17V3M15.5 17v-6"/><path d="M2.5 17h15"/></svg>
+      <span>Steel Reports</span>
+    </a>
+
+    <div class="nav-divider" data-admin-only></div>
+    <div class="nav-section-label" data-admin-only>Admin</div>
+    <a class="nav-item" href="/updates.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3"/><path d="M14.2 5.7H17V3"/><path d="M5.8 14.3H3V17"/></svg>
+      <span>Updates</span>
+    </a>
+    <a class="nav-item" href="/users.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16 5v5c0 4-2.7 6.5-6 7.5-3.3-1-6-3.5-6-7.5V5z"/><path d="M7.3 9.8l1.9 1.9 3.5-3.9"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item" href="/personnel-tracking.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M7.5 3h5v1.6h-5z"/><path d="M7 8h6M7 11h6M7 14h3.5"/></svg>
+      <span>Personnel Tracking</span>
+    </a>
+
+    <a class="nav-item" href="/backup.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v10.5M6.5 9.5 10 13l3.5-3.5"/><path d="M4 13.5v2A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      <span>Backup</span>
+    </a>
+
+    <div class="profile-card" id="profileCard" style="display:none;">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div class="profile-meta">
+        <div class="profile-name" id="profileName">—</div>
+        <div class="profile-role" id="profileRole">—</div>
+      </div>
+      <button class="profile-logout" id="navLogoutBtn" type="button" title="Log out">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/><path d="M13 14l4-4-4-4"/><path d="M17 10H7"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="content-inner">
+      <div class="topbar">
+        <div>
+          <div class="page-eyebrow">Ledger overview</div>
+          <h1 class="page-title">Who owes what, at a glance.</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn-primary" id="openAddCustomer" type="button">+ Add Customer</button>
         </div>
       </div>
-      <nav class="hero-nav">
-        <a href="/">Home</a>
-        <a class="active" href="/customers.html">Customers</a>
-        <a href="/quotation.html">New Quotation</a>
-        <a href="/chitti.html">New Slip</a>
-        <a href="/payment.html">New Payment</a>
-        <a href="/updates.html" data-admin-only>Updates</a>
-        <a href="/users.html" data-admin-only>Users</a>
-      </nav>
-    </div>
-    <div class="hero-heading">
-      <div class="eyebrow">Ledger overview</div>
-      <h2>Who owes what, at a glance.</h2>
-    </div>
-    <div class="stat-row">
-      <div class="stat-tile">
-        <div class="label">Customers</div>
-        <div class="value" id="statCount">—</div>
-      </div>
-      <div class="stat-tile">
-        <div class="label">Outstanding</div>
-        <div class="value rust" id="statOwed">—</div>
-      </div>
-      <div class="stat-tile">
-        <div class="label">In credit</div>
-        <div class="value moss" id="statCredit">—</div>
-      </div>
-    </div>
-  </div>
-  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
-    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
-    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
-  </svg>
-</div>
 
-<div class="page">
-  <div class="toolbar">
-    <h3>All customers</h3>
-    <button class="btn-primary" id="openAddCustomer" type="button">+ Add Customer</button>
-  </div>
+      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+        <div class="stat-card"><div class="stat-label">Customers</div><div class="stat-value" id="statCount">—</div></div>
+        <div class="stat-card"><div class="stat-label">Outstanding</div><div class="stat-value rust" id="statOwed">—</div></div>
+        <div class="stat-card"><div class="stat-label">In credit</div><div class="stat-value moss" id="statCredit">—</div></div>
+      </div>
 
-  <div class="search-wrap">
-    <input type="text" id="search" placeholder="Search by name or phone…">
-  </div>
+      <div class="search-wrap">
+        <input type="text" id="search" placeholder="Search by name or phone…">
+      </div>
 
-  <div class="card">
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Name</th><th>Phone</th><th class="num">Balance</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
+      <div class="table-panel">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Customer</th><th>Phone</th><th class="num">Balance</th><th></th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div id="emptyState" class="empty-state" style="display:none;">No customers found.</div>
+      </div>
+
+      <div class="panel" style="margin-top:22px;">
+        <div class="panel-header">Recent activity</div>
+        <div id="activityList">
+          <div class="empty-state">Loading…</div>
+        </div>
+      </div>
     </div>
-    <div id="emptyState" class="empty-state" style="display:none;">No customers found.</div>
-  </div>
+  </main>
 </div>
 
 <div class="modal-backdrop" id="addCustomerModal">
@@ -114,16 +157,28 @@
   </div>
 </div>
 
-<footer class="footer-credit">Powered by IntelliTech Solutions</footer>
-
 <script>
 const rowsEl = document.getElementById('rows');
 const emptyEl = document.getElementById('emptyState');
+
+function initials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '—';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 function balanceClass(balance) {
   if (Number(balance) > 0) return 'owes';
   if (Number(balance) < 0) return 'credit';
   return 'settled';
+}
+
+function pillText(balance) {
+  const n = Number(balance);
+  if (n > 0) return `Owes ₹${fmt(n)}`;
+  if (n < 0) return `In credit ₹${fmt(n)}`;
+  return 'Settled';
 }
 
 function fmt(n) {
@@ -143,7 +198,10 @@ async function load(term) {
     if (bal > 0) owed += bal; else credit += -bal;
     const tr = document.createElement('tr');
     tr.className = 'clickable';
-    tr.innerHTML = `<td>${c.name}</td><td>${c.phone_number}</td><td class="num"><span class="balance-pill ${balanceClass(c.balance)}">₹${c.balance}</span></td>`;
+    tr.innerHTML = `<td><div class="cust-cell"><div class="cust-avatar">${initials(c.name)}</div><span class="cust-name">${c.name}</span></div></td>
+      <td style="font-family:var(--font-mono);color:var(--ink-muted);">${c.phone_number}</td>
+      <td class="num"><span class="balance-pill ${balanceClass(c.balance)}"><span class="dot"></span>${pillText(c.balance)}</span></td>
+      <td style="width:30px;"><svg class="row-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg></td>`;
     tr.addEventListener('click', () => { window.location.href = `/customer.html?id=${c.customer_id}`; });
     rowsEl.appendChild(tr);
   });
@@ -157,6 +215,39 @@ async function load(term) {
 
 document.getElementById('search').addEventListener('input', (e) => load(e.target.value.trim()));
 load();
+
+const ACTIVITY_METHOD_LABELS = { cash: 'Cash', gpay: 'GPay', bank_transfer: 'Bank Transfer', screenshot: 'Screenshot', utr_text: 'UTR' };
+
+async function loadActivity() {
+  const listEl = document.getElementById('activityList');
+  try {
+    const res = await fetch('/api/activity');
+    const data = await res.json();
+    const rows = data.activity || [];
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="empty-state">Nothing recorded yet.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map((e) => {
+      const isInvoice = e.type === 'invoice';
+      const dotClass = isInvoice ? 'rust' : 'moss';
+      const amountColor = isInvoice ? 'var(--rust)' : 'var(--moss)';
+      const sign = isInvoice ? '+' : '-';
+      const label = isInvoice
+        ? String(e.label ?? '').replace(/\b\w/g, (c) => c.toUpperCase())
+        : (ACTIVITY_METHOD_LABELS[e.label] || e.label);
+      return `<div class="activity-row">
+        <div class="activity-dot ${dotClass}"></div>
+        <div><div class="activity-title"><a href="/customer.html?id=${e.customer_id}">${e.customer_name}</a></div><div class="activity-meta">${e.type} · ${label}</div></div>
+        <div class="activity-amount" style="color:${amountColor};">${sign}₹${fmt(Number(e.amount))}</div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    listEl.innerHTML = '<div class="empty-state">Couldn’t load activity.</div>';
+    console.error('Failed to load activity', err);
+  }
+}
+loadActivity();
 
 const modal = document.getElementById('addCustomerModal');
 const nameInput = document.getElementById('newCustomerName');

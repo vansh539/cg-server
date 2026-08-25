@@ -1,0 +1,524 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Steel Chitti — Aaral Marketing</title>
+<link rel="icon" href="/assets/aaral-logo-small.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aaral Marketing">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#191048">
+<link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/chitti-print.css" media="print">
+<style>
+  .form-card { padding: 1.6rem; }
+  .form-card label { display: block; font-size: 0.95rem; color: var(--ink-muted); font-weight: 500; margin-bottom: 0.35rem; }
+  .field-group { margin-bottom: 1.1rem; max-width: 260px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 620px; }
+
+  #itemsTable { width: 100%; border-collapse: collapse; margin-top: 0.4rem; table-layout: fixed; }
+  #itemsTable th, #itemsTable td { border: 1px solid #000; padding: 0.5rem; font-size: 0.85rem; text-align: left; }
+  #itemsTable tbody td { overflow: hidden; text-overflow: ellipsis; }
+  #itemsTable th { background: #eee; text-transform: uppercase; font-size: 0.72rem; }
+  #itemsTable td input { border: none; width: 100%; font-family: inherit; background: transparent; padding: 0; }
+  #itemsTable td input:focus { outline: none; }
+  .row-amount, .totals span { font-variant-numeric: tabular-nums; }
+  .stock-badge { display: inline-block; width: 1.4em; text-align: center; cursor: default; }
+
+  col.s-sl { width: 5%; }
+  col.s-particulars { width: 30%; }
+  col.s-pcs { width: 10%; }
+  col.s-qty { width: 13%; }
+  col.s-rate { width: 13%; }
+  col.s-amount { width: 19%; }
+  col.s-actions { width: 6%; }
+
+  button.add-row { margin-top: 0.8rem; padding: 0.5rem 1rem; font-size: 0.85rem; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; cursor: pointer; }
+  button.add-row:hover { background: var(--concrete); }
+  button.row-del { border: none; background: none; color: var(--rust); cursor: pointer; font-size: 1rem; }
+
+  .charges-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem 1.2rem; max-width: 700px; }
+  .charges-grid input[readonly] { background: var(--concrete); color: var(--ink-muted); }
+  .toggle-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.9rem 0; font-size: 0.95rem; }
+  .toggle-row input { width: 1.15em; height: 1.15em; cursor: pointer; }
+
+  .totals { margin-top: 1.2rem; max-width: 340px; margin-left: auto; }
+  .totals .sr { display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem; }
+  .totals .sr.muted { color: var(--ink-muted); }
+  .totals .sr.grand { font-weight: 700; font-size: 1.25rem; border-top: 2px solid #000; padding-top: 0.6rem; margin-top: 0.4rem; font-family: 'Space Grotesk', sans-serif; color: var(--navy); }
+
+  .unmatched-warn { background: #fef2f2; border: 1.5px solid #fecaca; color: #991b1b; border-radius: 8px; padding: 0.7rem 0.9rem; margin-top: 0.8rem; font-size: 0.85rem; font-weight: 600; }
+  #printHost { display: none; }
+  @media print {
+    body > *:not(#printHost) { display: none !important; }
+    #printHost { display: block !important; }
+  }
+</style>
+</head>
+<body>
+<script src="/auth-nav.js"></script>
+
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand-row" href="/dashboard.html">
+      <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+      <div>
+        <div class="brand-name">Aaral Marketing</div>
+        <div class="brand-sub">Ledger &amp; billing</div>
+      </div>
+    </a>
+
+    <a class="nav-item" href="/dashboard.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 10 4l7 6.5"/><path d="M5 9v7a1 1 0 0 0 1 1h3v-5h2v5h3a1 1 0 0 0 1-1V9"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="nav-item" href="/customers.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8.2" r="2.3"/><path d="M2.3 17c.5-3.1 2.3-4.7 4.7-4.7s4.2 1.6 4.7 4.7"/><path d="M12.6 13.1c1.7.2 3 1.7 3.4 3.9"/></svg>
+      <span>Customers</span>
+    </a>
+    <a class="nav-item" href="/quotation.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h6l3 3V17a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M12 2.5V6h3"/><path d="M7 10h6M7 13h6M7 7h3"/></svg>
+      <span>New Quotation</span>
+    </a>
+    <a class="nav-item" href="/chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>New Slip</span>
+    </a>
+    <a class="nav-item" href="/payment.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="15" height="10.5" rx="2"/><path d="M2.5 8.5h15"/><circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>New Payment</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Iron &amp; Steel</div>
+    <a class="nav-item active" href="/steel-chitti.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10v15l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>
+      <span>Steel Chitti</span>
+    </a>
+    <a class="nav-item" href="/steel-stock.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 17 6.2v7.6L10 17.5 3 13.8V6.2z"/><path d="M3 6.2 10 10l7-3.8M10 10v7.5"/></svg>
+      <span>Steel Stock</span>
+    </a>
+    <a class="nav-item" href="/steel-reports.html">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17V9M9.5 17V3M15.5 17v-6"/><path d="M2.5 17h15"/></svg>
+      <span>Steel Reports</span>
+    </a>
+
+    <div class="nav-divider" data-admin-only></div>
+    <div class="nav-section-label" data-admin-only>Admin</div>
+    <a class="nav-item" href="/updates.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3"/><path d="M14.2 5.7H17V3"/><path d="M5.8 14.3H3V17"/></svg>
+      <span>Updates</span>
+    </a>
+    <a class="nav-item" href="/users.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16 5v5c0 4-2.7 6.5-6 7.5-3.3-1-6-3.5-6-7.5V5z"/><path d="M7.3 9.8l1.9 1.9 3.5-3.9"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item" href="/personnel-tracking.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M7.5 3h5v1.6h-5z"/><path d="M7 8h6M7 11h6M7 14h3.5"/></svg>
+      <span>Personnel Tracking</span>
+    </a>
+
+    <a class="nav-item" href="/backup.html" data-admin-only>
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v10.5M6.5 9.5 10 13l3.5-3.5"/><path d="M4 13.5v2A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      <span>Backup</span>
+    </a>
+
+    <div class="profile-card" id="profileCard" style="display:none;">
+      <div class="profile-avatar" id="profileAvatar">--</div>
+      <div class="profile-meta">
+        <div class="profile-name" id="profileName">—</div>
+        <div class="profile-role" id="profileRole">—</div>
+      </div>
+      <button class="profile-logout" id="navLogoutBtn" type="button" title="Log out">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/><path d="M13 14l4-4-4-4"/><path d="M17 10H7"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="content-inner">
+      <div class="topbar no-print">
+        <div>
+          <div class="page-eyebrow">Iron &amp; Steel</div>
+          <h1 class="page-title">Steel Chitti</h1>
+        </div>
+      </div>
+
+      <div class="card form-card no-print">
+        <div class="grid2">
+          <div class="field-group">
+            <label>M/s. (Customer name)</label>
+            <input type="text" id="fCustomer" placeholder="Customer name">
+          </div>
+          <div class="field-group">
+            <label>Date</label>
+            <input type="date" id="fDate">
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field-group">
+            <label>Lorry No.</label>
+            <input type="text" id="fLorry" placeholder="TS08AB1234">
+          </div>
+        </div>
+
+        <label>Items</label>
+        <table id="itemsTable">
+          <colgroup>
+            <col class="s-sl"><col class="s-particulars"><col class="s-pcs">
+            <col class="s-qty"><col class="s-rate"><col class="s-amount"><col class="s-actions">
+          </colgroup>
+          <thead>
+            <tr><th>Sl</th><th>Particulars</th><th>Pcs</th><th>Qty (Kg)</th><th>Rate</th><th>Amount</th><th></th></tr>
+          </thead>
+          <tbody id="rowsBody"></tbody>
+        </table>
+        <div style="font-size:0.78rem;color:var(--ink-muted);margin:0.4rem 0 0.2rem;">
+          Leave Qty (kg) blank and fill Pcs + Rate for items sold by piece (no kg stock kept) — amount = Pcs × Rate.
+        </div>
+        <button class="add-row" type="button" id="addRowBtn">+ Add item</button>
+
+        <h3 style="margin-top:1.4rem;">Additional charges</h3>
+        <div class="charges-grid">
+          <div class="field-group">
+            <label>Loading (₹400/1000kg)</label>
+            <input type="number" id="fLoading" readonly>
+          </div>
+          <div class="field-group">
+            <label>Kanta</label>
+            <input type="number" id="fKanta" min="0" placeholder="0">
+          </div>
+          <div class="field-group">
+            <label>Freight</label>
+            <input type="number" id="fFreight" min="0" placeholder="0">
+          </div>
+          <div class="field-group">
+            <label>Unloading</label>
+            <input type="number" id="fUnloading" min="0" placeholder="0">
+          </div>
+          <div class="field-group">
+            <label>Bending Charges</label>
+            <input type="number" id="fBending" min="0" placeholder="0">
+          </div>
+          <div class="field-group">
+            <label>Others</label>
+            <input type="number" id="fOthers" min="0" placeholder="0">
+          </div>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="fNoLoading"><label for="fNoLoading">No Loading Charges</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="fGst"><label for="fGst">Apply GST @ 18%</label>
+        </div>
+        <div class="field-group">
+          <label>Advance Received</label>
+          <input type="number" id="fAdvance" min="0" placeholder="0">
+        </div>
+        <div class="field-group" style="max-width:620px;">
+          <label>Note (optional)</label>
+          <textarea id="fNote" rows="2" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--line);border-radius:8px;font-family:inherit;"></textarea>
+        </div>
+
+        <div class="totals">
+          <div class="sr"><span>Items subtotal</span><span id="dSub">0</span></div>
+          <div class="sr muted"><span>Loading</span><span id="dLoading">0</span></div>
+          <div class="sr muted"><span>Kanta</span><span id="dKanta">0</span></div>
+          <div class="sr muted"><span>Freight</span><span id="dFreight">0</span></div>
+          <div class="sr muted"><span>Unloading</span><span id="dUnloading">0</span></div>
+          <div class="sr muted"><span>Bending Charges</span><span id="dBending">0</span></div>
+          <div class="sr muted"><span>Others</span><span id="dOthers">0</span></div>
+          <div class="sr muted"><span>GST @18%</span><span id="dGst">0</span></div>
+          <div class="sr muted"><span>Advance</span><span id="dAdvance">0</span></div>
+          <div class="sr grand"><span>Grand Total</span><span id="dTotal">0</span></div>
+        </div>
+
+        <div id="unmatchedWarn" class="unmatched-warn" style="display:none;"></div>
+        <div id="statusMsg" style="margin-top:0.6rem;font-size:0.85rem;"></div>
+
+        <div class="modal-actions" style="justify-content:flex-start;margin-top:1.2rem;">
+          <button class="btn-primary" id="printBtn" type="button">Print Chitti &amp; Deduct Stock</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="printHost"></div>
+
+<script>
+const rowsBody = document.getElementById('rowsBody');
+const statusEl = document.getElementById('statusMsg');
+const unmatchedEl = document.getElementById('unmatchedWarn');
+let stockItems = [];
+let rows = [{ particulars: '', pcs: '', qty: '', rate: '', stockItemId: null, deducted: false }];
+
+document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
+
+async function loadStockItems() {
+  try {
+    const res = await fetch('/api/steel/items');
+    stockItems = await res.json();
+    const cats = await fetch('/api/steel/categories').then((r) => r.json());
+    const catName = (id) => (cats.find((c) => c.id === id) || {}).name || '';
+    const list = document.getElementById('stockItemsList');
+    list.innerHTML = stockItems.map((it) => `<option value="${it.name} (${catName(it.categoryId)})">`).join('');
+  } catch (e) {
+    // Stock lookup failing must not block billing -- items just print without
+    // a stock link, same as an item that was never matched.
+  }
+}
+
+function matchStockItem(row, value) {
+  const trimmed = (value || '').trim().toLowerCase();
+  // Typing the bare item name directly matches here. Picking a datalist
+  // suggestion ("Name (Category)") does not, so the fallback below strips
+  // the suffix and retries -- as long as that bare name is unambiguous
+  // across all items, matching Narayani's original tool.
+  let match = stockItems.find((it) => it.name.toLowerCase() === trimmed);
+  if (!match) {
+    const bare = trimmed.replace(/\s*\([^)]*\)\s*$/, '');
+    const byBareName = stockItems.filter((it) => it.name.trim().toLowerCase() === bare);
+    if (byBareName.length === 1) match = byBareName[0];
+  }
+  row.stockItemId = match ? match.id : null;
+  if (match) row.particulars = match.name;
+}
+
+function rowAmount(row) {
+  const qty = parseFloat(row.qty) || 0;
+  const pcs = parseFloat(row.pcs) || 0;
+  const rate = parseFloat(row.rate) || 0;
+  if (qty <= 0 && pcs > 0 && rate > 0) return pcs * rate;
+  return qty * rate;
+}
+
+function rowDeductable(row) {
+  if (!row.stockItemId) return false;
+  const item = stockItems.find((it) => it.id === row.stockItemId);
+  if (!item) return false;
+  if (item.dualTrack) return (parseFloat(row.qty) || 0) > 0 && (parseFloat(row.pcs) || 0) > 0;
+  const isPcs = item.unit === 'pcs';
+  return (isPcs ? parseFloat(row.pcs) || 0 : parseFloat(row.qty) || 0) > 0;
+}
+
+function stockBadge(row) {
+  const hasQty = (parseFloat(row.qty) || 0) > 0 || (parseFloat(row.pcs) || 0) > 0;
+  if (!row.particulars.trim() || !hasQty) return '';
+  if (!row.stockItemId) return '<span class="stock-badge" title="Not linked to a stock item — will NOT be deducted from stock. Pick the item from the suggestions to link it.">⚠</span>';
+  const item = stockItems.find((it) => it.id === row.stockItemId);
+  if (item && item.dualTrack && !rowDeductable(row)) {
+    return '<span class="stock-badge" title="This item tracks both Pieces and Kg — fill in both Qty(kg) and Pcs before it can be deducted.">⚠</span>';
+  }
+  return '<span class="stock-badge" title="Linked to stock — will be deducted">🔗</span>';
+}
+
+function fmt(v) { return Math.round(v).toLocaleString('en-IN'); }
+
+function renderRows() {
+  rowsBody.innerHTML = rows.map((row, i) => {
+    const amt = rowAmount(row);
+    return `<tr>
+      <td>${i + 1}</td>
+      <td><input type="text" list="stockItemsList" value="${row.particulars.replace(/"/g, '&quot;')}" data-i="${i}" data-f="particulars"> ${stockBadge(row)}</td>
+      <td><input type="number" value="${row.pcs}" data-i="${i}" data-f="pcs"></td>
+      <td><input type="number" value="${row.qty}" data-i="${i}" data-f="qty"></td>
+      <td><input type="number" value="${row.rate}" data-i="${i}" data-f="rate"></td>
+      <td class="row-amount">${amt > 0 ? fmt(amt) : ''}</td>
+      <td><button class="row-del" type="button" data-i="${i}">&times;</button></td>
+    </tr>`;
+  }).join('');
+
+  rowsBody.querySelectorAll('input').forEach((input) => {
+    input.addEventListener('input', (e) => {
+      const i = Number(e.target.dataset.i);
+      const f = e.target.dataset.f;
+      rows[i][f] = e.target.value;
+      if (f === 'particulars') matchStockItem(rows[i], e.target.value);
+      renderRows();
+      recalc();
+      // Re-focus the cell being edited -- renderRows() rebuilds every input.
+      const again = rowsBody.querySelector(`input[data-i="${i}"][data-f="${f}"]`);
+      if (again) { again.focus(); const v = again.value; again.value = ''; again.value = v; }
+    });
+  });
+  rowsBody.querySelectorAll('.row-del').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const i = Number(e.target.dataset.i);
+      rows.splice(i, 1);
+      if (!rows.length) rows.push({ particulars: '', pcs: '', qty: '', rate: '', stockItemId: null, deducted: false });
+      renderRows();
+      recalc();
+    });
+  });
+}
+
+document.getElementById('addRowBtn').addEventListener('click', () => {
+  rows.push({ particulars: '', pcs: '', qty: '', rate: '', stockItemId: null, deducted: false });
+  renderRows();
+});
+
+function gc(id) { return parseFloat(document.getElementById(id).value) || 0; }
+
+function totalQtyKg() {
+  return rows.reduce((sum, r) => sum + (parseFloat(r.qty) || 0), 0);
+}
+
+function currentCharges() {
+  const sub = rows.reduce((sum, r) => sum + rowAmount(r), 0);
+  const tq = totalQtyKg();
+  const noLoading = document.getElementById('fNoLoading').checked;
+  const loading = noLoading ? 0 : Math.round((tq / 1000) * 400);
+  document.getElementById('fLoading').value = loading;
+  const kanta = gc('fKanta'), freight = gc('fFreight'), unloading = gc('fUnloading'), bending = gc('fBending'), others = gc('fOthers');
+  const taxable = sub + loading + kanta + freight + unloading + bending + others;
+  const gst = document.getElementById('fGst').checked ? Math.round(taxable * 0.18) : 0;
+  const advance = gc('fAdvance');
+  const total = taxable + gst - advance;
+  return { sub, loading, kanta, freight, unloading, bending, others, gst, advance, total };
+}
+
+function recalc() {
+  const c = currentCharges();
+  document.getElementById('dSub').textContent = fmt(c.sub);
+  document.getElementById('dLoading').textContent = fmt(c.loading);
+  document.getElementById('dKanta').textContent = fmt(c.kanta);
+  document.getElementById('dFreight').textContent = fmt(c.freight);
+  document.getElementById('dUnloading').textContent = fmt(c.unloading);
+  document.getElementById('dBending').textContent = fmt(c.bending);
+  document.getElementById('dOthers').textContent = fmt(c.others);
+  document.getElementById('dGst').textContent = fmt(c.gst);
+  document.getElementById('dAdvance').textContent = c.advance > 0 ? `-${fmt(c.advance)}` : fmt(0);
+  document.getElementById('dTotal').textContent = fmt(c.total);
+}
+
+['fNoLoading', 'fKanta', 'fFreight', 'fUnloading', 'fBending', 'fOthers', 'fGst', 'fAdvance'].forEach((id) => {
+  document.getElementById(id).addEventListener('input', recalc);
+});
+
+function unmatchedItemNames() {
+  return rows.filter((r) => {
+    if (!r.particulars.trim()) return false;
+    const hasAny = (parseFloat(r.qty) || 0) > 0 || (parseFloat(r.pcs) || 0) > 0;
+    if (!hasAny) return false;
+    if (!r.stockItemId) return true;
+    const item = stockItems.find((it) => it.id === r.stockItemId);
+    return item && item.dualTrack && !rowDeductable(r);
+  }).map((r) => {
+    const item = r.stockItemId && stockItems.find((it) => it.id === r.stockItemId);
+    return item && item.dualTrack ? `${r.particulars} (needs both Qty(kg) and Pcs)` : r.particulars;
+  });
+}
+
+// Deducts every linked, quantified row from stock, sequentially so a
+// mid-batch failure is reported with exactly which rows already went
+// through -- not silently partial. `deducted` guards against a second
+// Print click re-deducting the same slip.
+async function performStockDeduction() {
+  const pending = rows.filter((r) => rowDeductable(r) && !r.deducted);
+  const succeeded = [];
+  let failure = null;
+  for (const r of pending) {
+    const item = stockItems.find((it) => it.id === r.stockItemId);
+    const body = { note: `Steel Chitti to ${document.getElementById('fCustomer').value || 'walk-in'}` };
+    let label;
+    if (item.dualTrack) {
+      body.kg = parseFloat(r.qty) || 0;
+      body.pcs = parseFloat(r.pcs) || 0;
+      label = `${body.pcs} pcs / ${body.kg}kg ${r.particulars}`;
+    } else {
+      const isPcs = item.unit === 'pcs';
+      const qty = isPcs ? (parseFloat(r.pcs) || 0) : (parseFloat(r.qty) || 0);
+      body.kg = qty;
+      label = `${qty}${isPcs ? ' pcs' : 'kg'} ${r.particulars}`;
+    }
+    try {
+      const res = await fetch(`/api/steel/items/${r.stockItemId}/deduct`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const resBody = await res.json();
+      if (!res.ok) throw new Error(resBody.error || 'Deduct failed');
+      r.deducted = true;
+      succeeded.push(label);
+    } catch (err) {
+      failure = err.message;
+      break;
+    }
+  }
+  return { succeeded, failure };
+}
+
+document.getElementById('printBtn').addEventListener('click', async () => {
+  statusEl.textContent = 'Deducting stock…';
+  statusEl.style.color = 'var(--ink-muted)';
+  unmatchedEl.style.display = 'none';
+
+  const { succeeded, failure } = await performStockDeduction();
+  const unmatched = unmatchedItemNames();
+
+  if (failure) {
+    statusEl.textContent = `Stock deduction stopped: ${failure}. Deducted so far: ${succeeded.join(', ') || 'none'}. Fix the item and print again -- already-deducted rows will not be deducted twice.`;
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  if (unmatched.length) {
+    unmatchedEl.textContent = `Not linked to stock, so NOT deducted: ${unmatched.join(', ')}`;
+    unmatchedEl.style.display = 'block';
+  }
+  statusEl.textContent = succeeded.length ? `Deducted from stock: ${succeeded.join(', ')}` : '';
+  statusEl.style.color = 'var(--ink-muted)';
+
+  const c = currentCharges();
+  const payload = {
+    customerName: document.getElementById('fCustomer').value,
+    meta: { date: document.getElementById('fDate').value, lorry: document.getElementById('fLorry').value },
+    items: rows.filter((r) => r.particulars.trim() || rowAmount(r) > 0).map((r) => ({
+      particulars: r.particulars, pcs: r.pcs, qty: r.qty, rate: r.rate,
+    })),
+    charges: { loading: c.loading, kanta: c.kanta, freight: c.freight, unloading: c.unloading, bending: c.bending, gst: c.gst, others: c.others },
+    advance: c.advance,
+    note: document.getElementById('fNote').value,
+  };
+
+  let res;
+  try {
+    res = await fetch('/api/steel/chitti', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    statusEl.textContent = 'Could not prepare the slip for printing.';
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    statusEl.textContent = `Could not prepare the slip: ${data.error || 'unknown error'}`;
+    statusEl.style.color = 'var(--rust)';
+    return;
+  }
+  const { html } = await res.json();
+  document.getElementById('printHost').innerHTML = html;
+
+  const previousTitle = document.title;
+  document.title = `${document.getElementById('fCustomer').value || 'Steel-Chitti'}`.replace(/\s+/g, '-');
+  const restore = () => { document.title = previousTitle; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore);
+  window.print();
+  setTimeout(restore, 60000);
+});
+
+loadStockItems();
+renderRows();
+recalc();
+</script>
+<datalist id="stockItemsList"></datalist>
+<script>
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

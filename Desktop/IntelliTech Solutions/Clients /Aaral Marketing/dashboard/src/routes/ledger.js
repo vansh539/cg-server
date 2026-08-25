@@ -3,8 +3,114 @@ const balances = require('payment-ledger-core/ledger/balances');
 const customers = require('payment-ledger-core/ledger/customers');
 const { query, pool } = require('payment-ledger-core/db');
 const { requireAdmin } = require('../sessionAuth');
+const { notifyWithPdf, humanReason } = require('../notify');
+const { renderLedgerPdf } = require('../ledgerPdf');
+const { sanitize } = require('../invoiceFilename');
+const { formatIndian, formatDate } = require('../chittiTemplate');
+const { logActivity } = require('../activityLog');
 
 const router = express.Router();
+
+// Invoice-type entries also carry `items` (particulars/qty/rate from
+// invoice_items) so the statement can show what was actually bought, not
+// just an "Invoice #N" line -- the customer's own copy has no other way to
+// see that breakdown without asking the office to look up the invoice.
+async function fetchLedgerEntries(customerId) {
+  const { rows } = await query(
+    `SELECT 'invoice' AS type, d.id, d.description AS label, d.amount_due AS amount, d.created_at AS occurred_at,
+            d.invoice_id, d.voided
+     FROM dues d
+     WHERE d.customer_id = $1
+     UNION ALL
+     SELECT 'payment' AS type, id, proof_type AS label, amount_claimed AS amount, reported_at AS occurred_at,
+            invoice_id, (status = 'voided') AS voided
+     FROM payment_claims WHERE customer_id = $1 AND status IN ('confirmed', 'voided')
+     ORDER BY occurred_at ASC`,
+    [customerId]
+  );
+
+  const invoiceIds = [...new Set(
+    rows.filter((row) => row.type === 'invoice' && row.invoice_id).map((row) => row.invoice_id)
+  )];
+  let itemsByInvoice = {};
+  if (invoiceIds.length) {
+    const { rows: itemRows } = await query(
+      `SELECT invoice_id, particulars, qty, rate FROM invoice_items
+       WHERE invoice_id = ANY($1::uuid[]) ORDER BY s_no ASC`,
+      [invoiceIds]
+    );
+    itemsByInvoice = itemRows.reduce((acc, item) => {
+      (acc[item.invoice_id] = acc[item.invoice_id] || []).push(item);
+      return acc;
+    }, {});
+  }
+
+  let running = 0;
+  return rows.map((row) => {
+    if (!row.voided) running += row.type === 'invoice' ? Number(row.amount) : -Number(row.amount);
+    const items = row.type === 'invoice' && row.invoice_id ? (itemsByInvoice[row.invoice_id] || []) : [];
+    return { ...row, runningBalance: running, items };
+  });
+}
+
+router.get('/dashboard/summary', async (req, res) => {
+  const { rows: balRows } = await query('SELECT balance FROM customer_balances');
+  let outstanding = 0;
+  let credit = 0;
+  balRows.forEach((r) => {
+    const b = Number(r.balance);
+    if (b > 0) outstanding += b;
+    else credit += -b;
+  });
+  const { rows: monthRows } = await query(
+    `SELECT COALESCE(SUM(amount_due), 0) AS total, COUNT(*)::int AS count
+     FROM dues
+     WHERE invoice_id IS NOT NULL AND created_at >= date_trunc('month', now())`
+  );
+  res.json({
+    outstanding,
+    credit,
+    customerCount: balRows.length,
+    monthSales: Number(monthRows[0].total),
+    monthSlipCount: monthRows[0].count,
+  });
+});
+
+router.get('/dashboard/activity', async (req, res) => {
+  const { rows } = await query(
+    `SELECT 'invoice' AS type, c.name AS customer_name, d.amount_due AS amount, d.created_at AS occurred_at
+     FROM dues d
+     JOIN customers c ON c.id = d.customer_id
+     WHERE d.invoice_id IS NOT NULL
+     UNION ALL
+     SELECT 'payment' AS type, c.name AS customer_name, p.amount_claimed AS amount, p.reported_at AS occurred_at
+     FROM payment_claims p
+     JOIN customers c ON c.id = p.customer_id
+     WHERE p.status = 'confirmed'
+     ORDER BY occurred_at DESC
+     LIMIT 8`
+  );
+  res.json(rows);
+});
+
+// Powers the customers page's "Recent activity" feed -- a system-wide view
+// across every customer, not one account's ledger.
+router.get('/activity', async (_req, res) => {
+  const { rows: activity } = await query(
+    `SELECT 'invoice' AS type, d.description AS label, d.amount_due AS amount, d.created_at AS occurred_at,
+            d.invoice_id, c.name AS customer_name, c.id AS customer_id
+     FROM dues d JOIN customers c ON c.id = d.customer_id
+     WHERE NOT d.voided
+     UNION ALL
+     SELECT 'payment' AS type, pc.proof_type AS label, pc.amount_claimed AS amount, pc.reported_at AS occurred_at,
+            pc.invoice_id, c.name AS customer_name, c.id AS customer_id
+     FROM payment_claims pc JOIN customers c ON c.id = pc.customer_id
+     WHERE pc.status = 'confirmed'
+     ORDER BY occurred_at DESC
+     LIMIT 15`
+  );
+  res.json({ activity });
+});
 
 router.get('/customers', async (req, res) => {
   const term = req.query.q;
@@ -27,6 +133,7 @@ router.post('/customers', async (req, res) => {
     if (existing) return res.status(400).json({ ok: false, error: `A customer with this phone number already exists: ${existing.name}` });
 
     const customer = await customers.createCustomer({ name, phoneNumber });
+    await logActivity(req, 'added customer', name);
     res.json({ ok: true, customerId: customer.id });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -52,6 +159,7 @@ router.post('/customers/:id/opening-balance', async (req, res) => {
     );
 
     const balance = await balances.getBalanceByCustomerId(customer.id);
+    await logActivity(req, 'added opening balance', `₹${amount} for ${customer.name}`);
     res.json({ ok: true, balance: balance ? balance.balance : null });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -62,26 +170,42 @@ router.get('/customers/:id/ledger', async (req, res) => {
   const balance = await balances.getBalanceByCustomerId(req.params.id);
   if (!balance) return res.status(404).json({ ok: false, error: 'Customer not found' });
 
-  const { rows } = await query(
-    `SELECT 'invoice' AS type, d.id, d.description AS label, d.amount_due AS amount, d.created_at AS occurred_at,
-            d.invoice_id, d.voided
-     FROM dues d
-     WHERE d.customer_id = $1
-     UNION ALL
-     SELECT 'payment' AS type, id, proof_type AS label, amount_claimed AS amount, reported_at AS occurred_at,
-            invoice_id, (status = 'voided') AS voided
-     FROM payment_claims WHERE customer_id = $1 AND status IN ('confirmed', 'voided')
-     ORDER BY occurred_at ASC`,
-    [req.params.id]
-  );
-
-  let running = 0;
-  const entries = rows.map((row) => {
-    if (!row.voided) running += row.type === 'invoice' ? Number(row.amount) : -Number(row.amount);
-    return { ...row, runningBalance: running };
-  });
+  const entries = await fetchLedgerEntries(req.params.id);
 
   res.json({ customer: { name: balance.name, phone_number: balance.phone_number, balance: balance.balance }, entries });
+});
+
+// Sends the customer their full transaction history (every invoice and
+// payment, with running balance) as a PDF over WhatsApp -- the third option
+// alongside "Add Opening Balance" and "Delete Customer" on the ledger page.
+router.post('/customers/:id/send-ledger-whatsapp', async (req, res) => {
+  try {
+    const balance = await balances.getBalanceByCustomerId(req.params.id);
+    if (!balance) return res.status(404).json({ ok: false, error: 'Customer not found' });
+    if (!balance.phone_number) {
+      return res.status(400).json({ ok: false, error: 'This customer has no phone number on file.' });
+    }
+
+    const entries = await fetchLedgerEntries(req.params.id);
+    const customer = { name: balance.name, phone_number: balance.phone_number, balance: balance.balance };
+    const { paperWidthMm, paperHeightMm } = req.body;
+
+    const pdfBuffer = await renderLedgerPdf({ customer, entries, paperWidthMm, paperHeightMm });
+    // Same sanitiser the slip filenames use. A trade name like "M/s Sharma
+    // Traders" was previously pasted in raw, and that slash makes a filename
+    // Windows will not accept.
+    const filename = `Ledger-${sanitize(customer.name) || 'Customer'}.pdf`;
+    const message = `Here's your account statement as of ${formatDate()}, ${customer.name}. Current balance: ₹${formatIndian(customer.balance)}.`;
+    const result = await notifyWithPdf(customer.phone_number, message, pdfBuffer, filename);
+    if (!result.sent) {
+      return res.status(502).json({ ok: false, error: humanReason(result), recovering: result.recovering === true });
+    }
+
+    await logActivity(req, 'sent ledger on WhatsApp', `to ${customer.name}`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 // Only for standalone dues (Opening Balance entries, invoice_id IS NULL) --
@@ -95,6 +219,7 @@ router.delete('/dues/:id', requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'This entry is linked to an invoice — delete the invoice instead.' });
     }
     await query('DELETE FROM dues WHERE id = $1', [req.params.id]);
+    await logActivity(req, 'deleted ledger entry', `due id ${req.params.id}`);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -109,7 +234,7 @@ router.delete('/customers/:id', requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query('SELECT id FROM customers WHERE id = $1 FOR UPDATE', [req.params.id]);
+    const { rows } = await client.query('SELECT id, name FROM customers WHERE id = $1 FOR UPDATE', [req.params.id]);
     if (rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ ok: false, error: 'Customer not found' });
@@ -125,6 +250,7 @@ router.delete('/customers/:id', requireAdmin, async (req, res) => {
     await client.query('DELETE FROM invoices WHERE customer_id = $1', [req.params.id]);
     await client.query('DELETE FROM customers WHERE id = $1', [req.params.id]);
     await client.query('COMMIT');
+    await logActivity(req, 'deleted customer', rows[0].name);
     res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');

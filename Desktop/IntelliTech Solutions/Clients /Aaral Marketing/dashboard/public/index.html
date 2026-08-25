@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Aaral Marketing — Home</title>
+<title>Aaral Marketing</title>
 <link rel="icon" href="/assets/aaral-logo-small.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,269 +11,132 @@
 <meta name="theme-color" content="#191048">
 <link rel="apple-touch-icon" href="/assets/aaral-icon-180.png">
 <link rel="stylesheet" href="/styles.css">
-<style>
-  .section-heading {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0 0 1.2rem;
-  }
-  .section-sub { font-size: 0.86rem; color: var(--ink-muted); margin: -0.8rem 0 1.4rem; max-width: 60ch; }
-
-  /* ── Action pad stack ──────────────────────────────────────────────
-     Each tile reads as the top sheet of a real slip pad sitting on the
-     counter -- a slight rotation, a couple of paper-edge layers peeking out
-     from underneath, and a torn/perforated top edge. Straightens and lifts
-     on hover, like picking the top sheet off the pad. */
-  .pad-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 2rem 1.6rem;
-    margin-bottom: 3.2rem;
-  }
-  .pad-link { text-decoration: none; color: inherit; display: block; }
-  .pad {
-    position: relative;
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: 3px 3px 8px 8px;
-    padding: 1.5rem 1.4rem 1.3rem;
-    box-shadow: var(--shadow);
-    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
-  }
-  .pad::before, .pad::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: 3px 3px 8px 8px;
-    z-index: -1;
-  }
-  .pad::before { transform: rotate(var(--pad-tilt, -2deg)) translateY(2px); opacity: 0.85; }
-  .pad::after { transform: rotate(calc(var(--pad-tilt, -2deg) * 2)) translateY(4px); opacity: 0.6; }
-  .pad-link:nth-child(1) .pad { --pad-tilt: -1.6deg; }
-  .pad-link:nth-child(2) .pad { --pad-tilt: 1.1deg; }
-  .pad-link:nth-child(3) .pad { --pad-tilt: -0.9deg; }
-  .pad-link:nth-child(4) .pad { --pad-tilt: 1.7deg; }
-  .pad-tear {
-    height: 6px;
-    margin: -1.5rem -1.4rem 1rem;
-    background-image: radial-gradient(circle at 6px 3px, transparent 3px, var(--line) 3.5px, var(--line) 4px, transparent 4.5px);
-    background-size: 12px 6px;
-    background-repeat: repeat-x;
-    border-bottom: 1px dashed var(--line);
-  }
-  .pad-icon { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cyan); background: var(--concrete); display: inline-block; padding: 0.2rem 0.55rem; border-radius: 4px; margin-bottom: 0.8rem; }
-  .pad-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--navy); margin: 0 0 0.35rem; }
-  .pad-desc { font-size: 0.86rem; color: var(--ink-muted); margin: 0; line-height: 1.4; }
-
-  .pad-link:hover .pad, .pad-link:focus-visible .pad {
-    transform: rotate(0deg) translateY(-5px);
-    box-shadow: 0 4px 8px rgba(20,15,5,0.06), 0 20px 34px -16px rgba(25,16,72,0.32);
-  }
-  .pad-link:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; border-radius: 8px; }
-
-  /* ── Facts strip ────────────────────────────────────────────────── */
-  .fact-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1.2rem;
-    margin-bottom: 3.2rem;
-  }
-  .fact-card {
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 1.4rem 1.5rem;
-    position: relative;
-    overflow: hidden;
-  }
-  .fact-card::after {
-    content: '';
-    position: absolute;
-    right: -18px; bottom: -18px;
-    width: 90px; height: 90px;
-    border-radius: 50%;
-    background: var(--concrete);
-    z-index: 0;
-  }
-  .fact-icon { position: relative; z-index: 1; display: block; margin-bottom: 0.7rem; }
-  .fact-number { position: relative; z-index: 1; font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; font-weight: 800; color: var(--cyan); line-height: 1; }
-  .fact-text { position: relative; z-index: 1; font-size: 0.86rem; color: var(--ink); line-height: 1.5; margin-top: 0.5rem; }
-
-  /* ── Brand story rail ───────────────────────────────────────────── */
-  .story-rail { display: flex; flex-direction: column; gap: 0; margin-bottom: 2.5rem; }
-  .story-row {
-    display: grid;
-    grid-template-columns: 160px 1fr;
-    gap: 1.4rem;
-    align-items: start;
-    padding: 1.3rem 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .story-row:first-child { padding-top: 0; }
-  .story-row:last-child { border-bottom: none; }
-  .story-brand { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--navy); font-size: 1.02rem; }
-  .story-brand .story-year { display: block; font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 0.72rem; color: var(--ink-muted); margin-top: 0.2rem; letter-spacing: 0.04em; }
-  .story-text { font-size: 0.88rem; color: var(--ink-muted); line-height: 1.55; margin: 0; }
-
-  @media (max-width: 640px) {
-    .story-row { grid-template-columns: 1fr; gap: 0.3rem; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .pad { transition: none; }
-    .pad-link:hover .pad, .pad-link:focus-visible .pad { transform: none; }
-  }
-</style>
 </head>
-<body>
-<script src="/auth-nav.js"></script>
+<body class="cement-page">
 
-<div class="hero">
-  <div class="hero-inner">
-    <div class="hero-top">
-      <div class="brand-mark">
-        <img src="/assets/aaral-logo-header.png" alt="Aaral Marketing">
-        <div class="brand-text">
-          <h1>Aaral Marketing</h1>
-          <p>Cement &amp; Building Materials Ledger</p>
-        </div>
-      </div>
-      <nav class="hero-nav">
-        <a class="active" href="/">Home</a>
-        <a href="/customers.html">Customers</a>
-        <a href="/quotation.html">New Quotation</a>
-        <a href="/chitti.html">New Slip</a>
-        <a href="/payment.html">New Payment</a>
-        <a href="/updates.html" data-admin-only>Updates</a>
-        <a href="/users.html" data-admin-only>Users</a>
-      </nav>
+<div class="cement-header">
+  <a class="brand-row" href="/">
+    <div class="brand-icon-wrap"><img src="/assets/aaral-icon-180.png" alt="Aaral Marketing"></div>
+    <div>
+      <div class="brand-name">Aaral Marketing</div>
+      <div class="brand-sub">Ledger &amp; billing</div>
     </div>
-    <div class="hero-heading">
-      <div class="eyebrow" id="todayLabel">Today</div>
-      <h2 id="greeting">Built on cement, run on trust.</h2>
-    </div>
-  </div>
-  <svg class="hero-wave" viewBox="0 0 1440 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M0,50 C240,90 480,10 720,50 C960,90 1200,10 1440,50 L1440,100 L0,100 Z" fill="#00aeef" opacity="0.22"/>
-    <path d="M0,65 C240,35 480,95 720,65 C960,35 1200,95 1440,65 L1440,100 L0,100 Z" fill="#7fd8f7" opacity="0.3"/>
-    <path d="M0,80 C240,60 480,100 720,80 C960,60 1200,100 1440,80 L1440,100 L0,100 Z" fill="#ece7dc" opacity="1"/>
-  </svg>
+  </a>
+  <a class="btn-primary" href="/dashboard.html">Enter Dashboard →</a>
 </div>
 
-<div class="page">
-  <h3 class="section-heading">What do you need to do?</h3>
-  <div class="pad-grid">
-    <a class="pad-link" href="/chitti.html">
-      <div class="pad">
-        <div class="pad-tear"></div>
-        <span class="pad-icon">Sale</span>
-        <h4 class="pad-title">New Slip</h4>
-        <p class="pad-desc">Write up a sale and print it.</p>
-      </div>
-    </a>
-    <a class="pad-link" href="/quotation.html">
-      <div class="pad">
-        <div class="pad-tear"></div>
-        <span class="pad-icon">Quote</span>
-        <h4 class="pad-title">New Quotation</h4>
-        <p class="pad-desc">Quote a price — nothing goes in the ledger.</p>
-      </div>
-    </a>
-    <a class="pad-link" href="/payment.html">
-      <div class="pad">
-        <div class="pad-tear"></div>
-        <span class="pad-icon">Payment</span>
-        <h4 class="pad-title">New Payment</h4>
-        <p class="pad-desc">Record a payment against an account.</p>
-      </div>
-    </a>
-    <a class="pad-link" href="/customers.html">
-      <div class="pad">
-        <div class="pad-tear"></div>
-        <span class="pad-icon">Ledger</span>
-        <h4 class="pad-title">Customers</h4>
-        <p class="pad-desc">Look up an account or balance.</p>
-      </div>
-    </a>
+<div class="cement-hero">
+  <img src="/assets/cement/hero.jpg" alt="Concrete being poured on site">
+  <div class="cement-hero-inner">
+    <div class="cement-hero-eyebrow" id="todayLabel">Today</div>
+    <h1 class="cement-hero-title">Built on cement, run on trust.</h1>
   </div>
+</div>
 
-  <h3 class="section-heading">Concrete, in numbers</h3>
-  <p class="section-sub">A few things worth knowing about the material that built the modern world.</p>
-  <div class="fact-grid">
-    <div class="fact-card">
-      <svg class="fact-icon" width="30" height="30" viewBox="0 0 30 30" fill="none"><path d="M4 26V12l11-7 11 7v14" stroke="#191048" stroke-width="2" stroke-linejoin="round"/><path d="M4 12h22" stroke="#00aeef" stroke-width="2"/></svg>
-      <div class="fact-number">#2</div>
-      <p class="fact-text">India is the world's second-largest cement producer, behind only China — the industry underpins nearly every road, home, and structure built here.</p>
-    </div>
-    <div class="fact-card">
-      <svg class="fact-icon" width="30" height="30" viewBox="0 0 30 30" fill="none"><rect x="4" y="8" width="22" height="14" rx="2" stroke="#191048" stroke-width="2"/><path d="M4 15h22M12 8v14M20 8v14" stroke="#00aeef" stroke-width="2"/></svg>
-      <div class="fact-number">2nd</div>
-      <p class="fact-text">Water aside, concrete is the most-used man-made material on Earth by volume — more than steel, plastic, and aluminium put together.</p>
-    </div>
-    <div class="fact-card">
-      <svg class="fact-icon" width="30" height="30" viewBox="0 0 30 30" fill="none"><circle cx="15" cy="15" r="11" stroke="#191048" stroke-width="2"/><path d="M15 8v7l5 3" stroke="#00aeef" stroke-width="2" stroke-linecap="round"/></svg>
-      <div class="fact-number">28</div>
-      <p class="fact-text">Concrete keeps gaining strength for years, but the industry standard "full strength" test is always taken at 28 days of curing.</p>
-    </div>
-    <div class="fact-card">
-      <svg class="fact-icon" width="30" height="30" viewBox="0 0 30 30" fill="none"><path d="M6 24h18M9 24V10l6-4 6 4v14" stroke="#191048" stroke-width="2" stroke-linejoin="round"/></svg>
-      <div class="fact-number">1824</div>
-      <p class="fact-text">"Portland" cement was named by its English inventor for its resemblance, once set, to the natural stone quarried on the Isle of Portland.</p>
-    </div>
-    <div class="fact-card">
-      <svg class="fact-icon" width="30" height="30" viewBox="0 0 30 30" fill="none"><path d="M5 10h20M5 15h20M5 20h20" stroke="#191048" stroke-width="2" stroke-linecap="round"/><path d="M9 10v10M21 10v10" stroke="#00aeef" stroke-width="2"/></svg>
-      <div class="fact-number">50kg</div>
-      <p class="fact-text">The standard cement bag weight across the Indian market — a unit every mason and site engineer estimates by instinct.</p>
-    </div>
-    <div class="fact-card">
-      <svg class="fact-icon" width="30" height="30" viewBox="0 0 30 30" fill="none"><path d="M15 4l3.5 7.2 7.9 1.1-5.7 5.6 1.3 7.9L15 22l-7 3.8 1.3-7.9-5.7-5.6 7.9-1.1L15 4z" stroke="#191048" stroke-width="2" stroke-linejoin="round"/></svg>
-      <div class="fact-number">~2000</div>
-      <p class="fact-text">The Roman Pantheon's unreinforced concrete dome, poured nearly two millennia ago, is still the largest of its kind standing today.</p>
+<div class="cement-grid">
+  <div class="panel">
+    <div class="panel-header">Cement industry news</div>
+    <div class="news-list" id="newsList">
+      <div class="empty-state">Loading…</div>
     </div>
   </div>
 
-  <h3 class="section-heading">Names that built the industry</h3>
-  <p class="section-sub">A quick look at the houses behind the bags moving through yards like this one every day.</p>
-  <div class="card" style="padding: 0.3rem 1.6rem;">
-    <div class="story-rail">
-      <div class="story-row">
-        <div class="story-brand">UltraTech Cement<span class="story-year">Aditya Birla Group</span></div>
-        <p class="story-text">India's largest cement manufacturer by capacity, with plants spanning the country and a footprint that reaches into the Middle East and Africa.</p>
+  <div>
+    <div class="panel" style="margin-bottom: 18px;">
+      <div class="panel-header">Cement stocks — NSE</div>
+      <div class="ticker-grid" id="tickerGrid">
+        <div class="empty-state">Loading…</div>
       </div>
-      <div class="story-row">
-        <div class="story-brand">ACC Limited<span class="story-year">Est. 1936</span></div>
-        <p class="story-text">One of India's oldest cement names — its concrete went into landmark early infrastructure decades before "branded cement" was even a category.</p>
-      </div>
-      <div class="story-row">
-        <div class="story-brand">Ambuja Cements<span class="story-year">Est. 1983</span></div>
-        <p class="story-text">Built its name on fuel-efficient plant design and became one of the country's most recognised cement brands among retail buyers.</p>
-      </div>
-      <div class="story-row">
-        <div class="story-brand">Shree Cement<span class="story-year">Est. 1979</span></div>
-        <p class="story-text">Grew from a single Rajasthan plant into one of India's most efficient large-scale producers, known for its energy-conscious operations.</p>
-      </div>
-      <div class="story-row">
-        <div class="story-brand">Ramco Cements<span class="story-year">South India</span></div>
-        <p class="story-text">A South-focused major with a strong presence across Tamil Nadu, Andhra Pradesh, and Karnataka — a familiar name on yards like this one.</p>
-      </div>
+    </div>
+    <div class="panel fact-panel">
+      <div class="fact-badge">Did you know</div>
+      <p class="fact-text" id="factText">&nbsp;</p>
     </div>
   </div>
 </div>
 
-<footer class="footer-credit">Powered by IntelliTech Solutions</footer>
+<div class="cement-gallery">
+  <img src="/assets/cement/plant.jpg" alt="Cement factory">
+  <img src="/assets/cement/mixer.jpg" alt="Concrete mixer truck">
+  <img src="/assets/cement/site.jpg" alt="Construction site">
+</div>
+
+<div class="footer-credit">Powered by IntelliTech Solutions</div>
 
 <script>
 document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
-</script>
-<script>
-if ('serviceWorker' in navigator && window.isSecureContext) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+const FACTS = [
+  'Water aside, concrete is the most-used man-made material on Earth by volume — more than steel, plastic and aluminium put together.',
+  'Ancient Roman concrete used volcanic ash and has outlasted much of what we build today — some structures are still standing 2,000 years later.',
+  'India is the second-largest cement producer in the world, after China.',
+  'Cement itself isn’t concrete — cement is the glue; mixed with sand, gravel and water, it becomes concrete.',
+  '"Portland cement" is named after the Isle of Portland in England, whose stone it resembled once hardened.',
+  'A single tonne of cement production releases roughly 0.6–0.9 tonnes of CO₂, making the industry a major target for decarbonisation.',
+  'Concrete gets stronger for years — it never really stops curing, just slows down dramatically after about 28 days.',
+  'The Hoover Dam’s concrete is still curing internally, more than 90 years after it was poured.',
+  'China has poured more concrete in the last decade than the US did in the entire 20th century.',
+  'Adding too much water to a cement mix is the single biggest cause of weak concrete — it dilutes the strength-giving reaction.',
+  'Fly ash and slag, waste products from power plants and steel mills, are often blended into cement to cut both cost and emissions.',
+  'The Pantheon in Rome, poured in 128 AD, is still the world’s largest unreinforced concrete dome.',
+  'Cement sets through a chemical reaction with water called hydration, not by drying out — it can even cure underwater.',
+  'Ready-mix concrete trucks keep rotating during transit for one reason only: to stop the mix from setting before it arrives.',
+  'UltraTech Cement, headquartered in Mumbai, is India’s largest cement producer and among the top players worldwide.',
+];
+document.getElementById('factText').textContent = FACTS[Math.floor(Math.random() * FACTS.length)];
+
+function fmtPrice(n) {
+  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(n);
 }
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+
+async function loadStocks() {
+  const el = document.getElementById('tickerGrid');
+  try {
+    const res = await fetch('/api/cement/stocks');
+    const data = await res.json();
+    if (!data.ok || !data.stocks.length) throw new Error('empty');
+    el.innerHTML = data.stocks.map((s) => {
+      const up = s.change >= 0;
+      const arrow = up ? '▲' : '▼';
+      return `<div class="ticker-card">
+        <div class="ticker-name">${s.name}</div>
+        <div class="ticker-price">₹${fmtPrice(s.price)}</div>
+        <div class="ticker-change ${up ? 'up' : 'down'}">${arrow} ${fmtPrice(Math.abs(s.change))} (${fmtPrice(Math.abs(s.changePct))}%)</div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state">Stock data unavailable right now.</div>';
+    console.error('Failed to load stocks', err);
+  }
+}
+
+async function loadNews() {
+  const el = document.getElementById('newsList');
+  try {
+    const res = await fetch('/api/cement/news');
+    const data = await res.json();
+    if (!data.ok || !data.items.length) throw new Error('empty');
+    el.innerHTML = data.items.map((item) => {
+      const when = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
+      return `<a class="news-item" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">
+        <div class="news-title">${escapeHtml(item.title)}</div>
+        <div class="news-meta">${escapeHtml(item.source)}${item.source && when ? ' · ' : ''}${when}</div>
+      </a>`;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state">News unavailable right now.</div>';
+    console.error('Failed to load news', err);
+  }
+}
+
+loadStocks();
+loadNews();
 </script>
 </body>
 </html>
