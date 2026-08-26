@@ -27,4 +27,22 @@ function extractAmount(text) {
   return Math.max(...candidates);
 }
 
-module.exports = { extractAmount };
+const chrono = require('chrono-node');
+
+function toIsoDate(date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function extractDateInfo(text, referenceDate = new Date()) {
+  const results = chrono.parse(String(text || ''), referenceDate, { forwardDate: false });
+  if (results.length === 0) {
+    return { iso: toIsoDate(referenceDate), matchedText: null };
+  }
+  const best = results[0];
+  return { iso: toIsoDate(best.date()), matchedText: best.text };
+}
+
+module.exports = { extractAmount, extractDateInfo, toIsoDate };

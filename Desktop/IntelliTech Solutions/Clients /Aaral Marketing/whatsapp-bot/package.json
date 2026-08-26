@@ -10,6 +10,7 @@
     "test": "node --test --test-concurrency=1"
   },
   "dependencies": {
+    "chrono-node": "^2.10.1",
     "dotenv": "^16.4.5",
     "node-cron": "^3.0.3",
     "payment-ledger-core": "file:../../../packages/payment-ledger-core",
