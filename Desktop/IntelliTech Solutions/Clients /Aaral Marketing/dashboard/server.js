@@ -109,6 +109,7 @@ app.use((req, res, next) => {
 });
 
 app.use('/api', require('./src/routes/auth'));
+app.use(require('./src/routes/botInternal'));
 app.use(requireSession);
 
 app.use('/api', require('./src/routes/invoices'));
