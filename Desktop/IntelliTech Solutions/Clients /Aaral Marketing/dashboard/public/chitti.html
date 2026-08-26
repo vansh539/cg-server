@@ -209,6 +209,11 @@
           <input type="text" id="destination" placeholder="e.g. site / delivery location" autocomplete="off">
         </div>
 
+        <div class="field-group no-print">
+          <label>Note</label>
+          <input type="text" id="note" placeholder="e.g. special instructions" autocomplete="off">
+        </div>
+
         <div class="field-group no-print" id="customerSearchWrap">
           <label>Customer (leave blank for a walk-in / cash sale)</label>
           <input type="text" id="customerSearch" placeholder="Search by name or phone…" autocomplete="off">
@@ -242,8 +247,12 @@
         <div class="totals">
           <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
           <div class="no-print">
-            <label style="display:inline;">Unloading charges: ₹</label>
+            <label style="display:inline;">Hamali Charges: ₹</label>
             <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
+          </div>
+          <div class="no-print">
+            <label style="display:inline;">Freight Charges: ₹</label>
+            <input id="freight" type="number" min="0" step="0.01" style="width:100px;display:inline;">
           </div>
           <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
         </div>
@@ -324,7 +333,8 @@ function recalc() {
     subtotal += amount;
   });
   const unloading = Number(document.getElementById('unloading').value) || 0;
-  const grandTotal = subtotal + unloading;
+  const freight = Number(document.getElementById('freight').value) || 0;
+  const grandTotal = subtotal + unloading + freight;
   document.getElementById('subtotal').textContent = formatMoney(subtotal);
   document.getElementById('grandTotal').textContent = formatMoney(grandTotal);
   document.getElementById('footerTotal').textContent = formatMoney(grandTotal);
@@ -352,6 +362,7 @@ function updatePrintDestination() {
 }
 
 document.getElementById('unloading').addEventListener('input', recalc);
+document.getElementById('freight').addEventListener('input', recalc);
 document.getElementById('addRow').addEventListener('click', addRow);
 for (let i = 0; i < 5; i++) addRow();
 recalc();
@@ -531,6 +542,8 @@ saveBtn.addEventListener('click', async () => {
     customerId: selectedCustomerId,
     items: collectItems(),
     unloadingCharge: document.getElementById('unloading').value || null,
+    freightCharge: document.getElementById('freight').value || null,
+    note: document.getElementById('note').value.trim() || null,
     paidNow: document.getElementById('paidNow').checked,
     invoiceDate: document.getElementById('invoiceDate').value || null,
     destination: document.getElementById('destination').value.trim() || null,
@@ -608,6 +621,8 @@ function slipPayload() {
   return {
     items: collectItems(),
     unloadingCharge: document.getElementById('unloading').value || null,
+    freightCharge: document.getElementById('freight').value || null,
+    note: document.getElementById('note').value.trim() || null,
     invoiceDate: document.getElementById('invoiceDate').value || null,
     destination: document.getElementById('destination').value.trim() || null,
     customerName: searchInput.value.trim() || null,
@@ -687,6 +702,8 @@ document.getElementById('savePdfBtn').addEventListener('click', async () => {
   const body = {
     items: collectItems(),
     unloadingCharge: document.getElementById('unloading').value || null,
+    freightCharge: document.getElementById('freight').value || null,
+    note: document.getElementById('note').value.trim() || null,
     invoiceDate: document.getElementById('invoiceDate').value || null,
     destination: document.getElementById('destination').value.trim() || null,
     paperWidthMm: currentPaperSize.w,

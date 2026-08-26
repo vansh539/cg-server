@@ -215,6 +215,13 @@ input[type="text"], input[type="number"], input[type="date"], input[type="passwo
 }
 input:focus, textarea:focus, select:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.16); }
 
+/* Removes the up/down spinner arrows on every number input app-wide -- a
+   stray click/keypress on them was silently changing amounts (charges,
+   qty, rate) without the person noticing. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
 .customer-chip { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .customer-chip .cust-avatar { width: 26px; height: 26px; font-size: 0.65rem; border-radius: 7px; }
 

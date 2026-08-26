@@ -28,11 +28,12 @@ function resolveEffectiveDate(invoiceDate) {
   return new Date(`${invoiceDate}T${timeOfDay}`);
 }
 
-async function createInvoice({ customerId, items, unloadingCharge, paidNow, createdBy, invoiceDate, destination }) {
+async function createInvoice({ customerId, items, unloadingCharge, freightCharge, note, paidNow, createdBy, invoiceDate, destination }) {
   const normalizedItems = normalizeItems(items);
   const subtotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
   const unloading = unloadingCharge ? Number(unloadingCharge) : null;
-  const total = subtotal + (unloading || 0);
+  const freight = freightCharge ? Number(freightCharge) : null;
+  const total = subtotal + (unloading || 0) + (freight || 0);
   const effectiveDate = resolveEffectiveDate(invoiceDate);
 
   // Walk-in / cash sales (no customer, no ledger) are never persisted — only
@@ -46,9 +47,9 @@ async function createInvoice({ customerId, items, unloadingCharge, paidNow, crea
     await client.query('BEGIN');
 
     const { rows: invoiceRows } = await client.query(
-      `INSERT INTO invoices (customer_id, paid_now, unloading_charge, subtotal, total, created_by, created_at, destination)
-       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, now()), $8) RETURNING *`,
-      [customerId, !!paidNow, unloading, subtotal, total, createdBy, effectiveDate, destination || null]
+      `INSERT INTO invoices (customer_id, paid_now, unloading_charge, freight_charge, note, subtotal, total, created_by, created_at, destination)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, now()), $10) RETURNING *`,
+      [customerId, !!paidNow, unloading, freight, note || null, subtotal, total, createdBy, effectiveDate, destination || null]
     );
     const invoice = invoiceRows[0];
 
@@ -218,11 +219,12 @@ async function voidInvoice(invoiceId, voidedBy) {
   }
 }
 
-async function updateInvoice(invoiceId, { items, unloadingCharge, destination, invoiceDate }, updatedBy) {
+async function updateInvoice(invoiceId, { items, unloadingCharge, freightCharge, note, destination, invoiceDate }, updatedBy) {
   const normalizedItems = normalizeItems(items);
   const subtotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
   const unloading = unloadingCharge ? Number(unloadingCharge) : null;
-  const total = subtotal + (unloading || 0);
+  const freight = freightCharge ? Number(freightCharge) : null;
+  const total = subtotal + (unloading || 0) + (freight || 0);
   const effectiveDate = resolveEffectiveDate(invoiceDate);
 
   const client = await pool.connect();
@@ -245,10 +247,10 @@ async function updateInvoice(invoiceId, { items, unloadingCharge, destination, i
     }
 
     const { rows: updatedRows } = await client.query(
-      `UPDATE invoices SET unloading_charge = $1, subtotal = $2, total = $3, destination = $4,
-         created_at = COALESCE($5, created_at), updated_at = now(), updated_by = $6
-       WHERE id = $7 RETURNING *`,
-      [unloading, subtotal, total, destination || null, effectiveDate, updatedBy, invoiceId]
+      `UPDATE invoices SET unloading_charge = $1, freight_charge = $2, note = $3, subtotal = $4, total = $5, destination = $6,
+         created_at = COALESCE($7, created_at), updated_at = now(), updated_by = $8
+       WHERE id = $9 RETURNING *`,
+      [unloading, freight, note || null, subtotal, total, destination || null, effectiveDate, updatedBy, invoiceId]
     );
     await client.query('UPDATE dues SET amount_due = $1 WHERE id = $2', [total, dueId]);
     if (claimId) {

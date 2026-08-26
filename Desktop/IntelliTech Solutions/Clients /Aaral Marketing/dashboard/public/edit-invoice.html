@@ -132,6 +132,11 @@
           <input type="text" id="destination" placeholder="e.g. site / delivery location" autocomplete="off">
         </div>
 
+        <div class="field-group">
+          <label>Note</label>
+          <input type="text" id="note" placeholder="e.g. special instructions" autocomplete="off">
+        </div>
+
         <table id="itemsTable">
           <colgroup>
             <col class="c-sl"><col class="c-particulars"><col class="c-grade"><col class="c-vch">
@@ -147,8 +152,12 @@
         <div class="totals">
           <div>Subtotal: ₹<span id="subtotal">0.00</span></div>
           <div>
-            <label style="display:inline;">Unloading charges: ₹</label>
+            <label style="display:inline;">Hamali Charges: ₹</label>
             <input id="unloading" type="number" min="0" step="0.01" style="width:100px;display:inline;">
+          </div>
+          <div>
+            <label style="display:inline;">Freight Charges: ₹</label>
+            <input id="freight" type="number" min="0" step="0.01" style="width:100px;display:inline;">
           </div>
           <div class="grand">Total: ₹<span id="grandTotal">0.00</span></div>
         </div>
@@ -201,12 +210,14 @@ function recalc() {
     subtotal += amount;
   });
   const unloading = Number(document.getElementById('unloading').value) || 0;
+  const freight = Number(document.getElementById('freight').value) || 0;
   document.getElementById('subtotal').textContent = formatMoney(subtotal);
-  document.getElementById('grandTotal').textContent = formatMoney(subtotal + unloading);
+  document.getElementById('grandTotal').textContent = formatMoney(subtotal + unloading + freight);
 }
 
 document.getElementById('addRow').addEventListener('click', () => { addRow(null); recalc(); });
 document.getElementById('unloading').addEventListener('input', recalc);
+document.getElementById('freight').addEventListener('input', recalc);
 
 async function load() {
   const res = await fetch(`/api/invoices/${invoiceId}`);
@@ -223,7 +234,9 @@ async function load() {
   }
   document.getElementById('pageTitle').textContent = `Edit Invoice #${invoice.invoice_number}`;
   document.getElementById('destination').value = invoice.destination || '';
+  document.getElementById('note').value = invoice.note || '';
   document.getElementById('unloading').value = invoice.unloading_charge || '';
+  document.getElementById('freight').value = invoice.freight_charge || '';
   if (invoice.customer_id) document.getElementById('backLink').href = `/customer.html?id=${invoice.customer_id}`;
   items.forEach((item) => addRow(item));
   recalc();
@@ -243,6 +256,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   const body = {
     items,
     unloadingCharge: document.getElementById('unloading').value || null,
+    freightCharge: document.getElementById('freight').value || null,
+    note: document.getElementById('note').value.trim() || null,
     destination: document.getElementById('destination').value.trim() || null,
     invoiceDate: null,
   };

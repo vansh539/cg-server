@@ -83,6 +83,7 @@ function buildChittiTable({ invoice = {}, items = [], customerName }) {
   </thead>
   <tbody>${buildRows(items)}</tbody>
   <tfoot>
+    ${invoice.note ? `<tr><td class="total-label" colspan="7" style="text-align:left">Note: ${escapeHtml(invoice.note)}</td></tr>` : ''}
     <tr><td class="total-label" colspan="6">Total</td><td class="n amt">${formatIndian(invoice.total)}</td></tr>
   </tfoot>
 </table>`;

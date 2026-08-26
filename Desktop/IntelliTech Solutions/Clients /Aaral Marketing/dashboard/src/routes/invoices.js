@@ -15,11 +15,11 @@ const router = express.Router();
 router.post('/invoices', async (req, res) => {
   try {
     const {
-      customerId, items, unloadingCharge, paidNow,
+      customerId, items, unloadingCharge, freightCharge, note, paidNow,
       invoiceDate, destination,
     } = req.body;
     const createdBy = req.session.user.username;
-    const result = await createInvoice({ customerId, items, unloadingCharge, paidNow, createdBy, invoiceDate, destination });
+    const result = await createInvoice({ customerId, items, unloadingCharge, freightCharge, note, paidNow, createdBy, invoiceDate, destination });
 
     if (customerId) {
       const customer = await customers.findById(customerId);
@@ -67,19 +67,20 @@ router.post('/invoices', async (req, res) => {
 router.post('/invoices/pdf', async (req, res) => {
   try {
     const {
-      items, unloadingCharge, invoiceDate, destination,
+      items, unloadingCharge, freightCharge, note, invoiceDate, destination,
       paperWidthMm, paperHeightMm, customerName, invoiceNumber,
     } = req.body;
     const normalizedItems = normalizeItems(items);
     const subtotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
     const unloading = unloadingCharge ? Number(unloadingCharge) : 0;
-    const total = subtotal + unloading;
+    const freight = freightCharge ? Number(freightCharge) : 0;
+    const total = subtotal + unloading + freight;
     const pdfItems = normalizedItems.map((item) => ({
       s_no: item.sNo, particulars: item.particulars, grade: item.grade,
       vch: item.vch, qty: item.qty, rate: item.rate, amount: item.amount,
     }));
     const pdfBuffer = await renderInvoicePdf({
-      invoice: { total, created_at: invoiceDate || null, destination: destination || null },
+      invoice: { total, created_at: invoiceDate || null, destination: destination || null, note: note || null },
       items: pdfItems,
       customerName: customerName || '',
       paperWidthMm, paperHeightMm,
@@ -102,18 +103,19 @@ router.post('/invoices/pdf', async (req, res) => {
 router.post('/invoices/image', async (req, res) => {
   try {
     const {
-      items, unloadingCharge, invoiceDate, destination,
+      items, unloadingCharge, freightCharge, note, invoiceDate, destination,
       paperWidthMm, paperHeightMm, customerName, invoiceNumber,
     } = req.body;
     const normalizedItems = normalizeItems(items);
     const subtotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
     const unloading = unloadingCharge ? Number(unloadingCharge) : 0;
+    const freight = freightCharge ? Number(freightCharge) : 0;
     const pdfItems = normalizedItems.map((item) => ({
       s_no: item.sNo, particulars: item.particulars, grade: item.grade,
       vch: item.vch, qty: item.qty, rate: item.rate, amount: item.amount,
     }));
     const imageBuffer = await renderInvoiceImage({
-      invoice: { total: subtotal + unloading, created_at: invoiceDate || null, destination: destination || null },
+      invoice: { total: subtotal + unloading + freight, created_at: invoiceDate || null, destination: destination || null, note: note || null },
       items: pdfItems,
       customerName: customerName || '',
       paperWidthMm, paperHeightMm,
@@ -132,14 +134,15 @@ router.post('/invoices/image', async (req, res) => {
 // template as the PDF/JPEG, so what prints is what downloads.
 router.post('/invoices/chitti', async (req, res) => {
   try {
-    const { items, unloadingCharge, invoiceDate, destination, customerName } = req.body;
+    const { items, unloadingCharge, freightCharge, note, invoiceDate, destination, customerName } = req.body;
     const normalizedItems = normalizeItems(items);
     const subtotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
     const unloading = unloadingCharge ? Number(unloadingCharge) : 0;
+    const freight = freightCharge ? Number(freightCharge) : 0;
     res.json({
       ok: true,
       html: buildChittiTable({
-        invoice: { total: subtotal + unloading, created_at: invoiceDate || null, destination: destination || null },
+        invoice: { total: subtotal + unloading + freight, created_at: invoiceDate || null, destination: destination || null, note: note || null },
         items: normalizedItems.map((item) => ({
           s_no: item.sNo, particulars: item.particulars, grade: item.grade,
           vch: item.vch, qty: item.qty, rate: item.rate, amount: item.amount,
@@ -268,9 +271,9 @@ router.post('/invoices/:id/send-whatsapp', async (req, res) => {
 
 router.put('/invoices/:id', async (req, res) => {
   try {
-    const { items, unloadingCharge, destination, invoiceDate } = req.body;
+    const { items, unloadingCharge, freightCharge, note, destination, invoiceDate } = req.body;
     const result = await updateInvoice(
-      req.params.id, { items, unloadingCharge, destination, invoiceDate }, req.session.user.username
+      req.params.id, { items, unloadingCharge, freightCharge, note, destination, invoiceDate }, req.session.user.username
     );
     await logActivity(req, 'edited invoice', `#${result.invoice.invoice_number}`);
     res.json({ ok: true, invoice: result.invoice });

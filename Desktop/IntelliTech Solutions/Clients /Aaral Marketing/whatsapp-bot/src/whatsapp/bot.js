@@ -627,6 +627,13 @@ async function handleSelfSentMessage(msg) {
   }
 }
 
+function formatTodayDate() {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}-${mm}-${d.getFullYear()}`;
+}
+
 function buildConfirmSummary({ amount, date, method, customerName, balanceAfter }) {
   const methodLabel = { cash: 'Cash', gpay: 'GPay', bank_transfer: 'Bank Transfer' }[method];
   const balanceNote = balanceAfter !== null ? ` — balance will become ₹${balanceAfter}` : '';
@@ -778,7 +785,8 @@ async function handleStaffCommand(msg, waNumber, staff, parsed) {
   if (parsed.command === 'BALANCE') {
     const results = await balances.searchBalances(parsed.query);
     if (results.length === 0) { await safeSend(msg, `No customer found matching "${parsed.query}".`); return; }
-    const lines = results.map((r) => `${r.name}: due ₹${r.total_due}, confirmed ₹${r.total_confirmed}, balance ₹${r.balance}`);
+    const dateStr = formatTodayDate();
+    const lines = results.map((r) => `${r.name} — Balance as of ${dateStr}: ₹${r.balance}`);
     await safeSend(msg, lines.join('\n'));
     return;
   }
