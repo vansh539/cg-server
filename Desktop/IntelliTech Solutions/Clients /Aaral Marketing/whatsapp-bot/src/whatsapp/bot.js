@@ -5,7 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync, spawn } = require('child_process');
-const cron = require('node-cron');
 const { logger } = require('../utils/logger');
 const { createConnection } = require('./connection');
 const { createHealthMonitor } = require('./healthMonitor');
@@ -13,10 +12,11 @@ const { isFatalSessionError, withTimeout } = require('./sessionErrors');
 const { clearSessionCache } = require('./sessionCacheClean');
 const { query } = require('payment-ledger-core/db');
 const customers = require('payment-ledger-core/ledger/customers');
-const claims = require('payment-ledger-core/ledger/claims');
 const balances = require('payment-ledger-core/ledger/balances');
 const duesImport = require('payment-ledger-core/imports/duesImport');
+const { recordPayment } = require('payment-ledger-core/ledger/payments');
 const flows = require('./flows');
+const paymentIntent = require('./paymentIntent');
 
 const SESSION_DIR = process.env.WA_SESSION_PATH || './wa-sessions';
 const PROOFS_DIR = process.env.PROOFS_PATH || './proofs';
@@ -31,28 +31,9 @@ if (!fs.existsSync(PROOFS_DIR)) fs.mkdirSync(PROOFS_DIR, { recursive: true });
 // timestamp, which let them slip past a fail-open version of this check.
 const BOT_START_TIME = Math.floor(Date.now() / 1000);
 
-// Extra safety net for testing: when set, ONLY these numbers (plus seeded
-// admins) can trigger any reply at all — everyone else is silently ignored.
-// Set TEST_MODE_ALLOWED_NUMBERS in .env (comma-separated, any format) while
-// testing on a personal/real number. Leave unset in production so real
-// customers aren't blocked.
-const TEST_MODE_ALLOWED_NUMBERS = (process.env.TEST_MODE_ALLOWED_NUMBERS || '')
-  .split(',')
-  .map((n) => n.replace(/\D/g, '').slice(-10))
-  .filter(Boolean);
-
-// ── OCR Service (Python/PaddleOCR) ────────────────────────────
-// A small local Python worker (ocr-service/) runs PaddleOCR, which reads
-// the ₹ symbol correctly — Tesseract cannot (confirmed live: it always
-// misreads ₹ as a phantom leading digit fused onto the amount, e.g.
-// ₹3,500 → "23,500", regardless of character whitelisting, image
-// upscaling, or Tesseract's own official "best" quality model). Node
-// spawns this worker once at startup and talks to it over localhost
-// HTTP; screenshots skip OCR entirely if it never comes up, same
-// graceful-degradation philosophy as any other OCR failure.
-const OCR_SERVICE_PORT = process.env.OCR_SERVICE_PORT || 5001;
-const OCR_SERVICE_URL = `http://127.0.0.1:${OCR_SERVICE_PORT}`;
-const OCR_SERVICE_DIR = path.join(__dirname, '..', '..', 'ocr-service');
+// Where to reach the dashboard's internal-only bot routes (ledger PDF
+// rendering lives there, since Puppeteer/chittiStyles are dashboard-only).
+const DASHBOARD_INTERNAL_URL = process.env.DASHBOARD_INTERNAL_URL || 'http://127.0.0.1:3400';
 
 // ── Notify service (internal, for the dashboard) ────────────────
 // A minimal localhost-only HTTP server so the Aaral dashboard (a separate
@@ -235,76 +216,13 @@ function startNotifyServer() {
   server.on('error', (err) => {
     // A failure here (e.g. port already in use) must never take down the
     // WhatsApp bot itself — the dashboard's notify calls just get "failed
-    // to reach bot" and degrade gracefully, same as an OCR outage.
+    // to reach bot" and degrade gracefully.
     logger.error('[Notify] Server failed to start', { error: err.message, port: NOTIFY_SERVICE_PORT });
   });
   server.listen(NOTIFY_SERVICE_PORT, '127.0.0.1', () => {
     logger.info(`[Notify] Listening on 127.0.0.1:${NOTIFY_SERVICE_PORT} (contract ${WA_CONTRACT})`);
   });
 }
-const OCR_VENV_PYTHON = process.platform === 'win32'
-  ? path.join(OCR_SERVICE_DIR, 'venv', 'Scripts', 'python.exe')
-  : path.join(OCR_SERVICE_DIR, 'venv', 'bin', 'python');
-const OCR_SERVER_SCRIPT = path.join(OCR_SERVICE_DIR, 'server.py');
-
-let ocrServiceProcess = null;
-
-function startOcrService() {
-  if (!fs.existsSync(OCR_VENV_PYTHON)) {
-    logger.warn('[OCR] venv not found, skipping OCR service startup — see ocr-service/README.md', { expected: OCR_VENV_PYTHON });
-    return;
-  }
-  ocrServiceProcess = spawn(OCR_VENV_PYTHON, [OCR_SERVER_SCRIPT], {
-    env: { ...process.env, OCR_SERVICE_PORT: String(OCR_SERVICE_PORT) },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  ocrServiceProcess.stdout.on('data', (d) => logger.info(`[OCR] ${d.toString().trim()}`));
-  ocrServiceProcess.stderr.on('data', (d) => logger.warn(`[OCR] ${d.toString().trim()}`));
-  ocrServiceProcess.on('exit', (code) => {
-    logger.warn('[OCR] Python OCR service exited', { code });
-    ocrServiceProcess = null;
-  });
-}
-
-async function waitForOcrService(timeoutMs = 30000, intervalMs = 500) {
-  if (!ocrServiceProcess) return;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${OCR_SERVICE_URL}/health`);
-      if (res.ok) {
-        logger.info('[OCR] Python OCR service ready');
-        return;
-      }
-    } catch (e) {
-      // Not up yet — keep polling until the timeout.
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  logger.warn('[OCR] Python OCR service did not become ready in time — screenshots will skip OCR this session');
-}
-
-function stopOcrService() {
-  return new Promise((resolve) => {
-    if (!ocrServiceProcess) { resolve(); return; }
-    const proc = ocrServiceProcess;
-    const forceKillTimer = setTimeout(() => {
-      try { proc.kill('SIGKILL'); } catch (e) { /* already dead */ }
-    }, 3000);
-    proc.once('exit', () => {
-      clearTimeout(forceKillTimer);
-      resolve();
-    });
-    proc.kill('SIGTERM');
-  });
-}
-
-function stopOcrServiceSync() {
-  if (ocrServiceProcess) {
-    try { ocrServiceProcess.kill('SIGTERM'); } catch (e) { /* already dead */ }
-  }
-}
-
 // ── Chrome Cleanup ─────────────────────────────────────────────
 // Kills orphaned Chrome and wipes stale Singleton/lock files that make the
 // next launch hang forever. Same fix as the Jalan Group bot — must run at
@@ -338,12 +256,11 @@ function chromeCleanup() {
 
 if (require.main === module) {
   chromeCleanup();
-  startOcrService();
-  process.on('exit', () => { chromeCleanup(); stopOcrServiceSync(); });
-  process.on('SIGTERM', () => { logger.info('[WhatsApp] SIGTERM — clean exit'); stopOcrService().then(() => process.exit(0)); });
-  process.on('SIGINT', () => { logger.info('[WhatsApp] SIGINT — clean exit'); stopOcrService().then(() => process.exit(0)); });
-  process.on('SIGHUP', () => { logger.info('[WhatsApp] SIGHUP — clean exit'); stopOcrService().then(() => process.exit(0)); });
-  process.on('SIGQUIT', () => { logger.info('[WhatsApp] SIGQUIT — clean exit'); stopOcrService().then(() => process.exit(0)); });
+  process.on('exit', () => { chromeCleanup(); });
+  process.on('SIGTERM', () => { logger.info('[WhatsApp] SIGTERM — clean exit'); process.exit(0); });
+  process.on('SIGINT', () => { logger.info('[WhatsApp] SIGINT — clean exit'); process.exit(0); });
+  process.on('SIGHUP', () => { logger.info('[WhatsApp] SIGHUP — clean exit'); process.exit(0); });
+  process.on('SIGQUIT', () => { logger.info('[WhatsApp] SIGQUIT — clean exit'); process.exit(0); });
 }
 
 // ── Session lock ────────────────────────────────────────────────
@@ -497,12 +414,10 @@ function makeClient() {
     headless: 'new',
     timeout: 60000,
     // Puppeteer installs its own SIGINT/SIGTERM/SIGHUP handlers by default
-    // that call process.exit() directly and synchronously — confirmed live
-    // that this races ahead of (and preempts) our own SIGINT/SIGTERM
-    // handlers' async OCR-worker shutdown below, aborting the SIGKILL
-    // escalation before it can fire and leaving the OCR child orphaned.
-    // Disabling Puppeteer's handlers here means our own handlers are the
-    // only thing driving process exit.
+    // that call process.exit() directly and synchronously, which would race
+    // ahead of (and preempt) our own signal handlers above. Disabling
+    // Puppeteer's handlers here means our own handlers are the only thing
+    // driving process exit.
     handleSIGINT: false,
     handleSIGTERM: false,
     handleSIGHUP: false,
@@ -546,8 +461,8 @@ async function resolveWaNumber(msg) {
 
 // ── Safe send: sendMessage (not reply) avoids LID-address hangs ────
 // Previously a 60s timeout here called process.exit(1) — killing the whole
-// bot, the notify server, the admin alert channel and the daily digest,
-// because one customer reply was slow. Now a stalled send is classified: a
+// bot and the notify/admin-alert channels because one reply was slow. Now a
+// stalled send is classified: a
 // dead-session error triggers a background browser rebuild (the connection
 // repairs itself and the next message goes through), while anything else just
 // fails this one send and is surfaced to the caller.
@@ -565,14 +480,20 @@ async function safeSend(msg, text) {
   }
 }
 
-async function isAdmin(waNumber) {
+// Gates every bot command. Distinct from the `admins` table (which is a
+// shared payment-ledger-core concept used for business-activity broadcasts,
+// e.g. new-invoice/new-payment alerts, and stays untouched here) — this is
+// the dashboard's own real staff identity, extended with a phone number.
+async function resolveStaffUser(waNumber) {
   const { rows } = await query(
-    `SELECT 1 FROM admins
+    `SELECT id, role, display_name FROM dashboard_users
      WHERE active = true
+       AND phone_number IS NOT NULL
        AND right(regexp_replace(phone_number, '\\D', '', 'g'), 10) = right(regexp_replace($1, '\\D', '', 'g'), 10)`,
     [waNumber]
   );
-  return rows.length > 0;
+  if (!rows.length) return null;
+  return { id: rows[0].id, role: rows[0].role, displayName: rows[0].display_name };
 }
 
 async function notifyAdmins(text, mediaPath) {
@@ -624,19 +545,19 @@ process.on('unhandledRejection', (reason) => {
   const message = reason?.message || String(reason);
   // A dead Puppeteer frame surfacing as an unhandled rejection used to take
   // the entire process down. Repair the connection in place instead — the
-  // notify server, admin alerts and daily digest all stay up meanwhile.
+  // notify server and admin alerts stay up meanwhile.
   if (isFatalSessionError(message) && connection) {
     logger.error('[WhatsApp] Unhandled rejection looks like a dead session — repairing', { error: message });
     connection.noteSendFailure(message);
     return;
   }
   logger.error('[WhatsApp] Unhandled rejection — exiting for PM2 restart:', { error: message });
-  stopOcrService().then(() => process.exit(1));
+  process.exit(1);
 });
 
 process.on('uncaughtException', (err) => {
   logger.error('[WhatsApp] Uncaught exception — exiting for PM2 restart:', { error: err?.message || String(err) });
-  stopOcrService().then(() => process.exit(1));
+  process.exit(1);
 });
 
 async function handleIncomingMessage(msg) {
@@ -645,268 +566,215 @@ async function handleIncomingMessage(msg) {
     if (!msg.timestamp || msg.timestamp < BOT_START_TIME) return;
 
     const waNumber = await resolveWaNumber(msg);
+    const staff = await resolveStaffUser(waNumber);
+    if (!staff) return; // non-staff numbers are always silently ignored, no exceptions
+
     const text = (msg.body || '').trim();
     const pending = pendingConfirmations.get(waNumber);
-    const admin = await isAdmin(waNumber);
-
-    if (TEST_MODE_ALLOWED_NUMBERS.length > 0 && !admin) {
-      const last10 = waNumber.replace(/\D/g, '').slice(-10);
-      if (!TEST_MODE_ALLOWED_NUMBERS.includes(last10)) {
-        logger.info('[WhatsApp] Ignoring message — not on TEST_MODE_ALLOWED_NUMBERS allowlist', { waNumber });
-        return;
-      }
-    }
-
     if (pending && pending.expiry > Date.now()) {
-      await handlePendingReply(msg, waNumber, pending, text);
+      await handlePendingReply(msg, waNumber, staff, pending, text);
       return;
     }
 
-    if (admin && !/^paid$/i.test(text)) {
-      const parsed = flows.parseAdminCommand(text);
-      if (parsed.command !== 'UNKNOWN') {
-        await handleAdminCommand(msg, waNumber, parsed);
-        return;
-      }
-    }
-
-    const customer = await customers.findByPhone(waNumber);
-    if (!customer) {
-      setPending(waNumber, 'registration_name', {});
-      await safeSend(msg, "👋 Welcome to *Aaral Marketing*! I don't have you registered yet — what's your name?");
+    const parsed = flows.parseAdminCommand(text);
+    if (parsed.command !== 'UNKNOWN') {
+      await handleStaffCommand(msg, waNumber, staff, parsed);
       return;
     }
 
-    if (/^paid$/i.test(text)) {
-      setPending(waNumber, 'awaiting_amount', { customerId: customer.id });
-      await safeSend(msg, 'Got it — how much did you pay?');
-      return;
-    }
-
-    if (/^help$/i.test(text)) {
-      await safeSend(msg, `Hi ${customer.name}!\n\n${flows.buildInstructionsMessage()}`);
-      return;
-    }
-
-    await safeSend(msg, `Hi ${customer.name}! Reply *PAID* any time you make a payment to Aaral Marketing, or *HELP* for instructions.`);
+    await handlePaymentReport(msg, waNumber, staff, text);
   } catch (e) {
     logger.error('[WhatsApp] message handler error', { error: e.message });
     if (connection) connection.noteSendFailure(e.message);
   }
 }
 
-// When the admin's WhatsApp account IS the bot's own linked number (the
-// common case while developing/testing on a personal number), a command an
-// admin sends to themselves is a "self-sent" message. whatsapp-web.js's
-// 'message' event deliberately excludes self-sent messages (it only fires
-// for messages from someone else) — a self-sent CONFIRM/REJECT would
-// otherwise never reach the handler above at all, with no error, since the
-// library drops it before 'message' ever fires. 'message_create' fires for
-// every message including self-sent ones, so admin commands sent to
-// yourself are handled here instead.
+// When a staff member's WhatsApp account IS the bot's own linked number (the
+// common case while developing/testing on a personal number), a command they
+// send to themselves is a "self-sent" message. whatsapp-web.js's 'message'
+// event deliberately excludes self-sent messages (it only fires for messages
+// from someone else) — a self-sent command would otherwise never reach the
+// handler above at all, with no error, since the library drops it before
+// 'message' ever fires. 'message_create' fires for every message including
+// self-sent ones, so staff commands sent to yourself are handled here instead.
 async function handleSelfSentMessage(msg) {
   try {
     if (!msg.fromMe) return; // messages from others are handled by 'message' above
     if (msg.from.includes('@g.us') || msg.isStatus) return;
     if (!msg.timestamp || msg.timestamp < BOT_START_TIME) return;
 
-    const text = (msg.body || '').trim();
-    const parsed = flows.parseAdminCommand(text);
-    if (parsed.command === 'UNKNOWN') return;
-
     const waNumber = client.info.wid.user;
-    await handleAdminCommand(msg, waNumber, parsed);
+    const staff = await resolveStaffUser(waNumber);
+    if (!staff) return;
+
+    const text = (msg.body || '').trim();
+    const pending = pendingConfirmations.get(waNumber);
+    if (pending && pending.expiry > Date.now()) {
+      await handlePendingReply(msg, waNumber, staff, pending, text);
+      return;
+    }
+
+    const parsed = flows.parseAdminCommand(text);
+    if (parsed.command !== 'UNKNOWN') {
+      await handleStaffCommand(msg, waNumber, staff, parsed);
+      return;
+    }
+
+    await handlePaymentReport(msg, waNumber, staff, text);
   } catch (e) {
     logger.error('[WhatsApp] message_create handler error', { error: e.message });
     if (connection) connection.noteSendFailure(e.message);
   }
 }
 
-async function handlePendingReply(msg, waNumber, pending, text) {
-  if (pending.type === 'registration_name') {
-    const result = flows.handleRegistrationName(text);
-    if (!result.ok) { await safeSend(msg, result.error); return; }
-    const customer = await customers.createCustomer({ name: result.name, phoneNumber: waNumber });
-    clearPending(waNumber);
-    await safeSend(
-      msg,
-      `Thanks, ${customer.name}! You're registered with *Aaral Marketing*.\n\n` +
-      flows.buildInstructionsMessage()
-    );
+function buildConfirmSummary({ amount, date, method, customerName, balanceAfter }) {
+  const methodLabel = { cash: 'Cash', gpay: 'GPay', bank_transfer: 'Bank Transfer' }[method];
+  const balanceNote = balanceAfter !== null ? ` — balance will become ₹${balanceAfter}` : '';
+  return `Record ₹${amount} from ${customerName}, dated ${date}, ${methodLabel}${balanceNote}. Reply YES to confirm, NO to cancel.`;
+}
+
+async function presentPaymentConfirm(msg, waNumber, draft) {
+  const balance = await balances.getBalanceByCustomerId(draft.customerId).catch(() => null);
+  const currentBalance = balance ? Number(balance.balance) : 0;
+  const balanceAfter = balance ? currentBalance - Number(draft.amount) : null;
+  setPending(waNumber, 'awaiting_payment_confirm', { ...draft, balanceAfter });
+  await safeSend(msg, buildConfirmSummary({ ...draft, balanceAfter }));
+}
+
+// The only free-text surface in this bot -- everything else (BALANCE,
+// LEDGER, IMPORT) is a structured command, deliberately, to keep parsing
+// risk contained to the one place that actually needs it.
+async function handlePaymentReport(msg, waNumber, staff, text) {
+  const parsed = paymentIntent.parsePaymentMessage(text);
+
+  if (parsed.amount === null) {
+    await safeSend(msg, 'Unknown command. Try BALANCE <name>, LEDGER <name>, IMPORT, or report a payment like: received 5000 from Ramesh.');
     return;
   }
 
-  if (pending.type === 'awaiting_amount') {
-    const result = flows.handleAmountReply(text);
-    if (!result.ok) { await safeSend(msg, result.error); return; }
-    setPending(waNumber, 'awaiting_proof', { customerId: pending.data.customerId, amount: result.amount });
-    await safeSend(msg, 'Now send a screenshot of the payment, type the UPI reference/UTR number, or reply CASH if you paid cash.');
+  const candidates = await paymentIntent.resolveCustomerFromText(parsed.candidatePhrases, customers.findByNameOrPhone);
+
+  if (candidates.length === 0) {
+    setPending(waNumber, 'awaiting_customer_clarification', {
+      amount: parsed.amount, date: parsed.date, method: parsed.method, mode: 'ask_name',
+    });
+    await safeSend(msg, `I couldn't match a customer in that message. What's the exact registered name?`);
     return;
   }
 
-  if (pending.type === 'awaiting_proof') {
-    const result = flows.handleProofReply(text, msg.hasMedia);
-    if (!result.ok) { await safeSend(msg, result.error); return; }
+  if (candidates.length > 1) {
+    const lines = candidates.map((c, i) => `${i + 1}. ${c.name}`);
+    setPending(waNumber, 'awaiting_customer_clarification', {
+      amount: parsed.amount, date: parsed.date, method: parsed.method, mode: 'pick',
+      candidates: candidates.map((c) => ({ id: c.id, name: c.name })),
+    });
+    await safeSend(msg, `Multiple customers match:\n${lines.join('\n')}\nReply with a number.`);
+    return;
+  }
 
-    let proofReference = result.proofReference;
-    let screenshotPath = null;
-    let ocrExtractedAmount = null;
-    let ocrExtractedTxnId = null;
-    let ocrExtractedDate = null;
-    let ocrWarning = '';
-    let ocrInfoLine = '';
-    if (result.proofType === 'screenshot') {
-      const media = await msg.downloadMedia();
-      const mimeToExt = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
-      const ext = mimeToExt[media.mimetype] || 'jpg';
-      const fileName = `${Date.now()}-${waNumber}.${ext}`;
-      screenshotPath = path.join(PROOFS_DIR, fileName);
-      fs.writeFileSync(screenshotPath, media.data, 'base64');
-      proofReference = fileName;
+  const draft = {
+    amount: parsed.amount, date: parsed.date, method: parsed.method,
+    customerId: candidates[0].id, customerName: candidates[0].name,
+  };
 
-      try {
-        const ocrResponse = await fetch(`${OCR_SERVICE_URL}/ocr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imagePath: path.resolve(screenshotPath) }),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (!ocrResponse.ok) {
-          const errorBody = await ocrResponse.json().catch(() => ({}));
-          throw new Error(`OCR service returned ${ocrResponse.status}: ${errorBody.error || 'unknown error'}`);
-        }
-        const { text: ocrText } = await ocrResponse.json();
-        const ocrResult = flows.extractAmountMatch(ocrText, pending.data.amount);
-        ocrExtractedAmount = ocrResult.extractedAmount;
-        if (ocrResult.matched === false) {
-          ocrWarning += `\n⚠️ Typed ₹${pending.data.amount} but screenshot appears to show ₹${ocrResult.extractedAmount} — verify carefully.`;
-        }
+  if (!draft.method) {
+    setPending(waNumber, 'awaiting_payment_method', draft);
+    await safeSend(msg, 'Cash, GPay, or Bank?');
+    return;
+  }
 
-        ocrExtractedTxnId = flows.extractTxnId(ocrText);
-        ocrExtractedDate = flows.extractPaymentDate(ocrText);
+  await presentPaymentConfirm(msg, waNumber, draft);
+}
 
-        const refParts = [];
-        if (ocrExtractedTxnId) refParts.push(`UPI Ref: ${ocrExtractedTxnId}`);
-        if (ocrExtractedDate) refParts.push(`Date: ${ocrExtractedDate}`);
-        if (refParts.length > 0) {
-          ocrInfoLine = `\n${refParts.join(', ')}`;
-        }
-
-        if (flows.isScreenshotDateStale(ocrExtractedDate, new Date().toISOString())) {
-          const ageDays = Math.floor(flows.screenshotAgeDays(ocrExtractedDate, new Date().toISOString()));
-          ocrWarning += `\n⚠️ Screenshot is ${ageDays} day${ageDays === 1 ? '' : 's'} old (${ocrExtractedDate}) — more than the 3-day freshness window, verify carefully.`;
-        }
-      } catch (e) {
-        logger.warn('[WhatsApp] OCR failed, skipping OCR checks', { error: e.message });
-      }
+async function handlePendingReply(msg, waNumber, staff, pending, text) {
+  if (pending.type === 'awaiting_customer_clarification') {
+    if (pending.data.mode === 'pick') {
+      const index = parseInt(text, 10);
+      const picked = Number.isInteger(index) ? pending.data.candidates[index - 1] : null;
+      if (!picked) { await safeSend(msg, `Reply with a number from 1 to ${pending.data.candidates.length}.`); return; }
+      const draft = { amount: pending.data.amount, date: pending.data.date, method: pending.data.method, customerId: picked.id, customerName: picked.name };
+      clearPending(waNumber);
+      if (!draft.method) { setPending(waNumber, 'awaiting_payment_method', draft); await safeSend(msg, 'Cash, GPay, or Bank?'); return; }
+      await presentPaymentConfirm(msg, waNumber, draft);
+      return;
     }
 
-    const { claim, duplicateOf, duplicateTxnIdOf } = await claims.createClaim({
-      customerId: pending.data.customerId,
-      amountClaimed: pending.data.amount,
-      proofType: result.proofType,
-      proofReference,
-      ocrExtractedAmount,
-      ocrExtractedTxnId,
-      ocrExtractedDate,
-    });
+    // mode === 'ask_name'
+    const matches = await customers.findByNameOrPhone(text.trim());
+    if (matches.length !== 1) {
+      await safeSend(msg, matches.length === 0
+        ? `Still no match for "${text.trim()}". What's the exact registered name?`
+        : `Multiple customers match "${text.trim()}" — try a more specific name.`);
+      return;
+    }
+    const draft = { amount: pending.data.amount, date: pending.data.date, method: pending.data.method, customerId: matches[0].id, customerName: matches[0].name };
     clearPending(waNumber);
+    if (!draft.method) { setPending(waNumber, 'awaiting_payment_method', draft); await safeSend(msg, 'Cash, GPay, or Bank?'); return; }
+    await presentPaymentConfirm(msg, waNumber, draft);
+    return;
+  }
 
-    const shortId = claim.id.slice(0, 8);
-    await safeSend(msg, `Thanks! Your payment of ₹${pending.data.amount} has been recorded (claim #${shortId}) and is pending verification.`);
+  if (pending.type === 'awaiting_payment_method') {
+    const method = paymentIntent.extractMethod(text);
+    if (!method) { await safeSend(msg, 'Please reply Cash, GPay, or Bank.'); return; }
+    const draft = { ...pending.data, method };
+    clearPending(waNumber);
+    await presentPaymentConfirm(msg, waNumber, draft);
+    return;
+  }
 
-    const customer = await customers.findByPhone(waNumber);
-    const dupNote = duplicateOf ? `\n⚠️ Same reference already claimed on claim #${duplicateOf.id.slice(0, 8)} (status: ${duplicateOf.status}).` : '';
-    const dupTxnNote = duplicateTxnIdOf ? `\n⚠️ Same UPI transaction ID already claimed on claim #${duplicateTxnIdOf.id.slice(0, 8)} (status: ${duplicateTxnIdOf.status}).` : '';
-    await notifyAdmins(
-      `New payment claim #${shortId}\nFrom: ${customer.name} (${waNumber})\nAmount: ₹${claim.amount_claimed}\nProof: ${result.proofType}${proofReference ? ' - ' + proofReference : ''}${dupNote}${dupTxnNote}${ocrInfoLine}${ocrWarning}\n\nReply CONFIRM ${shortId} or REJECT ${shortId} <reason>`,
-      screenshotPath
-    );
+  if (pending.type === 'awaiting_payment_confirm') {
+    if (/^no$/i.test(text.trim())) {
+      clearPending(waNumber);
+      await safeSend(msg, 'Cancelled — nothing recorded.');
+      return;
+    }
+    if (!/^yes$/i.test(text.trim())) {
+      await safeSend(msg, 'Reply YES to confirm or NO to cancel.');
+      return;
+    }
+
+    clearPending(waNumber);
+    const { amount, date, method, customerId, customerName, balanceAfter } = pending.data;
+    const payment = await recordPayment({ customerId, amount, method, date, createdBy: `whatsapp:${staff.displayName}` });
+    await safeSend(msg, `Recorded ₹${payment.amount_claimed} from ${customerName}.`);
+
+    try {
+      const customer = await customers.findById(customerId);
+      if (customer) {
+        const balanceLine = balanceAfter !== null ? ` Balance: ₹${balanceAfter}` : '';
+        await client.sendMessage(flows.toWhatsAppChatId(customer.phone_number), `Payment received: ₹${payment.amount_claimed} on ${date}.${balanceLine}`);
+      }
+    } catch (e) {
+      logger.error('[WhatsApp] Failed to notify customer of recorded payment', { error: e.message });
+    }
     return;
   }
 }
 
-async function handleAdminCommand(msg, waNumber, parsed) {
-  if (parsed.command === 'CONFIRM' || parsed.command === 'REJECT') {
-    const matches = await claims.findClaimByIdPrefix(parsed.claimId);
-    if (matches.length === 0) { await safeSend(msg, `No claim found matching "${parsed.claimId}".`); return; }
-    if (matches.length > 1) { await safeSend(msg, `Multiple claims match "${parsed.claimId}" — use more characters.`); return; }
-
-    const fullId = matches[0].id;
-    if (parsed.command === 'CONFIRM') {
-      const updated = await claims.confirmClaim(fullId, waNumber);
-      if (updated) {
-        await safeSend(msg, `Claim #${parsed.claimId} confirmed.`);
-        const customer = await customers.findById(updated.customer_id);
-        if (customer) {
-          const chatId = flows.toWhatsAppChatId(customer.phone_number);
-          let balanceLine = '';
-          try {
-            const balance = await balances.getBalanceByCustomerId(customer.id);
-            if (balance) balanceLine = `\n${flows.formatBalanceLine(balance.balance)}`;
-          } catch (e) {
-            logger.error('[WhatsApp] Failed to fetch balance for confirmation message', { customer: customer.phone_number, error: e.message });
-          }
-          try {
-            await client.sendMessage(chatId, `✅ Your payment of ₹${updated.amount_claimed} has been confirmed. Thank you!${balanceLine}`);
-          } catch (e) {
-            logger.error('[WhatsApp] Failed to notify customer of confirmation', { customer: customer.phone_number, error: e.message });
-          }
-          try {
-            const { rows: activeAdmins } = await query('SELECT phone_number FROM admins WHERE active = true');
-            const adminBalance = await balances.getBalanceByCustomerId(customer.id);
-            const adminBalanceLine = adminBalance ? flows.formatBalanceLine(adminBalance.balance) : '';
-            for (const admin of activeAdmins) {
-              if (admin.phone_number.replace(/\D/g, '').slice(-10) === waNumber) continue;
-              await client.sendMessage(
-                flows.toWhatsAppChatId(admin.phone_number),
-                `Payment of ₹${updated.amount_claimed} received from ${customer.name}. ${adminBalanceLine}`
-              );
-            }
-          } catch (e) {
-            logger.error('[WhatsApp] Failed to notify admins of confirmation', { error: e.message });
-          }
-        }
-      } else {
-        await safeSend(msg, `Claim #${parsed.claimId} was already reviewed.`);
-      }
-    } else {
-      const updated = await claims.rejectClaim(fullId, waNumber, parsed.reason);
-      if (updated) {
-        await safeSend(msg, `Claim #${parsed.claimId} rejected.`);
-        const customer = await customers.findById(updated.customer_id);
-        if (customer) {
-          const chatId = flows.toWhatsAppChatId(customer.phone_number);
-          const reasonNote = updated.review_note ? ` Reason: ${updated.review_note}` : '';
-          try {
-            await client.sendMessage(chatId, `❌ Your payment claim (₹${updated.amount_claimed}) was rejected.${reasonNote}`);
-          } catch (e) {
-            logger.error('[WhatsApp] Failed to notify customer of rejection', { customer: customer.phone_number, error: e.message });
-          }
-        }
-      } else {
-        await safeSend(msg, `Claim #${parsed.claimId} was already reviewed.`);
-      }
+async function sendLedgerPdf(msg, customer) {
+  try {
+    const res = await fetch(`${DASHBOARD_INTERNAL_URL}/internal/bot/ledger-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Bot-Internal-Secret': process.env.BOT_INTERNAL_SECRET || '' },
+      body: JSON.stringify({ customerId: customer.id }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      await safeSend(msg, `Could not fetch the ledger: ${body.error || res.statusText}`);
+      return;
     }
-    return;
+    const data = await res.json();
+    const media = new MessageMedia('application/pdf', data.pdfBase64, data.filename);
+    await client.sendMessage(msg.from, media, { caption: data.balanceLine });
+  } catch (e) {
+    logger.error('[WhatsApp] Failed to fetch/send ledger PDF', { error: e.message });
+    await safeSend(msg, 'Could not reach the dashboard to fetch the ledger — try again shortly.');
   }
+}
 
-  if (parsed.command === 'PENDING') {
-    const rows = await claims.listPendingClaims();
-    if (rows.length === 0) { await safeSend(msg, 'No pending claims.'); return; }
-    const lines = rows.map((r) => `#${r.id.slice(0, 8)} ${r.name} (${r.phone_number}) ₹${r.amount_claimed} [${r.proof_type}]`);
-    await safeSend(msg, `Pending claims:\n${lines.join('\n')}`);
-    return;
-  }
-
-  if (parsed.command === 'PENDING_LINKS') {
-    const rows = await balances.listUnlinkedCustomers();
-    if (rows.length === 0) { await safeSend(msg, 'No unlinked customers.'); return; }
-    const lines = rows.map((r) => `${r.name} (${r.phone_number})`);
-    await safeSend(msg, `Unlinked customers:\n${lines.join('\n')}`);
-    return;
-  }
-
+async function handleStaffCommand(msg, waNumber, staff, parsed) {
   if (parsed.command === 'BALANCE') {
     const results = await balances.searchBalances(parsed.query);
     if (results.length === 0) { await safeSend(msg, `No customer found matching "${parsed.query}".`); return; }
@@ -915,7 +783,20 @@ async function handleAdminCommand(msg, waNumber, parsed) {
     return;
   }
 
+  if (parsed.command === 'LEDGER') {
+    const matches = await customers.findByNameOrPhone(parsed.query);
+    if (matches.length === 0) { await safeSend(msg, `No customer found matching "${parsed.query}".`); return; }
+    if (matches.length > 1) {
+      const lines = matches.map((c, i) => `${i + 1}. ${c.name}`);
+      await safeSend(msg, `Multiple customers match "${parsed.query}":\n${lines.join('\n')}\nSend LEDGER with the exact name.`);
+      return;
+    }
+    await sendLedgerPdf(msg, matches[0]);
+    return;
+  }
+
   if (parsed.command === 'IMPORT') {
+    if (staff.role !== 'admin') { await safeSend(msg, 'Only an admin can run IMPORT.'); return; }
     if (!msg.hasMedia) { await safeSend(msg, 'Send the CSV or Excel file as an attachment with caption IMPORT.'); return; }
     const media = await msg.downloadMedia();
     const buffer = Buffer.from(media.data, 'base64');
@@ -942,17 +823,7 @@ async function handleAdminCommand(msg, waNumber, parsed) {
     return;
   }
 
-  await safeSend(msg, 'Unknown command. Try PAID, PENDING, PENDING LINKS, BALANCE <name>, CONFIRM <id>, REJECT <id> <reason>, or IMPORT (with a CSV or Excel attachment).');
-}
-
-// Daily 9 AM IST digest of claims that have sat pending for 24h+
-if (require.main === module) {
-  cron.schedule('0 9 * * *', async () => {
-    const stale = await claims.listStaleClaims(24);
-    if (stale.length === 0) return;
-    const lines = stale.map((r) => `#${r.id.slice(0, 8)} ${r.name} (${r.phone_number}) ₹${r.amount_claimed} — reported ${r.reported_at}`);
-    await notifyAdmins(`⏰ ${stale.length} claim(s) pending review for 24h+:\n${lines.join('\n')}`);
-  }, { timezone: 'Asia/Kolkata' });
+  await safeSend(msg, 'Unknown command. Try BALANCE <name>, LEDGER <name>, IMPORT, or report a payment like: received 5000 from Ramesh.');
 }
 
 function buildConnection() {
@@ -997,9 +868,7 @@ if (require.main === module) {
   // unconditionally, is what makes the WhatsApp state observable at all.
   startNotifyServer();
 
-  waitForOcrService()
-    .catch((e) => logger.error('[OCR] Unexpected error waiting for OCR service', { error: e.message }))
-    .then(() => connection.start())
+  connection.start()
     .then((result) => {
       if (!result.ok) {
         // Deliberately NOT process.exit(1). Everything above stays up, and
@@ -1012,7 +881,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  makeClient, safeSend, resolveWaNumber, isAdmin, notifyAdmins,
+  makeClient, safeSend, resolveWaNumber, resolveStaffUser, notifyAdmins,
   pendingConfirmations, setPending, clearPending, PROOFS_DIR,
   buildConnection, startNotifyServer, WA_CONTRACT,
   getConnection: () => connection,

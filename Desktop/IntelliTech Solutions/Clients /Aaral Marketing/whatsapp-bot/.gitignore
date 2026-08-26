@@ -8,5 +8,3 @@ logs/
 .DS_Store
 ruvector.db
 .wwebjs_cache/
-ocr-service/venv/
-ocr-service/__pycache__/
