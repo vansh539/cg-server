@@ -121,7 +121,7 @@
       <div class="table-panel">
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Username</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody id="rows"></tbody>
           </table>
         </div>
@@ -156,10 +156,29 @@
         <option value="admin">Admin</option>
       </select>
     </div>
+    <div class="field-group">
+      <label>Phone number</label>
+      <input type="text" id="newPhone" autocomplete="off" placeholder="e.g. 9812345678">
+    </div>
     <div id="addUserError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelAddUser" type="button">Cancel</button>
       <button class="btn-primary" id="saveAddUser" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="editPhoneModal">
+  <div class="modal-box">
+    <h3>Edit Phone Number</h3>
+    <div class="field-group">
+      <label>Phone number for <strong id="editPhoneForName"></strong></label>
+      <input type="text" id="editPhoneValue" autocomplete="off">
+    </div>
+    <div id="editPhoneError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelEditPhone" type="button">Cancel</button>
+      <button class="btn-primary" id="confirmEditPhone" type="button">Save</button>
     </div>
   </div>
 </div>
@@ -186,7 +205,7 @@ async function load() {
   const res = await fetch('/api/users');
   const data = await res.json();
   if (!data.ok) {
-    rowsEl.innerHTML = `<tr><td colspan="5" class="empty-state">${data.error || "You don't have access to this."}</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="6" class="empty-state">${data.error || "You don't have access to this."}</td></tr>`;
     document.getElementById('openAddUser').style.display = 'none';
     return;
   }
@@ -194,15 +213,20 @@ async function load() {
   data.users.forEach((u) => {
     const tr = document.createElement('tr');
     tr.className = u.active ? '' : 'inactive';
+    const escapedName = u.display_name.replace(/"/g, '&quot;');
+    const escapedPhone = (u.phone_number || '').replace(/"/g, '&quot;');
     tr.innerHTML = `
       <td>${u.display_name}</td>
       <td>${u.username}</td>
+      <td>${u.phone_number || '<span style="color:var(--ink-muted)">not set</span>'}</td>
       <td><span class="role-badge ${u.role}">${u.role}</span></td>
       <td>${u.active ? '' : '<span class="inactive-badge">Deactivated</span>'}</td>
       <td>
         <div class="row-actions">
-          <button data-reset-id="${u.id}" data-reset-name="${u.display_name.replace(/"/g, '&quot;')}">Reset password</button>
+          <button data-edit-phone-id="${u.id}" data-edit-phone-name="${escapedName}" data-edit-phone-current="${escapedPhone}">Edit phone</button>
+          <button data-reset-id="${u.id}" data-reset-name="${escapedName}">Reset password</button>
           <button class="danger" data-toggle-id="${u.id}">${u.active ? 'Deactivate' : 'Activate'}</button>
+          <button class="danger" data-delete-id="${u.id}" data-delete-name="${escapedName}">Delete</button>
         </div>
       </td>`;
     rowsEl.appendChild(tr);
@@ -215,6 +239,7 @@ const newName = document.getElementById('newName');
 const newUsername = document.getElementById('newUsername');
 const newPassword = document.getElementById('newPassword');
 const newRole = document.getElementById('newRole');
+const newPhone = document.getElementById('newPhone');
 const addUserError = document.getElementById('addUserError');
 
 function openAddUserModal() {
@@ -222,6 +247,7 @@ function openAddUserModal() {
   newUsername.value = '';
   newPassword.value = '';
   newRole.value = 'employee';
+  newPhone.value = '';
   addUserError.textContent = '';
   addUserModal.classList.add('open');
   newName.focus();
@@ -241,6 +267,7 @@ document.getElementById('saveAddUser').addEventListener('click', async () => {
       username: newUsername.value.trim(),
       password: newPassword.value,
       role: newRole.value,
+      phoneNumber: newPhone.value.trim(),
     }),
   });
   const data = await res.json();
@@ -249,6 +276,40 @@ document.getElementById('saveAddUser').addEventListener('click', async () => {
     return;
   }
   closeAddUserModal();
+  load();
+});
+
+const editPhoneModal = document.getElementById('editPhoneModal');
+const editPhoneValue = document.getElementById('editPhoneValue');
+const editPhoneError = document.getElementById('editPhoneError');
+let pendingEditPhoneId = null;
+
+function openEditPhoneModal(id, name, current) {
+  pendingEditPhoneId = id;
+  document.getElementById('editPhoneForName').textContent = name;
+  editPhoneValue.value = current || '';
+  editPhoneError.textContent = '';
+  editPhoneModal.classList.add('open');
+  editPhoneValue.focus();
+}
+function closeEditPhoneModal() { editPhoneModal.classList.remove('open'); pendingEditPhoneId = null; }
+
+document.getElementById('cancelEditPhone').addEventListener('click', closeEditPhoneModal);
+editPhoneModal.addEventListener('click', (e) => { if (e.target === editPhoneModal) closeEditPhoneModal(); });
+
+document.getElementById('confirmEditPhone').addEventListener('click', async () => {
+  if (!pendingEditPhoneId) return;
+  const res = await fetch(`/api/users/${pendingEditPhoneId}/phone`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phoneNumber: editPhoneValue.value.trim() }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    editPhoneError.textContent = data.error;
+    return;
+  }
+  closeEditPhoneModal();
   load();
 });
 
@@ -286,6 +347,19 @@ document.getElementById('confirmReset').addEventListener('click', async () => {
 });
 
 rowsEl.addEventListener('click', (e) => {
+  const editPhoneBtn = e.target.closest('[data-edit-phone-id]');
+  if (editPhoneBtn) {
+    openEditPhoneModal(editPhoneBtn.dataset.editPhoneId, editPhoneBtn.dataset.editPhoneName, editPhoneBtn.dataset.editPhoneCurrent);
+    return;
+  }
+  const deleteBtn = e.target.closest('[data-delete-id]');
+  if (deleteBtn) {
+    if (!confirm(`Permanently delete ${deleteBtn.dataset.deleteName}? This cannot be undone.`)) return;
+    fetch(`/api/users/${deleteBtn.dataset.deleteId}`, { method: 'DELETE' })
+      .then((res) => res.json())
+      .then((data) => { if (!data.ok) alert(data.error); load(); });
+    return;
+  }
   const resetBtn = e.target.closest('[data-reset-id]');
   if (resetBtn) {
     openResetModal(resetBtn.dataset.resetId, resetBtn.dataset.resetName);
