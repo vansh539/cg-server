@@ -91,3 +91,69 @@ test('extractMethod recognizes bank transfer and its abbreviations', () => {
 test('extractMethod returns null when no method keyword is present', () => {
   assert.equal(extractMethod('just received payment from Shyam'), null);
 });
+
+const { extractNameCandidatePhrases, resolveCustomerFromText, parsePaymentMessage } = require('../src/whatsapp/paymentIntent');
+
+test('extractNameCandidatePhrases drops stopwords, amounts, and produces word + adjacent-pair candidates', () => {
+  const phrases = extractNameCandidatePhrases('Received 15000 payment from Shyam miyapur today');
+  assert.ok(phrases.includes('Shyam'));
+  assert.ok(phrases.includes('miyapur'));
+  assert.ok(phrases.includes('Shyam miyapur'));
+  assert.ok(!phrases.some((p) => p.toLowerCase().includes('received')));
+  assert.ok(!phrases.some((p) => p.toLowerCase().includes('today')));
+  assert.ok(!phrases.includes('15000'));
+});
+
+test('extractNameCandidatePhrases orders longer phrases first', () => {
+  const phrases = extractNameCandidatePhrases('paid 5000 to Shyam Kumar');
+  assert.equal(phrases[0], 'Shyam Kumar');
+});
+
+async function fakeFindByNameOrPhone(term) {
+  const db = [
+    { id: '1', name: 'Shyam Miyapur Traders' },
+    { id: '2', name: 'Shyam Kumar' },
+    { id: '3', name: 'Ramesh Stores' },
+  ];
+  const lower = term.toLowerCase();
+  return db.filter((c) => c.name.toLowerCase().includes(lower));
+}
+
+test('resolveCustomerFromText resolves an unambiguous two-word match uniquely', async () => {
+  const phrases = extractNameCandidatePhrases('Received 15000 from Shyam miyapur today');
+  const results = await resolveCustomerFromText(phrases, fakeFindByNameOrPhone);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, '1');
+});
+
+test('resolveCustomerFromText surfaces both candidates on an ambiguous single-word match', async () => {
+  const phrases = extractNameCandidatePhrases('Received 15000 from Shyam today');
+  const results = await resolveCustomerFromText(phrases, fakeFindByNameOrPhone);
+  assert.equal(results.length, 2);
+});
+
+test('resolveCustomerFromText returns an empty array when nothing matches', async () => {
+  const phrases = extractNameCandidatePhrases('Received 15000 from Nobody today');
+  const results = await resolveCustomerFromText(phrases, fakeFindByNameOrPhone);
+  assert.equal(results.length, 0);
+});
+
+test('parsePaymentMessage masks the matched date text out before amount/method/name extraction', () => {
+  const result = parsePaymentMessage('Received 15000 payment from Shyam miyapur on 15-06-2026', new Date('2026-08-26'));
+  assert.equal(result.amount, 15000);
+  assert.equal(result.date, '2026-06-15');
+  assert.ok(result.candidatePhrases.includes('Shyam'));
+  assert.ok(!result.candidatePhrases.some((p) => p.includes('15-06-2026')));
+});
+
+test('parsePaymentMessage extracts method alongside amount/date/name', () => {
+  const result = parsePaymentMessage('Received 5000 cash from Ramesh today', new Date('2026-08-26'));
+  assert.equal(result.amount, 5000);
+  assert.equal(result.method, 'cash');
+  assert.ok(result.candidatePhrases.includes('Ramesh'));
+});
+
+test('parsePaymentMessage returns a null amount when the message has none', () => {
+  const result = parsePaymentMessage('hello there', new Date('2026-08-26'));
+  assert.equal(result.amount, null);
+});

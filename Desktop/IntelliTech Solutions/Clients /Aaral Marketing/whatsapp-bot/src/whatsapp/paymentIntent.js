@@ -59,4 +59,77 @@ function extractMethod(text) {
   return null;
 }
 
-module.exports = { extractAmount, extractDateInfo, extractMethod, toIsoDate };
+const STOPWORDS = new Set([
+  'received', 'payment', 'paid', 'pay', 'from', 'today', 'yesterday', 'cash',
+  'gpay', 'g', 'pay', 'upi', 'bank', 'transfer', 'rs', 'inr', 'rupees',
+  'rupee', 'of', 'the', 'a', 'an', 'via', 'on', 'for', 'amount', 'balance',
+  'ledger', 'got', 'payments', 'money', 'sent', 'and', 'with', 'him', 'her',
+  'them', 'done', 'settled', 'tomorrow', 'morning', 'evening', 'neft',
+  'imps', 'rtgs', 'phonepe', 'paytm',
+]);
+
+function extractNameCandidatePhrases(text) {
+  const words = String(text || '')
+    .replace(/[₹,]/g, ' ')
+    .split(/\s+/)
+    .map((w) => w.replace(/^[^\w]+|[^\w]+$/g, ''))
+    .filter(Boolean)
+    .filter((w) => !/^\d+$/.test(w))
+    .filter((w) => !STOPWORDS.has(w.toLowerCase()));
+
+  const phrases = [];
+  for (let i = 0; i < words.length; i++) {
+    phrases.push(words[i]);
+    if (i + 1 < words.length) phrases.push(`${words[i]} ${words[i + 1]}`);
+  }
+  // Longest phrases first, so a two-word match is preferred over its
+  // single-word substring resolving to the same or a different customer.
+  return [...new Set(phrases)].sort((a, b) => b.length - a.length);
+}
+
+// Tries the most specific (most words) candidate phrases first -- e.g.
+// "Shyam miyapur" before the bare "Shyam" it contains. As soon as any
+// phrase at a given specificity level resolves to at least one customer,
+// that level's matches are returned outright and shorter, vaguer phrases
+// are never consulted -- otherwise a two-word phrase that uniquely
+// resolves would still end up looking ambiguous just because its
+// first-word substring also happens to match someone else.
+async function resolveCustomerFromText(candidatePhrases, findByNameOrPhone) {
+  const byWordCount = new Map();
+  for (const phrase of candidatePhrases) {
+    if (phrase.length < 2) continue;
+    const wordCount = phrase.trim().split(/\s+/).length;
+    if (!byWordCount.has(wordCount)) byWordCount.set(wordCount, []);
+    byWordCount.get(wordCount).push(phrase);
+  }
+
+  const tiers = [...byWordCount.keys()].sort((a, b) => b - a);
+
+  for (const wordCount of tiers) {
+    const seen = new Map();
+    for (const phrase of byWordCount.get(wordCount)) {
+      const matches = await findByNameOrPhone(phrase);
+      for (const customer of matches) seen.set(customer.id, customer);
+    }
+    if (seen.size > 0) return [...seen.values()];
+  }
+  return [];
+}
+
+function parsePaymentMessage(text, referenceDate = new Date()) {
+  const raw = String(text || '');
+  const dateInfo = extractDateInfo(raw, referenceDate);
+  const masked = dateInfo.matchedText ? raw.replace(dateInfo.matchedText, ' ') : raw;
+  return {
+    amount: extractAmount(masked),
+    date: dateInfo.iso,
+    method: extractMethod(masked),
+    candidatePhrases: extractNameCandidatePhrases(masked),
+  };
+}
+
+module.exports = {
+  extractAmount, extractDateInfo, extractMethod,
+  extractNameCandidatePhrases, resolveCustomerFromText, parsePaymentMessage,
+  toIsoDate,
+};
