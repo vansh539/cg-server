@@ -93,6 +93,10 @@ const CHITTI_CSS = `
   overflow-wrap: break-word;
 }
 
+/* The chitti (not the ledger statement, which reads better left-aligned)
+   centers its data cells to the grid. */
+.chitti th, .chitti td { text-align: center; }
+
 /* The customer's name, baked into the table rather than floated above it so
    border-collapse gives it seamless shared edges with the grid. */
 .slip .slip-banner {
@@ -116,6 +120,11 @@ const CHITTI_CSS = `
   padding: 1.3vw 1.4vw;
 }
 .slip .slip-meta .v { font-weight: 800; font-size: 3.1vw; float: right; }
+/* Chitti's To/Date row centers label+value together instead of spreading
+   them to opposite edges -- the ledger's Statement/Balance row keeps the
+   float since that wasn't part of this ask. */
+.chitti .slip-meta { text-align: center; }
+.chitti .slip-meta .v { float: none; }
 
 .slip thead th.col {
   background: #ebebeb;
@@ -129,6 +138,7 @@ const CHITTI_CSS = `
 }
 
 .slip th.n, .slip td.n { text-align: right; }
+.chitti th.n, .chitti td.n { text-align: center; }
 .slip tbody td { height: 4.6vw; font-weight: 600; border-color: #9a9a9a; }
 
 /* A rule down the left of Amount so the eye lands on the money. */

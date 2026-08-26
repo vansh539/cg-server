@@ -37,9 +37,12 @@ function signedAmount(entry) {
 // Pre-escaped HTML: every dynamic value is escaped individually here since
 // detailFor's result is inserted into the row without a further escapeHtml
 // pass (that pass would otherwise escape the <span> markup itself).
+// Non-breaking spaces around "×" keep "100 × ₹100" together as one unit --
+// without them, the browser was free to wrap the line right after "×",
+// leaving it dangling on its own line with "₹100" stranded on the next.
 function itemLine(item) {
   return `<span class="item-line">${escapeHtml(item.particulars)} — `
-    + `${escapeHtml(formatIndian(item.qty))} × ₹${escapeHtml(formatIndian(item.rate))}</span>`;
+    + `${escapeHtml(formatIndian(item.qty))} × ₹${escapeHtml(formatIndian(item.rate))}</span>`;
 }
 
 function detailFor(entry) {
