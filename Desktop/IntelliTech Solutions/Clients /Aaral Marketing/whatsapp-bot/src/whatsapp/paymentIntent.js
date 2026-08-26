@@ -45,4 +45,18 @@ function extractDateInfo(text, referenceDate = new Date()) {
   return { iso: toIsoDate(best.date()), matchedText: best.text };
 }
 
-module.exports = { extractAmount, extractDateInfo, toIsoDate };
+const METHOD_KEYWORDS = [
+  { method: 'gpay', pattern: /\b(g\s*pay|gpay|upi|phonepe|paytm)\b/i },
+  { method: 'bank_transfer', pattern: /\b(bank\s*transfer|neft|imps|rtgs|bank)\b/i },
+  { method: 'cash', pattern: /\bcash\b/i },
+];
+
+function extractMethod(text) {
+  const cleaned = String(text || '');
+  for (const { method, pattern } of METHOD_KEYWORDS) {
+    if (pattern.test(cleaned)) return method;
+  }
+  return null;
+}
+
+module.exports = { extractAmount, extractDateInfo, extractMethod, toIsoDate };

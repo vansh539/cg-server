@@ -69,3 +69,25 @@ test('extractDateInfo returns the matched substring so it can be masked out', ()
   const result = extractDateInfo('Received 15000 from Shyam yesterday', REF);
   assert.equal(result.matchedText, 'yesterday');
 });
+
+const { extractMethod } = require('../src/whatsapp/paymentIntent');
+
+test('extractMethod recognizes cash', () => {
+  assert.equal(extractMethod('received 5000 cash from Ramesh'), 'cash');
+});
+
+test('extractMethod recognizes gpay and its spelling variants', () => {
+  assert.equal(extractMethod('5000 via gpay from Shyam'), 'gpay');
+  assert.equal(extractMethod('5000 via g pay from Shyam'), 'gpay');
+  assert.equal(extractMethod('5000 via UPI from Shyam'), 'gpay');
+});
+
+test('extractMethod recognizes bank transfer and its abbreviations', () => {
+  assert.equal(extractMethod('bank transfer of 5000'), 'bank_transfer');
+  assert.equal(extractMethod('NEFT 5000 from X'), 'bank_transfer');
+  assert.equal(extractMethod('5000 IMPS from X'), 'bank_transfer');
+});
+
+test('extractMethod returns null when no method keyword is present', () => {
+  assert.equal(extractMethod('just received payment from Shyam'), null);
+});
