@@ -86,10 +86,11 @@ router.post('/customers', async (req, res) => {
     const name = (req.body.name || '').trim();
     const phoneNumber = (req.body.phoneNumber || '').trim();
     if (!name) return res.status(400).json({ ok: false, error: 'Name is required' });
-    if (!phoneNumber) return res.status(400).json({ ok: false, error: 'Phone number is required' });
 
-    const existing = await customers.findByPhone(phoneNumber);
-    if (existing) return res.status(400).json({ ok: false, error: `A customer with this phone number already exists: ${existing.name}` });
+    if (phoneNumber) {
+      const existing = await customers.findByPhone(phoneNumber);
+      if (existing) return res.status(400).json({ ok: false, error: `A customer with this phone number already exists: ${existing.name}` });
+    }
 
     const customer = await customers.createCustomer({ name, phoneNumber });
     await logActivity(req, 'added customer', name);

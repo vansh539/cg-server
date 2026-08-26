@@ -31,6 +31,17 @@ function humanReason({ reason, recovering, transport }) {
 }
 
 async function post(path, body, timeoutMs) {
+  // Customers can now be created without a phone number. Every WhatsApp-send
+  // call site in this app goes through notify()/notifyWithPdf() below, so
+  // short-circuiting here (before ever reaching the bot process) is the one
+  // place that makes phoneless customers silently skipped everywhere at
+  // once, rather than needing a guard at each of the half-dozen call sites.
+  // Same reason/shape the bot's own /notify endpoint already returns for a
+  // missing phone, so humanReason() and every existing caller's handling of
+  // that reason string keep working unchanged.
+  if (path === '/notify' && !body.phone) {
+    return { sent: false, reason: 'phone and message are required', recovering: false };
+  }
   try {
     const res = await fetch(`${NOTIFY_URL}${path}`, {
       method: 'POST',

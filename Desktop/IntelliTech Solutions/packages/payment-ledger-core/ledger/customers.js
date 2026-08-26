@@ -20,9 +20,13 @@ async function findById(customerId) {
 }
 
 async function createCustomer({ name, phoneNumber }) {
+  // Store a real SQL NULL, never '', when no phone is given -- phone_number
+  // still carries a UNIQUE constraint, and multiple customers with ''
+  // would collide on it where multiple NULLs are allowed to coexist.
+  const normalized = phoneNumber && phoneNumber.trim() ? phoneNumber.trim() : null;
   const { rows } = await query(
     `INSERT INTO customers (name, phone_number) VALUES ($1, $2) RETURNING *`,
-    [name, phoneNumber]
+    [name, normalized]
   );
   return rows[0];
 }

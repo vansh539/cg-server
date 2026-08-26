@@ -146,7 +146,7 @@
       <input type="text" id="newCustomerName" autocomplete="off">
     </div>
     <div class="field-group">
-      <label>Phone number</label>
+      <label>Phone number (optional)</label>
       <input type="text" id="newCustomerPhone" placeholder="10-digit WhatsApp number" autocomplete="off">
     </div>
     <div id="addCustomerError" style="color:var(--rust); font-size:0.85rem; margin-bottom:0.4rem;"></div>
@@ -270,8 +270,8 @@ modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); }
 document.getElementById('saveAddCustomer').addEventListener('click', async () => {
   const name = nameInput.value.trim();
   const phoneNumber = phoneInput.value.trim();
-  if (!name || !phoneNumber) {
-    errorEl.textContent = 'Name and phone number are both required.';
+  if (!name) {
+    errorEl.textContent = 'Name is required.';
     return;
   }
   const res = await fetch('/api/customers', {

@@ -22,10 +22,10 @@ router.post('/payments', async (req, res) => {
     if (customerId) {
       customer = await customers.findById(customerId);
       if (!customer) return res.status(404).json({ ok: false, error: 'Customer not found' });
-    } else if (newCustomerName && newCustomerPhone) {
+    } else if (newCustomerName) {
       customer = await customers.createCustomer({ name: newCustomerName, phoneNumber: newCustomerPhone });
     } else {
-      return res.status(400).json({ ok: false, error: 'customerId or newCustomerName+newCustomerPhone is required' });
+      return res.status(400).json({ ok: false, error: 'customerId or newCustomerName is required' });
     }
 
     const payment = await recordPayment({

@@ -140,7 +140,7 @@
         <div id="selectedCustomer"></div>
 
         <div class="field-group" id="newPhoneGroup" style="display:none;">
-          <label>Phone number (new customer)</label>
+          <label>Phone number (new customer, optional)</label>
           <input type="text" id="newCustomerPhone" placeholder="10-digit WhatsApp number" autocomplete="off">
         </div>
 
@@ -252,11 +252,6 @@ document.getElementById('save').addEventListener('click', async () => {
 
   if (!selectedCustomerId && !pendingNewName) {
     statusEl.textContent = 'Select an existing customer or create a new one.';
-    statusEl.style.color = 'var(--rust)';
-    return;
-  }
-  if (pendingNewName && !newPhone) {
-    statusEl.textContent = 'Phone number is required for a new customer.';
     statusEl.style.color = 'var(--rust)';
     return;
   }
